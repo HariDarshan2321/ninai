@@ -59,12 +59,16 @@ def main() -> None:
         return
 
     if args.command == "remember":
-        memory = store.remember(
-            args.content,
-            memory_type=args.memory_type,
-            scope=args.scope,
-            source_uri=args.source_uri,
-        )
+        try:
+            memory = store.remember(
+                args.content,
+                memory_type=args.memory_type,
+                scope=args.scope,
+                source_uri=args.source_uri,
+            )
+        except ValueError as error:
+            print(json.dumps({"stored": False, "error": str(error)}, indent=2))
+            sys.exit(1)
         print(json.dumps({"stored": True, "id": memory.id}, indent=2))
         return
 

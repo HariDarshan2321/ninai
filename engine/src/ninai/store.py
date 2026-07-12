@@ -4,17 +4,24 @@ import json
 import re
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 
 from .config import database_path
 from .models import ALLOWED_MEMORY_TYPES, ALLOWED_SCOPES, Memory
-from .retrieval import compose_context, rank_candidates
+from .retrieval import compose_context, estimate_tokens, rank_candidates
 from .security import contains_secret
 
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _escape_like(term: str) -> str:
+    """Escape LIKE wildcards so query terms match literally (ESCAPE '\\')."""
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class MemoryStore:
@@ -28,10 +35,28 @@ class MemoryStore:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA foreign_keys=ON")
+        # Wait rather than fail immediately when the long-lived server and a
+        # short-lived hook write concurrently.
+        connection.execute("PRAGMA busy_timeout=5000")
         return connection
 
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        """Yield a connection that commits on success and always closes.
+
+        The bare ``with sqlite3.connect(...)`` context manager commits or rolls
+        back the transaction but never closes the connection, which leaks file
+        descriptors in the long-lived MCP server. This wrapper closes it.
+        """
+        connection = self.connect()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     def _init_db(self) -> None:
-        with self.connect() as db:
+        with self._connection() as db:
             db.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS memories (
@@ -116,7 +141,7 @@ class MemoryStore:
             created_at=timestamp,
             updated_at=timestamp,
         )
-        with self.connect() as db:
+        with self._connection() as db:
             db.execute(
                 """
                 INSERT INTO memories (
@@ -157,7 +182,7 @@ class MemoryStore:
             raise ValueError("client_id cannot be empty")
         if scope not in ALLOWED_SCOPES:
             raise ValueError(f"Unsupported scope: {scope}")
-        with self.connect() as db:
+        with self._connection() as db:
             db.execute(
                 """
                 INSERT INTO permissions(client_id, scope, allowed, updated_at)
@@ -169,7 +194,7 @@ class MemoryStore:
             )
 
     def allowed_scopes(self, client_id: str) -> set[str]:
-        with self.connect() as db:
+        with self._connection() as db:
             rows = db.execute(
                 "SELECT scope FROM permissions WHERE client_id=? AND allowed=1 ORDER BY scope",
                 (client_id,),
@@ -177,7 +202,7 @@ class MemoryStore:
         return {str(row["scope"]) for row in rows}
 
     def permissions(self, client_id: str) -> list[dict[str, object]]:
-        with self.connect() as db:
+        with self._connection() as db:
             rows = db.execute(
                 "SELECT scope, allowed, updated_at FROM permissions WHERE client_id=? ORDER BY scope",
                 (client_id,),
@@ -218,7 +243,7 @@ class MemoryStore:
         ids = [str(item["id"]) for item in selected]
         if ids:
             placeholders = ",".join("?" for _ in ids)
-            with self.connect() as db:
+            with self._connection() as db:
                 db.execute(
                     f"UPDATE memories SET access_count=access_count+1 WHERE id IN ({placeholders})",
                     ids,
@@ -245,7 +270,7 @@ class MemoryStore:
             if len(term) >= 2
         ]
         fts_query = " OR ".join(f'"{term}"' for term in cleaned_terms[:12])
-        with self.connect() as db:
+        with self._connection() as db:
             if fts_query:
                 try:
                     rows = db.execute(
@@ -267,18 +292,25 @@ class MemoryStore:
                     pass
 
             if cleaned_terms:
-                like = "%" + "%".join(cleaned_terms[:5]) + "%"
+                like_terms = cleaned_terms[:5]
+                # OR semantics (any term may match), order-independent, so the
+                # non-FTS fallback behaves like the FTS path instead of an
+                # order-sensitive AND. Wildcards in terms are escaped.
+                like_clause = " OR ".join(
+                    "lower(m.content) LIKE ? ESCAPE '\\'" for _ in like_terms
+                )
+                like_params = [f"%{_escape_like(term)}%" for term in like_terms]
                 rows = db.execute(
                     f"""
                     SELECT m.*, 0.0 AS text_rank
                     FROM memories m
                     WHERE m.deleted_at IS NULL
-                      AND lower(m.content) LIKE ?
+                      AND ({like_clause})
                       AND m.scope IN ({placeholders})
                     ORDER BY m.updated_at DESC
                     LIMIT ?
                     """,
-                    [like, *scope_values, limit],
+                    [*like_params, *scope_values, limit],
                 ).fetchall()
             else:
                 rows = db.execute(
@@ -294,16 +326,40 @@ class MemoryStore:
                 ).fetchall()
         return [dict(row) for row in rows]
 
-    def explain(self, memory_id: str) -> dict[str, object] | None:
-        with self.connect() as db:
+    def explain(
+        self, memory_id: str, *, client_id: str | None = None
+    ) -> dict[str, object] | None:
+        with self._connection() as db:
             row = db.execute(
                 "SELECT * FROM memories WHERE id=? AND deleted_at IS NULL",
                 (memory_id,),
             ).fetchone()
-        return dict(row) if row else None
+        if row is None:
+            return None
+        memory = dict(row)
+        # client_id=None is the local operator (CLI / vault owner) with full
+        # access. A named client is an untrusted MCP caller: enforce scope and
+        # log the disclosure so explain() cannot bypass the recall policy
+        # boundary.
+        if client_id is not None:
+            scopes = self.allowed_scopes(client_id)
+            if str(memory["scope"]) not in scopes:
+                self._log_access(
+                    client_id, "explain", f"explain:{memory_id}", sorted(scopes), [], 0
+                )
+                return None
+            self._log_access(
+                client_id,
+                "explain",
+                f"explain:{memory_id}",
+                sorted(scopes),
+                [memory_id],
+                estimate_tokens(str(memory["content"])),
+            )
+        return memory
 
     def get_by_source_uri(self, source_uri: str) -> dict[str, object] | None:
-        with self.connect() as db:
+        with self._connection() as db:
             row = db.execute(
                 """
                 SELECT * FROM memories
@@ -315,9 +371,19 @@ class MemoryStore:
             ).fetchone()
         return dict(row) if row else None
 
-    def forget(self, memory_id: str) -> bool:
+    def forget(self, memory_id: str, *, client_id: str | None = None) -> bool:
+        # A named (untrusted) client may only forget memories inside the scopes
+        # it has been granted; the local operator (client_id=None) is unrestricted.
+        if client_id is not None:
+            with self._connection() as db:
+                row = db.execute(
+                    "SELECT scope FROM memories WHERE id=? AND deleted_at IS NULL",
+                    (memory_id,),
+                ).fetchone()
+            if row is None or str(row["scope"]) not in self.allowed_scopes(client_id):
+                return False
         timestamp = now_iso()
-        with self.connect() as db:
+        with self._connection() as db:
             cursor = db.execute(
                 "UPDATE memories SET deleted_at=?, updated_at=? WHERE id=? AND deleted_at IS NULL",
                 (timestamp, timestamp, memory_id),
@@ -329,7 +395,7 @@ class MemoryStore:
         return cursor.rowcount > 0
 
     def list_memories(self, limit: int = 50) -> list[dict[str, object]]:
-        with self.connect() as db:
+        with self._connection() as db:
             rows = db.execute(
                 """
                 SELECT * FROM memories
@@ -342,7 +408,7 @@ class MemoryStore:
         return [dict(row) for row in rows]
 
     def list_logs(self, limit: int = 50) -> list[dict[str, object]]:
-        with self.connect() as db:
+        with self._connection() as db:
             rows = db.execute(
                 "SELECT * FROM access_logs ORDER BY created_at DESC LIMIT ?",
                 (limit,),
@@ -356,7 +422,7 @@ class MemoryStore:
         return result
 
     def status(self, client_id: str | None = None) -> dict[str, object]:
-        with self.connect() as db:
+        with self._connection() as db:
             total = db.execute(
                 "SELECT count(*) AS count FROM memories WHERE deleted_at IS NULL"
             ).fetchone()["count"]
@@ -378,7 +444,7 @@ class MemoryStore:
         memory_ids: list[str],
         estimated_tokens: int,
     ) -> None:
-        with self.connect() as db:
+        with self._connection() as db:
             db.execute(
                 """
                 INSERT INTO access_logs(

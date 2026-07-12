@@ -13,11 +13,14 @@ The MVP intentionally keeps the trust boundary small: memory is stored on the us
 
 ## 1. Run the engine locally
 
-Requirements: Python 3.11+
+Requirements: Python 3.11+. On macOS the default `python3` is often 3.9, which
+is too old and will fail the install with a `requires-python` / build error.
+Check with `python3 --version`; if it is below 3.11, use an explicit interpreter
+(`python3.11`, `python3.12`, or `python3.13`) in the `venv` command below.
 
 ```bash
 cd engine
-python3 -m venv .venv
+python3.13 -m venv .venv   # or python3.11 / python3.12 — must be >= 3.11
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install .
@@ -27,9 +30,15 @@ ninai permission grant claude-code work
 ninai permission grant claude-code project
 ninai permission grant claude-code preference
 
-# Register the MCP server.
-claude mcp add ninai -- ninai-mcp
+# Register the MCP server (use the absolute path to ninai-mcp from this venv
+# so the command resolves after you deactivate, e.g. .venv/bin/ninai-mcp).
+claude mcp add ninai --scope user -- "$(pwd)/.venv/bin/ninai-mcp"
 ```
+
+For a durable install that survives moving this repository, create the virtual
+environment in a stable location outside the source tree (for example
+`~/.ninai-app/venv`) and point the `claude mcp add` command at
+`~/.ninai-app/venv/bin/ninai-mcp`.
 
 In Claude Code, try:
 

@@ -116,6 +116,67 @@ class MemoryStoreTest(unittest.TestCase):
         self.assertTrue(self.store.forget(memory.id))
         self.assertIsNone(self.store.explain(memory.id))
 
+    def test_explain_denies_out_of_scope_client_and_logs(self) -> None:
+        self.store.grant("claude-code", "project")
+        private = self.store.remember("A private health detail", scope="health")
+
+        # A named client without the health scope must not read it, and the
+        # attempt must be logged (no memory disclosed).
+        self.assertIsNone(self.store.explain(private.id, client_id="claude-code"))
+        log = self.store.list_logs()[0]
+        self.assertEqual(log["purpose"], "explain")
+        self.assertEqual(log["memory_ids"], [])
+
+        # The local operator (no client_id) retains full access.
+        self.assertIsNotNone(self.store.explain(private.id))
+
+    def test_explain_allows_and_logs_in_scope_client(self) -> None:
+        self.store.grant("claude-code", "project")
+        memory = self.store.remember("Ninai launch decision", scope="project")
+
+        result = self.store.explain(memory.id, client_id="claude-code")
+        self.assertIsNotNone(result)
+        log = self.store.list_logs()[0]
+        self.assertEqual(log["memory_ids"], [memory.id])
+
+    def test_forget_denies_out_of_scope_client(self) -> None:
+        self.store.grant("claude-code", "project")
+        private = self.store.remember("A private personal note", scope="personal")
+
+        # Untrusted client cannot delete a memory outside its scopes.
+        self.assertFalse(self.store.forget(private.id, client_id="claude-code"))
+        self.assertIsNotNone(self.store.explain(private.id))
+
+        # The local operator can.
+        self.assertTrue(self.store.forget(private.id))
+
+    def test_recall_is_word_order_independent(self) -> None:
+        self.store.grant("claude-code", "project")
+        memory = self.store.remember("Ninai launch checklist", scope="project")
+        packet = self.store.recall(
+            "checklist launch Ninai",
+            client_id="claude-code",
+            purpose="order independence",
+        )
+        self.assertIn(memory.id, {fact["id"] for fact in packet["facts"]})
+
+    def test_source_uri_counts_against_token_budget(self) -> None:
+        self.store.grant("claude-code", "project")
+        long_uri = "https://example.test/" + "a" * 900
+        self.store.remember("OK", scope="project", source_uri=long_uri)
+        packet = self.store.recall(
+            "OK",
+            client_id="claude-code",
+            purpose="budget",
+            max_tokens=400,
+        )
+        # The fact fits, and estimated_tokens reflects the 900-char source_uri
+        # rather than just the two-character content (the pre-fix undercount
+        # would have reported ~25 tokens).
+        self.assertEqual(len(packet["facts"]), 1)
+        self.assertGreater(packet["estimated_tokens"], 200)
+        self.assertLessEqual(packet["estimated_tokens"], 400)
+
 
 if __name__ == "__main__":
     unittest.main()

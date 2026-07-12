@@ -90,7 +90,7 @@ Present in the MVP:
 - secret-pattern rejection and hook redaction;
 - local-only database;
 - provenance on every memory;
-- immutable access records;
+- append-only access records (by convention; not yet cryptographically tamper-evident);
 - soft deletion;
 - bounded memory size and context budgets.
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import re
 from datetime import datetime, timezone
@@ -75,21 +76,23 @@ def compose_context(
     token_total = 0
 
     for item in ranked:
-        fact_tokens = estimate_tokens(str(item["content"])) + 24
+        fact = {
+            "id": item["id"],
+            "content": item["content"],
+            "type": item["memory_type"],
+            "scope": item["scope"],
+            "source_uri": item["source_uri"],
+            "confidence": item["confidence"],
+            "updated_at": item["updated_at"],
+            "score": round(float(item["score"]), 4),
+        }
+        # Estimate from the full serialized fact so source_uri and metadata are
+        # counted against the budget, not just the content string. This keeps
+        # the returned packet within the requested token budget.
+        fact_tokens = estimate_tokens(json.dumps(fact, ensure_ascii=False))
         if fact_tokens > max_tokens - token_total:
             continue
-        selected.append(
-            {
-                "id": item["id"],
-                "content": item["content"],
-                "type": item["memory_type"],
-                "scope": item["scope"],
-                "source_uri": item["source_uri"],
-                "confidence": item["confidence"],
-                "updated_at": item["updated_at"],
-                "score": round(float(item["score"]), 4),
-            }
-        )
+        selected.append(fact)
         token_total += fact_tokens
         if len(selected) >= max_items:
             break

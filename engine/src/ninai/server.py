@@ -76,15 +76,19 @@ def recall(
 
 @mcp.tool()
 def explain(memory_id: str) -> str:
-    """Show a memory's content, scope, timestamps, and provenance."""
-    memory = get_store().explain(memory_id)
+    """Show a memory's content, scope, timestamps, and provenance.
+
+    Scope-filtered and logged for the requesting client, exactly like recall.
+    """
+    memory = get_store().explain(memory_id, client_id=configured_client_id())
     return json.dumps(memory or {"error": "Memory not found"}, ensure_ascii=False)
 
 
 @mcp.tool()
 def forget(memory_id: str) -> str:
-    """Soft-delete a memory from the local vault."""
-    return json.dumps({"forgotten": get_store().forget(memory_id)})
+    """Soft-delete a memory from the local vault (only within granted scopes)."""
+    forgotten = get_store().forget(memory_id, client_id=configured_client_id())
+    return json.dumps({"forgotten": forgotten})
 
 
 @mcp.tool()
