@@ -1,0 +1,18 @@
+# Ninai
+
+Ninai is a local-first, user-owned memory and permission layer for AI tools.
+
+## Canonical pages
+- Home: https://ninai.io/
+- Install: https://ninai.io/install/
+- Research: https://ninai.io/research/
+- Privacy: https://ninai.io/privacy/
+
+## Core product facts
+- The MVP stores memory in a local SQLite database.
+- It exposes memory through MCP.
+- Recall is filtered by explicit per-client scopes.
+- Returned context packets include provenance and a token budget.
+- The full vault stays local, but released context is sent to the selected AI provider.
+- Automatic capture currently targets Claude Code PostToolUse hooks.
+- The MVP is not production encrypted or independently audited.

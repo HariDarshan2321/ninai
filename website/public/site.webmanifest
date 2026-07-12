@@ -1,0 +1,12 @@
+{
+  "name": "Ninai",
+  "short_name": "Ninai",
+  "description": "User-owned AI memory and permissioned context",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f2ec",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {"src": "/assets/ninai-app-icon.svg", "sizes": "any", "type": "image/svg+xml"}
+  ]
+}

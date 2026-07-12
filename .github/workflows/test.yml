@@ -1,0 +1,49 @@
+name: Validate project
+
+on:
+  push:
+    paths:
+      - "engine/**"
+      - ".claude/**"
+      - "website/**"
+      - "scripts/validate_website.py"
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - "engine/**"
+      - ".claude/**"
+      - "website/**"
+      - "scripts/validate_website.py"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip
+      - run: pip install .
+      - run: python -m unittest discover -s tests -v
+
+  website:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
+      - run: npm run typecheck
+      - run: npm run build
+      - run: python3 ../scripts/validate_website.py

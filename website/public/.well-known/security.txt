@@ -1,0 +1,5 @@
+Contact: mailto:security@ninai.io
+Preferred-Languages: en
+Canonical: https://ninai.io/.well-known/security.txt
+Policy: https://ninai.io/privacy/
+Expires: 2027-07-18T23:59:00Z
