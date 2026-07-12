@@ -1,13 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Brand } from "./brand";
 
 export function SiteHeader() {
   const mobileMenu = useRef<HTMLDetailsElement>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    // Start refreshes at the top of the page instead of restoring the previous
+    // scroll position. Hash deep links (e.g. /#product) still scroll to their
+    // anchor because this only disables browser scroll restoration.
+    if (typeof history !== "undefined" && "scrollRestoration" in history) {
+      history.scrollRestoration = "manual";
+    }
+  }, []);
 
   function closeMobileMenu() {
     if (mobileMenu.current) {
