@@ -1,7 +1,9 @@
 # Ninai Desktop App — Design Spec
 
 - **Date:** 2026-07-12
-- **Status:** Approved (design); pending spec review
+- **Status:** Implemented (engine `update()` + `sensitivity`, `DesktopApi` bridge,
+  `ninai-app` window, five web screens; 42 engine/bridge tests passing; UI verified
+  against the real engine).
 - **Scope tier:** "Polished app I use myself now" — a real macOS window wired to the
   live engine. NOT code-signed/notarized, NO SQLCipher/keychain. Those belong to
   the later "shippable to strangers" tier and are explicitly out of scope here.

@@ -68,8 +68,30 @@ This prevents unauthorised rows from entering search results, ranking code, or c
 - `retrieval.py` contains deterministic ranking and packet composition.
 - `hook_capture.py` is the host-event capture policy.
 - `server.py` and `cli.py` are transport adapters.
+- `desktop/` is the owner-facing desktop control panel (another transport adapter).
 
 The current shape is intentionally smaller than the old Jarvis engine. Vector search, local-model extraction, consolidation, and a browser UI remain optional future adapters rather than runtime requirements.
+
+## Desktop app
+
+`desktop/` is a native window (PyWebView → system WebView) that gives the vault
+owner a UI over the engine: Today, Memories, Sources, Permissions, and Activity.
+It is a thin transport adapter, exactly like `server.py` and `cli.py`:
+
+- `desktop/app.py` builds the `MemoryStore`, the bridge, and the window; it is the
+  `ninai-app` entry point (optional dependency `pywebview`, installed via the
+  `desktop` extra).
+- `desktop/api.py` is the `DesktopApi` JS↔Python bridge — thin wrappers over
+  `MemoryStore` returning `{ok, data}` / `{ok, error}` envelopes. No policy lives here.
+- `desktop/web/` is dependency-free static HTML/CSS/JS.
+
+Trust model: the desktop app runs as the **local operator** (it calls the store with
+no `client_id`), i.e. with full owner access — deliberately unlike an untrusted MCP
+client, which is scope-restricted and logged. The app must never be exposed over a
+network. It shares `~/.ninai/ninai.sqlite3` with the MCP server; concurrency is safe
+because the store uses WAL and `busy_timeout`. The app is not a security boundary and
+the vault is not encrypted; the `sensitivity` label is display-only and does not yet
+affect disclosure.
 
 ## Website architecture
 

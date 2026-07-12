@@ -21,6 +21,17 @@ ALLOWED_SCOPES = {
     "health",
 }
 
+# Per-memory sensitivity label. Display-only in the MVP: it is shown in the
+# desktop UI and is editable, but does not yet influence ranking or disclosure
+# (the dossier's sensitivity penalty is post-MVP). Scope remains the access
+# control that actually gates recall.
+ALLOWED_SENSITIVITIES = {
+    "normal",
+    "personal",
+    "restricted",
+    "blocked",
+}
+
 
 @dataclass(slots=True)
 class Memory:
@@ -34,3 +45,4 @@ class Memory:
     created_at: str
     updated_at: str
     access_count: int = 0
+    sensitivity: str = "normal"

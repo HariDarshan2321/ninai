@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Iterator
 
 from .config import database_path
-from .models import ALLOWED_MEMORY_TYPES, ALLOWED_SCOPES, Memory
+from .models import (
+    ALLOWED_MEMORY_TYPES,
+    ALLOWED_SCOPES,
+    ALLOWED_SENSITIVITIES,
+    Memory,
+)
 from .retrieval import compose_context, estimate_tokens, rank_candidates
 from .security import contains_secret
 
@@ -70,7 +75,8 @@ class MemoryStore:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     access_count INTEGER NOT NULL DEFAULT 0,
-                    deleted_at TEXT
+                    deleted_at TEXT,
+                    sensitivity TEXT NOT NULL DEFAULT 'normal'
                 );
 
                 CREATE TABLE IF NOT EXISTS permissions (
@@ -101,6 +107,17 @@ class MemoryStore:
                 # Some minimal SQLite builds omit FTS5. Recall falls back to LIKE.
                 pass
 
+            # Backward-compatible migration for vaults created before the
+            # sensitivity column existed.
+            columns = {
+                str(row["name"])
+                for row in db.execute("PRAGMA table_info(memories)").fetchall()
+            }
+            if "sensitivity" not in columns:
+                db.execute(
+                    "ALTER TABLE memories ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'normal'"
+                )
+
     def remember(
         self,
         content: str,
@@ -110,6 +127,7 @@ class MemoryStore:
         source_uri: str = "user://manual",
         importance: float = 0.6,
         confidence: float = 1.0,
+        sensitivity: str = "normal",
     ) -> Memory:
         clean = " ".join(content.split()).strip()
         if not clean:
@@ -122,6 +140,8 @@ class MemoryStore:
             raise ValueError(f"Unsupported memory type: {memory_type}")
         if scope not in ALLOWED_SCOPES:
             raise ValueError(f"Unsupported scope: {scope}")
+        if sensitivity not in ALLOWED_SENSITIVITIES:
+            raise ValueError(f"Unsupported sensitivity: {sensitivity}")
         source_uri = source_uri.strip() or "unknown://source"
         if len(source_uri) > 1000:
             raise ValueError("Source URI is too large.")
@@ -140,14 +160,16 @@ class MemoryStore:
             confidence=confidence,
             created_at=timestamp,
             updated_at=timestamp,
+            sensitivity=sensitivity,
         )
         with self._connection() as db:
             db.execute(
                 """
                 INSERT INTO memories (
                     id, content, memory_type, scope, source_uri,
-                    importance, confidence, created_at, updated_at, access_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                    importance, confidence, created_at, updated_at, access_count,
+                    sensitivity
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
                 """,
                 (
                     memory.id,
@@ -159,6 +181,7 @@ class MemoryStore:
                     memory.confidence,
                     memory.created_at,
                     memory.updated_at,
+                    memory.sensitivity,
                 ),
             )
             try:
@@ -169,6 +192,93 @@ class MemoryStore:
             except sqlite3.OperationalError:
                 pass
         return memory
+
+    def update(
+        self,
+        memory_id: str,
+        *,
+        content: str | None = None,
+        memory_type: str | None = None,
+        scope: str | None = None,
+        sensitivity: str | None = None,
+        importance: float | None = None,
+        confidence: float | None = None,
+    ) -> dict[str, object] | None:
+        """Correct a memory in place, preserving id, source_uri, and created_at.
+
+        Only the provided fields change. New content is re-validated against the
+        secret filter and size limit, and the FTS index is refreshed. Returns the
+        updated memory dict, or None if no active memory has that id. Raises
+        ValueError on invalid field values (same contract as remember()).
+        """
+        with self._connection() as db:
+            row = db.execute(
+                "SELECT * FROM memories WHERE id=? AND deleted_at IS NULL",
+                (memory_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        current = dict(row)
+
+        if content is not None:
+            clean = " ".join(content.split()).strip()
+            if not clean:
+                raise ValueError("Memory content cannot be empty.")
+            if len(clean) > 4000:
+                raise ValueError(
+                    "Memory is too large. Store a compact outcome under 4,000 characters."
+                )
+            if contains_secret(clean):
+                raise ValueError(
+                    "Potential secret detected. Ninai refused to store this memory."
+                )
+            current["content"] = clean
+        if memory_type is not None:
+            if memory_type not in ALLOWED_MEMORY_TYPES:
+                raise ValueError(f"Unsupported memory type: {memory_type}")
+            current["memory_type"] = memory_type
+        if scope is not None:
+            if scope not in ALLOWED_SCOPES:
+                raise ValueError(f"Unsupported scope: {scope}")
+            current["scope"] = scope
+        if sensitivity is not None:
+            if sensitivity not in ALLOWED_SENSITIVITIES:
+                raise ValueError(f"Unsupported sensitivity: {sensitivity}")
+            current["sensitivity"] = sensitivity
+        if importance is not None:
+            current["importance"] = min(1.0, max(0.0, float(importance)))
+        if confidence is not None:
+            current["confidence"] = min(1.0, max(0.0, float(confidence)))
+
+        current["updated_at"] = now_iso()
+        with self._connection() as db:
+            db.execute(
+                """
+                UPDATE memories
+                SET content=?, memory_type=?, scope=?, sensitivity=?,
+                    importance=?, confidence=?, updated_at=?
+                WHERE id=? AND deleted_at IS NULL
+                """,
+                (
+                    current["content"],
+                    current["memory_type"],
+                    current["scope"],
+                    current["sensitivity"],
+                    current["importance"],
+                    current["confidence"],
+                    current["updated_at"],
+                    memory_id,
+                ),
+            )
+            try:
+                db.execute("DELETE FROM memory_fts WHERE memory_id=?", (memory_id,))
+                db.execute(
+                    "INSERT INTO memory_fts(memory_id, content) VALUES (?, ?)",
+                    (memory_id, current["content"]),
+                )
+            except sqlite3.OperationalError:
+                pass
+        return current
 
     def grant(self, client_id: str, scope: str) -> None:
         self._set_permission(client_id, scope, True)
@@ -208,6 +318,19 @@ class MemoryStore:
                 (client_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def clients(self) -> list[str]:
+        """Distinct client ids seen in permissions or access logs."""
+        with self._connection() as db:
+            rows = db.execute(
+                """
+                SELECT client_id FROM permissions
+                UNION
+                SELECT client_id FROM access_logs
+                ORDER BY client_id
+                """
+            ).fetchall()
+        return [str(row["client_id"]) for row in rows]
 
     def recall(
         self,

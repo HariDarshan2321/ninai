@@ -160,6 +160,80 @@ class MemoryStoreTest(unittest.TestCase):
         )
         self.assertIn(memory.id, {fact["id"] for fact in packet["facts"]})
 
+    def test_update_preserves_provenance_and_refreshes_search(self) -> None:
+        self.store.grant("claude-code", "project")
+        memory = self.store.remember(
+            "Send Priya the draft deck",
+            scope="project",
+            source_uri="gmail://thread/1",
+        )
+        updated = self.store.update(
+            memory.id, content="Send Priya the final launch deck", scope="work"
+        )
+        self.assertIsNotNone(updated)
+        # provenance and creation time preserved; updated_at bumped.
+        self.assertEqual(updated["source_uri"], "gmail://thread/1")
+        self.assertEqual(updated["created_at"], memory.created_at)
+        self.assertGreaterEqual(updated["updated_at"], memory.updated_at)
+        self.assertEqual(updated["scope"], "work")
+        # FTS reflects the new content: searchable by a new term, and the old
+        # unique term no longer matches.
+        self.store.grant("claude-code", "work")
+        hit = self.store.recall("final launch deck", client_id="claude-code", purpose="t")
+        self.assertIn(memory.id, {f["id"] for f in hit["facts"]})
+
+    def test_update_rejects_secret_content(self) -> None:
+        self.store.grant("claude-code", "project")
+        memory = self.store.remember("A safe note", scope="project")
+        with self.assertRaises(ValueError):
+            self.store.update(memory.id, content="new key AKIAIOSFODNN7EXAMPLE here")
+
+    def test_update_rejects_invalid_scope_and_sensitivity(self) -> None:
+        memory = self.store.remember("A note", scope="project")
+        with self.assertRaises(ValueError):
+            self.store.update(memory.id, scope="not-a-scope")
+        with self.assertRaises(ValueError):
+            self.store.update(memory.id, sensitivity="ultra")
+
+    def test_update_missing_memory_returns_none(self) -> None:
+        self.assertIsNone(self.store.update("does-not-exist", content="x"))
+
+    def test_migration_adds_sensitivity_to_preexisting_vault(self) -> None:
+        import sqlite3
+
+        # Simulate a vault created before the sensitivity column existed.
+        legacy_path = Path(self.temp.name) / "legacy.sqlite3"
+        con = sqlite3.connect(legacy_path)
+        con.executescript(
+            """
+            CREATE TABLE memories (
+                id TEXT PRIMARY KEY, content TEXT NOT NULL, memory_type TEXT NOT NULL,
+                scope TEXT NOT NULL, source_uri TEXT NOT NULL, importance REAL NOT NULL,
+                confidence REAL NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                access_count INTEGER NOT NULL DEFAULT 0, deleted_at TEXT
+            );
+            INSERT INTO memories VALUES
+              ('m1','old fact','fact','project','cli://x',0.6,1.0,'2026-01-01T00:00:00+00:00',
+               '2026-01-01T00:00:00+00:00',0,NULL);
+            """
+        )
+        con.commit()
+        con.close()
+
+        # Opening it through MemoryStore must migrate without data loss.
+        store = MemoryStore(legacy_path)
+        row = store.explain("m1")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["content"], "old fact")
+        self.assertEqual(row["sensitivity"], "normal")
+
+    def test_sensitivity_defaults_to_normal_and_is_editable(self) -> None:
+        memory = self.store.remember("A note", scope="project")
+        stored = self.store.explain(memory.id)
+        self.assertEqual(stored["sensitivity"], "normal")
+        updated = self.store.update(memory.id, sensitivity="restricted")
+        self.assertEqual(updated["sensitivity"], "restricted")
+
     def test_source_uri_counts_against_token_budget(self) -> None:
         self.store.grant("claude-code", "project")
         long_uri = "https://example.test/" + "a" * 900

@@ -52,6 +52,24 @@ Then begin a new session and ask:
 What should I finish before launch?
 ```
 
+## 1b. Optional: open the desktop control panel
+
+Ninai ships a native desktop control panel — a window with five screens
+(Today, Memories, Sources, Permissions, Activity) for the vault owner to see and
+manage everything the engine stores. It runs as the local operator (full access)
+and talks to the same local vault the MCP server uses.
+
+```bash
+pip install '.[desktop]'   # adds pywebview; from the engine/ directory
+ninai-app                  # opens the window
+```
+
+The app lets you add, search, view-with-source, correct, and delete memories;
+toggle each AI client's scope permissions; and read the full disclosure log. It is
+**not** a security boundary and the vault is **not** encrypted — see the boundaries
+below. Sensitivity labels are shown for your reference but do not yet affect what is
+disclosed; scope is the control that gates recall.
+
 ## 2. Optional: capture results from existing MCP tools
 
 Claude Code hooks receive tool events after tools complete. Copy the example settings into your project:
