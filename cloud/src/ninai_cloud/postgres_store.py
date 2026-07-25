@@ -216,7 +216,11 @@ class PostgresStore:
 
     def search(self, principal: Principal, query: str, *, limit: int = 20) -> list[HostedMemory]:
         limit = max(1, min(100, int(limit)))
-        terms = " ".join(re.findall(r"[\w-]+", query.lower())[:20])
+        lexemes = re.findall(r"[\w-]+", query.lower())[:20]
+        # Candidate retrieval uses OR semantics so natural questions are not
+        # forced to contain every filler word. Permission filtering still
+        # happens in the same SQL query before ranking.
+        terms = " | ".join(lexemes)
         with self._connection() as db:
             self._validate_principal(db, principal)
             rows = db.execute(
@@ -229,8 +233,8 @@ class PostgresStore:
                      AND s.memory_id=m.id ORDER BY s.created_at LIMIT 1) s ON true
                    WHERE m.workspace_id=%s AND m.status='active' AND m.deleted_at IS NULL
                      AND (m.valid_until IS NULL OR m.valid_until > now())
-                     AND (%s='' OR to_tsvector('simple',m.normalized_content) @@ plainto_tsquery('simple',%s))
-                   ORDER BY CASE WHEN %s='' THEN 0 ELSE ts_rank(to_tsvector('simple',m.normalized_content),plainto_tsquery('simple',%s)) END DESC,
+                     AND (%s='' OR to_tsvector('simple',m.normalized_content) @@ to_tsquery('simple',%s))
+                   ORDER BY CASE WHEN %s='' THEN 0 ELSE ts_rank(to_tsvector('simple',m.normalized_content),to_tsquery('simple',%s)) END DESC,
                      m.importance DESC,m.updated_at DESC LIMIT %s""",
                 (principal.client_connection_id, principal.workspace_id, terms, terms, terms, terms, limit),
             ).fetchall()

@@ -70,6 +70,10 @@ class PostgresLifecycleTest(unittest.TestCase):
             self.store.create_memory(self.principal, **{**args, "content": "Different"})
         self.assertEqual(self.store.get_memory(self.principal, created.id).source_uri, "claude://session/1")
         self.assertEqual([m.id for m in self.store.search(self.principal, "PostgreSQL")], [created.id])
+        self.assertEqual(
+            [m.id for m in self.store.search(self.principal, "Which database does Nova use and why?")],
+            [created.id],
+        )
         self.store.record_disclosure(self.principal, tool_name="search", query="PostgreSQL", purpose="test",
                                      returned_memory_ids=[created.id])
         self.assertTrue(self.store.revoke_client(self.workspace, self.client, self.user))
