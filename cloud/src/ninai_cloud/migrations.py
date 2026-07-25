@@ -5,8 +5,20 @@ from pathlib import Path
 
 
 def migration_files() -> list[Path]:
-    root = Path(__file__).resolve().parents[2] / "migrations"
-    return sorted(root.glob("*.sql"))
+    # Source checkouts keep migrations beside ``src`` while the production
+    # Docker image copies them to ``/app/migrations``.  Once installed into
+    # site-packages, deriving the directory solely from ``__file__`` points at
+    # the Python prefix and silently yields no migrations.
+    candidates = (
+        Path.cwd() / "migrations",
+        Path(__file__).resolve().parents[2] / "migrations",
+    )
+    for root in candidates:
+        files = sorted(root.glob("*.sql"))
+        if files:
+            return files
+    searched = ", ".join(str(path) for path in candidates)
+    raise RuntimeError(f"No database migrations found; searched: {searched}")
 
 
 def apply_migrations(database_url: str) -> None:
