@@ -279,7 +279,7 @@ def main() -> None:
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url:
         raise SystemExit("DATABASE_URL is required")
-    from .auth import (AuthSettings, JWTValidator, MCPTokenVerifier, OAuthControlTokenVerifier, PATTokenVerifier,
+    from .auth import (AuthSettings, JWTValidator, MCPTokenVerifier, OAuthControlTokenVerifier, OAuthIdentityResolver, PATTokenVerifier,
                        PrincipalResolver as AuthPrincipalResolver, auth_mode)
     store = PostgresStore(database_url)
     mode = auth_mode()
@@ -296,11 +296,16 @@ def main() -> None:
         settings = AuthSettings.from_env()
         validator = JWTValidator(settings)
         verifier = MCPTokenVerifier(validator, AuthPrincipalResolver(store._connection, settings))
-        control_verifier = OAuthControlTokenVerifier(validator, settings)
+        control_verifier = OAuthControlTokenVerifier(
+            validator, settings, OAuthIdentityResolver(store._connection, settings)
+        )
         sdk_auth = MCPAuthSettings(issuer_url=settings.issuer, resource_server_url=settings.resource,
                                    service_documentation_url=settings.resource, required_scopes=[])
-    control_service = ControlService(store._connection, self_hosted=mode == "pat",
-                                     public_mcp_url=str(sdk_auth.resource_server_url))
+    control_service = ControlService(
+        store._connection, self_hosted=mode == "pat",
+        public_mcp_url=str(sdk_auth.resource_server_url),
+        oauth_issuer=settings.issuer if mode == "oauth" else None,
+    )
     create_mcp(store, token_verifier=verifier, control_token_verifier=control_verifier,
                auth=sdk_auth, control_service=control_service,
                host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")),

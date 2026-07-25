@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from ninai_cloud.auth import (
     AuthSettings, AuthenticationError, BearerAuthenticator, JWTValidator, MCPTokenVerifier,
-    OAuthControlTokenVerifier, PrincipalResolver,
+    OAuthControlTokenVerifier, OAuthIdentityResolver, PrincipalResolver,
     PATTokenVerifier, auth_mode,
 )
 
@@ -24,7 +24,9 @@ class FakeResult:
 
 
 class FakeDb:
-    def __init__(self, row=(1,)): self.row, self.params = row, None
+    def __init__(self, row):
+        self.row = row
+        self.params = None
     def execute(self, _sql, params): self.params = params; return FakeResult(self.row)
 
 
@@ -40,22 +42,36 @@ class FakeValidator:
     def validate(self, token): self.token = token; return self.claims
 
 
+class FakeIdentities:
+    def __init__(self, user_id="user-uuid", workspace_id="11111111-1111-4111-8111-111111111111"):
+        self.user_id, self.workspace_id, self.created = user_id, workspace_id, None
+    def resolve_user(self, claims, create=False):
+        self.created = create
+        return self.user_id
+    def workspace_for(self, user_id, requested=None):
+        return str(requested or self.workspace_id) if self.workspace_id else None
+
+
 class AuthTest(unittest.TestCase):
     def setUp(self):
         self.settings = AuthSettings(
             issuer="https://issuer.test", audience="ninai", resource="https://api.test/mcp",
             jwks_uri="https://issuer.test/jwks",
         )
-        self.claims = {
-            "sub": "user-1", "ninai_workspace_id": "workspace-1",
-            "ninai_client_connection_id": "client-1",
-        }
+        self.workspace_id = "11111111-1111-4111-8111-111111111111"
+        self.claims = {"sub": "auth0|external-user", "client_id": "tpc_dynamic-client",
+                       "https://ninai.io/workspace_id": self.workspace_id}
 
-    def resolver(self, row=(1,)):
+    def resolver(self, row="default"):
+        if row == "default":
+            row = {"user_id": "user-uuid", "workspace_id": self.workspace_id,
+                   "client_connection_id": "client-1"}
         db = FakeDb(row)
         @contextmanager
         def connect(): yield db
-        return PrincipalResolver(connect, self.settings), db
+        resolver = PrincipalResolver(connect, self.settings)
+        resolver.identities = FakeIdentities()
+        return resolver, db
 
     def test_metadata_points_to_external_issuer(self):
         metadata = self.settings.protected_resource_metadata()
@@ -66,19 +82,20 @@ class AuthTest(unittest.TestCase):
     def test_principal_comes_only_from_signed_claims_and_is_checked_live(self):
         resolver, db = self.resolver()
         principal = resolver.resolve(self.claims)
-        self.assertEqual(principal.user_id, "user-1")
-        self.assertEqual(principal.workspace_id, "workspace-1")
-        self.assertEqual(db.params, ("user-1", "client-1", "workspace-1", "user-1"))
+        self.assertEqual(principal.user_id, "user-uuid")
+        self.assertEqual(principal.workspace_id, self.workspace_id)
+        self.assertEqual(db.params, ("user-uuid", "https://issuer.test", "tpc_dynamic-client",
+                                     "user-uuid", self.workspace_id, self.workspace_id))
 
     def test_revoked_client_is_rejected(self):
         resolver, _ = self.resolver(None)
-        with self.assertRaisesRegex(AuthenticationError, "revoked or unknown"):
+        with self.assertRaisesRegex(AuthenticationError, "not connected.*revoked"):
             resolver.resolve(self.claims)
 
     def test_missing_identity_claim_is_rejected(self):
         resolver, _ = self.resolver()
-        with self.assertRaisesRegex(AuthenticationError, "identity claims"):
-            resolver.resolve({"sub": "user-1"})
+        with self.assertRaisesRegex(AuthenticationError, "OAuth client identity"):
+            resolver.resolve({"sub": "auth0|external-user"})
 
     def test_bearer_header_is_required(self):
         resolver, _ = self.resolver()
@@ -94,10 +111,10 @@ class AuthTest(unittest.TestCase):
         verifier = MCPTokenVerifier(FakeValidator(claims), resolver)
         access = asyncio.run(verifier.verify_token("signed.jwt"))
         self.assertIsNotNone(access)
-        self.assertEqual(access.user_id, "user-1")
-        self.assertEqual(access.workspace_id, "workspace-1")
+        self.assertEqual(access.user_id, "user-uuid")
+        self.assertEqual(access.workspace_id, self.workspace_id)
         self.assertEqual(access.client_connection_id, "client-1")
-        self.assertEqual(access.claims["workspace_id"], "workspace-1")
+        self.assertEqual(access.claims["workspace_id"], self.workspace_id)
         self.assertEqual(access.scopes, ["ninai:read", "ninai:propose"])
 
     def test_mcp_verifier_returns_none_for_revoked_client(self):
@@ -106,14 +123,16 @@ class AuthTest(unittest.TestCase):
         self.assertIsNone(asyncio.run(verifier.verify_token("signed.jwt")))
 
     def test_control_oauth_verifier_allows_signed_first_workspace_identity(self):
-        claims = {"sub": "user-1", "email": "owner@example.test", "name": "Owner",
+        claims = {"sub": "auth0|external-user", "email": "owner@example.test", "name": "Owner",
                   "exp": 2_000_000_000}
         validator = FakeValidator(claims)
-        access = asyncio.run(OAuthControlTokenVerifier(validator, self.settings)
+        identities = FakeIdentities()
+        access = asyncio.run(OAuthControlTokenVerifier(validator, self.settings, identities)
                              .verify_token("signed.jwt"))
-        self.assertEqual(access.claims, {"user_id": "user-1", "email": "owner@example.test",
+        self.assertEqual(access.claims, {"user_id": "user-uuid", "workspace_id": self.workspace_id,
+                                         "email": "owner@example.test",
                                          "name": "Owner"})
-        self.assertNotIn("workspace_id", access.claims)
+        self.assertTrue(identities.created)
         self.assertEqual(validator.token, "signed.jwt")
 
     def test_oversized_bearer_is_rejected_before_validation_or_database_access(self):
@@ -137,7 +156,7 @@ class AuthTest(unittest.TestCase):
             "resource": self.settings.resource, "exp": int(time.time()) + 60,
         }
         token = jwt.encode(base, private_key, algorithm="RS256", headers={"kid": "test"})
-        self.assertEqual(validator.validate(token)["sub"], "user-1")
+        self.assertEqual(validator.validate(token)["sub"], "auth0|external-user")
 
         wrong_resource = jwt.encode(
             {**base, "resource": "https://other.test/mcp"}, private_key, algorithm="RS256"
@@ -147,6 +166,39 @@ class AuthTest(unittest.TestCase):
         expired = jwt.encode({**base, "exp": int(time.time()) - 1}, private_key, algorithm="RS256")
         with self.assertRaisesRegex(AuthenticationError, "validation failed"):
             validator.validate(expired)
+
+    def test_auth0_audience_can_bind_resource_without_resource_claim(self):
+        import jwt
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
+        settings = AuthSettings(
+            issuer="https://tenant.auth0.com/", audience="https://api.test/mcp",
+            resource="https://api.test/mcp", jwks_uri="https://tenant.auth0.com/.well-known/jwks.json",
+        )
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        validator = JWTValidator(settings)
+        validator._keys = type("Keys", (), {"get_signing_key_from_jwt": lambda _self, _token:
+                               type("Key", (), {"key": private_key.public_key()})()})()
+        claims = {"iss": settings.issuer, "aud": settings.audience,
+                  "sub": "auth0|abc", "client_id": "tpc_abc", "exp": int(time.time()) + 60}
+        token = jwt.encode(claims, private_key, algorithm="RS256")
+        self.assertEqual(validator.validate(token)["sub"], "auth0|abc")
+
+    def test_external_subject_is_never_used_as_internal_user_id(self):
+        calls = []
+        class Db:
+            def execute(self, sql, params):
+                calls.append((sql, params))
+                if "SELECT user_id FROM oauth_identities" in sql:
+                    return FakeResult({"user_id": "08b59d77-7dd8-4c3f-b878-049b81ceac70"})
+                return FakeResult(None)
+        @contextmanager
+        def connect(): yield Db()
+        user_id = OAuthIdentityResolver(connect, self.settings).resolve_user(
+            {"sub": "auth0|not-a-uuid"}
+        )
+        self.assertEqual(user_id, "08b59d77-7dd8-4c3f-b878-049b81ceac70")
+        self.assertEqual(calls[0][1], (self.settings.issuer, "auth0|not-a-uuid"))
 
     def test_pat_mode_must_be_explicit_and_valid(self):
         self.assertEqual(auth_mode({}), "oauth")

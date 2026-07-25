@@ -184,9 +184,11 @@ class ControlAppTest(unittest.TestCase):
 
     def test_connection_pat_is_returned_once_only_in_explicit_self_hosted_mode(self):
         who = self.identity
-        body = {"provider": "openai", "client_type": "codex", "display_name": "Codex"}
+        body = {"provider": "openai", "client_type": "codex", "display_name": "Codex",
+                "oauth_client_id": "tpc_codex"}
         hosted_db = RecordingDB()
-        hosted = ControlService(lambda: recording_connection(hosted_db), self_hosted=False)
+        hosted = ControlService(lambda: recording_connection(hosted_db), self_hosted=False,
+                                oauth_issuer="https://tenant.auth0.com/")
         self.assertNotIn("personal_access_token", hosted.create_connection(who, body))
         self.assertFalse(any("personal_access_tokens" in sql for sql, _ in hosted_db.calls))
 

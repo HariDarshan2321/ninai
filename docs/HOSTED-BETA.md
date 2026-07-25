@@ -16,7 +16,7 @@ The public MCP endpoint is `https://<host>/mcp`. It uses Streamable HTTP and req
 | `propose_memory` | `can_propose` | Creates a reviewable proposal; proposals are not recalled. |
 | `remember` | `can_auto_activate` | Creates active memory only for connections explicitly granted auto-activation. |
 
-All write calls require `source_uri` and `idempotency_key`. Requests cannot choose their user, workspace, or client identity: OAuth mode takes those values from signed token claims, while self-hosted PAT mode resolves them from the token's stored digest. Both modes check live PostgreSQL state on every request.
+All write calls require `source_uri` and `idempotency_key`. Requests cannot choose their identity: OAuth mode maps the signed external subject and OAuth client ID to internal UUID records, while self-hosted PAT mode resolves the token's stored digest. Both modes check live PostgreSQL state on every request.
 
 ## Authentication modes
 

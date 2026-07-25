@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ninai_cloud.migrations import apply_migrations
-from ninai_cloud.auth import PATTokenVerifier
+from ninai_cloud.auth import AuthSettings, AuthenticationError, PATTokenVerifier, PrincipalResolver
 from ninai_cloud.control_api import ControlIdentity, ControlService
 from ninai_cloud.postgres_store import AuthorizationError, IdempotencyConflict, PostgresStore, Principal
 
@@ -53,9 +53,11 @@ class PostgresLifecycleTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("DELETE FROM oauth_identities WHERE user_id=%s", (self.user,))
             for table in ("disclosure_logs", "idempotency_keys", "memory_relations", "memory_sources", "memories",
                           "personal_access_tokens",
-                          "client_scope_grants", "client_connections", "projects", "workspace_members", "workspaces", "users"):
+                          "oauth_client_bindings", "client_scope_grants", "client_connections",
+                          "projects", "workspace_members", "workspaces", "users"):
                 db.execute(f"DELETE FROM {table} WHERE workspace_id=%s" if table not in {"users", "workspaces"} else
                            ("DELETE FROM workspaces WHERE id=%s" if table == "workspaces" else "DELETE FROM users WHERE id=%s"),
                            (self.workspace if table != "users" else self.user,))
@@ -223,6 +225,33 @@ class PostgresLifecycleTest(unittest.TestCase):
             with self.psycopg.connect(DATABASE_URL) as db:
                 db.execute("DELETE FROM workspace_members WHERE workspace_id=%s", (created["id"],))
                 db.execute("DELETE FROM workspaces WHERE id=%s", (created["id"],))
+
+    def test_auth0_subject_and_dynamic_client_map_to_internal_uuids(self) -> None:
+        settings = AuthSettings(
+            issuer="https://tenant.auth0.com/", audience="https://ninai.test/mcp",
+            resource="https://ninai.test/mcp",
+            jwks_uri="https://tenant.auth0.com/.well-known/jwks.json",
+        )
+        subject = "auth0|external-not-a-uuid"
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("""INSERT INTO oauth_identities(id,issuer,subject,user_id,email)
+                VALUES(%s,%s,%s,%s,%s)""", (str(uuid.uuid4()), settings.issuer,
+                subject, self.user, f"{self.user}@test.invalid"))
+        control = ControlService(self.store._connection, oauth_issuer=settings.issuer)
+        connection = control.create_connection(ControlIdentity(self.user, self.workspace), {
+            "provider": "openai", "client_type": "codex", "display_name": "Codex DCR",
+            "oauth_client_id": "tpc_auth0_dynamic_client",
+        })
+        claims = {"sub": subject, "client_id": "tpc_auth0_dynamic_client",
+                  settings.workspace_claim: self.workspace}
+        principal = PrincipalResolver(self.store._connection, settings).resolve(claims)
+        self.assertEqual(principal.user_id, self.user)
+        self.assertEqual(principal.workspace_id, self.workspace)
+        self.assertEqual(principal.client_connection_id, str(connection["id"]))
+        self.assertTrue(control.revoke_connection(ControlIdentity(self.user, self.workspace),
+                                                  connection["id"]))
+        with self.assertRaisesRegex(AuthenticationError, "revoked"):
+            PrincipalResolver(self.store._connection, settings).resolve(claims)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,42 @@
+# Auth0 deployment adaptation
+
+Auth0 owns authorization, login, consent, PKCE, refresh tokens, and dynamic
+client registration (DCR). Ninai maps `(issuer, sub)` to an internal UUID user
+and `(issuer, client_id/azp, user, workspace)` to an internal client connection.
+An Auth0 subject such as `auth0|abc123` is never inserted into a UUID column.
+
+Register the `tpc_…` client ID returned by DCR when creating the matching Claude
+or Codex connection in the control center. Binding a client grants no memory
+scope; read/propose/auto-activate grants remain explicit Ninai actions.
+
+## Tenant configuration still required
+
+1. Create an Auth0 API whose Identifier exactly equals the public MCP URL, for
+   example `https://mcp.ninai.io/mcp`. Use RS256 and define `ninai:read`,
+   `ninai:propose`, and `ninai:remember` permissions.
+2. Enable the RFC 9068 access-token profile so tokens carry `client_id`. Ninai
+   also accepts Auth0's default `azp` claim.
+3. Enable DCR under **Settings → Advanced**. Auth0 DCR is open registration, so
+   configure the DCR tenant ACL and operational monitoring before launch.
+4. Configure third-party application default API access for the Ninai API.
+   DCR-created clients otherwise receive no API access.
+5. Configure Universal Login, consent, MFA, refresh-token rotation, attack
+   protection, signing-key rotation, and callback/logout URLs for the tested
+   Claude and Codex hosts.
+6. Set `cloud/.env.example` values. Preserve Auth0's canonical issuer trailing
+   slash. OAuth audience and `NINAI_PUBLIC_RESOURCE_URL` must be identical.
+7. For a user in multiple workspaces, add a Post-Login Action that emits the
+   selected UUID as `https://ninai.io/workspace_id`. Single-workspace users do
+   not require this custom claim.
+8. Apply `0004_oauth_identity_mapping.sql`, sign into `/control`, create a
+   connection with the DCR `tpc_…` client ID, then explicitly grant scopes.
+
+Auth0 DCR clients require PKCE and support authorization-code and refresh-token
+grants. The host must store and reuse a registration rather than creating a new
+application on each login.
+
+Official references:
+
+- [Auth0 Dynamic Client Registration](https://auth0.com/docs/get-started/applications/dynamic-client-registration)
+- [Auth0 custom claims](https://auth0.com/docs/secure/tokens/json-web-tokens/create-custom-claims)
+- [Auth0 token structure](https://auth0.com/docs/secure/tokens)

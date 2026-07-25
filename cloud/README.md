@@ -93,9 +93,9 @@ The real Claude Code → Codex → Claude Code round trip and existing-token rev
 OAuth is the default hosted boundary, and Ninai is a protected resource rather
 than an authorization server. Configure an external OAuth/OIDC issuer using
 `.env.example`. OAuth access tokens must be asymmetric signed JWTs with matching
-`iss`, `aud`, `resource`, and unexpired `exp` claims. The signed `sub`,
-`ninai_workspace_id`, and `ninai_client_connection_id` claims identify the
-principal. Explicit PAT mode instead resolves the opaque token's stored digest
+`iss`, `aud`, and unexpired `exp` claims. The signed external `sub` and OAuth
+`client_id` (or Auth0 `azp`) map to Ninai's internal UUID user, workspace, and
+client connection. Explicit PAT mode instead resolves the opaque token's stored digest
 to that same fixed principal; request bodies and query strings are never trusted
 for identity in either mode.
 
@@ -105,3 +105,5 @@ next request even if its token has not expired. Serve
 `AuthSettings.protected_resource_metadata()` from
 `/.well-known/oauth-protected-resource`; the configured issuer remains
 responsible for authorization-server discovery, login, consent, and tokens.
+
+See [Auth0 deployment adaptation](../docs/AUTH0.md) for DCR and tenant setup.

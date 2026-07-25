@@ -27,8 +27,10 @@ class HostedStoreUnitTest(unittest.TestCase):
 
     def test_core_migration_has_tenant_indexes_and_constraints(self) -> None:
         files = migration_files()
-        self.assertEqual([path.name for path in files],
-                         ["0001_hosted_core.sql", "0002_personal_access_tokens.sql", "0003_memory_lifecycle.sql"])
+        self.assertEqual([path.name for path in files], [
+            "0001_hosted_core.sql", "0002_personal_access_tokens.sql",
+            "0003_memory_lifecycle.sql", "0004_oauth_identity_mapping.sql",
+        ])
         sql = files[0].read_text(encoding="utf-8")
         for table in (
             "users", "workspaces", "workspace_members", "projects", "client_connections",

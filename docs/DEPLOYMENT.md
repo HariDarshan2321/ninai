@@ -20,7 +20,9 @@ does not mount or access the local desktop vault.
 - A public HTTPS URL for MCP and, in OAuth mode, public issuer discovery/JWKS
 - Provisioned users, workspaces, memberships, projects, client connections, and grants
 
-In OAuth mode, Ninai does not issue tokens. The issuer must place `sub`, `ninai_workspace_id`, and `ninai_client_connection_id` in signed tokens, plus matching `iss`, `aud`, `resource`, and unexpired `exp` claims.
+In OAuth mode, Ninai maps the issuer-signed external `sub` plus `client_id` (or
+legacy `azp`) to internal UUID identities. For Auth0, the API audience must
+equal the public MCP resource URL. See [AUTH0.md](AUTH0.md).
 
 ### Configure and migrate
 
@@ -31,13 +33,13 @@ DATABASE_URL=postgresql://ninai:<secret>@<private-host>:5432/ninai
 HOST=0.0.0.0
 PORT=8000
 NINAI_OAUTH_ISSUER=https://<issuer>
-NINAI_OAUTH_AUDIENCE=ninai-cloud
+NINAI_OAUTH_AUDIENCE=https://<api-host>/mcp
 NINAI_OAUTH_JWKS_URI=https://<issuer>/.well-known/jwks.json
 NINAI_OAUTH_AUTHORIZATION_ENDPOINT=https://<issuer>/oauth2/authorize
 NINAI_OAUTH_TOKEN_ENDPOINT=https://<issuer>/oauth2/token
 NINAI_PUBLIC_RESOURCE_URL=https://<api-host>/mcp
-NINAI_OAUTH_WORKSPACE_CLAIM=ninai_workspace_id
-NINAI_OAUTH_CLIENT_CONNECTION_CLAIM=ninai_client_connection_id
+NINAI_OAUTH_WORKSPACE_CLAIM=https://ninai.io/workspace_id
+NINAI_OAUTH_CLIENT_ID_CLAIM=client_id
 ```
 
 Apply migrations from the `cloud/` directory before starting the new application version:

@@ -42,10 +42,11 @@ def _jsonable(value: Any) -> Any:
 
 class ControlService:
     def __init__(self, connect: Callable[[], ContextManager[Any]], *, self_hosted: bool = False,
-                 public_mcp_url: str = "/mcp") -> None:
+                 public_mcp_url: str = "/mcp", oauth_issuer: str | None = None) -> None:
         self._connect = connect
         self.self_hosted = self_hosted
         self.public_mcp_url = public_mcp_url
+        self.oauth_issuer = oauth_issuer
 
     @staticmethod
     def _slug(value: str) -> str:
@@ -95,8 +96,11 @@ class ControlService:
         provider = str(data.get("provider", "")).strip().lower()
         client_type = str(data.get("client_type", "")).strip().lower()
         display_name = str(data.get("display_name", "")).strip()
+        oauth_client_id = str(data.get("oauth_client_id", "")).strip() or None
         if provider not in {"anthropic", "openai"} or not client_type or not display_name:
             raise ValueError("provider (anthropic or openai), client_type, and display_name are required")
+        if not self.self_hosted and not oauth_client_id:
+            raise ValueError("oauth_client_id is required for an OAuth connection")
         connection_id = str(uuid.uuid4())
         raw_token = "ninai_pat_" + secrets.token_urlsafe(32) if self.self_hosted else None
         expires_at = datetime.now(timezone.utc) + timedelta(days=90)
@@ -113,6 +117,14 @@ class ControlService:
                   VALUES(%s,%s,%s,%s,%s,%s,%s)""", (str(uuid.uuid4()), identity.workspace_id,
                   identity.user_id, connection_id, hashlib.sha256(raw_token.encode()).hexdigest(),
                   display_name, expires_at))
+            elif oauth_client_id:
+                if not self.oauth_issuer:
+                    raise ValueError("OAuth issuer is not configured")
+                db.execute("""INSERT INTO oauth_client_bindings
+                  (id,issuer,oauth_client_id,user_id,workspace_id,client_connection_id)
+                  VALUES(%s,%s,%s,%s,%s,%s)""", (str(uuid.uuid4()),
+                  self.oauth_issuer, oauth_client_id, identity.user_id,
+                  identity.workspace_id, connection_id))
         result = dict(row)
         result["setup"] = {"mcp_url": self.public_mcp_url, "auth_mode": "pat" if raw_token else "oauth"}
         if raw_token:

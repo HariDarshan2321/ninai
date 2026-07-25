@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import hashlib
+import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, ContextManager, Mapping
 
@@ -38,8 +39,8 @@ class AuthSettings:
     jwks_uri: str
     authorization_endpoint: str | None = None
     token_endpoint: str | None = None
-    workspace_claim: str = "ninai_workspace_id"
-    client_connection_claim: str = "ninai_client_connection_id"
+    workspace_claim: str = "https://ninai.io/workspace_id"
+    oauth_client_claim: str = "client_id"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "AuthSettings":
@@ -51,10 +52,10 @@ class AuthSettings:
             jwks_uri=_required(values, "NINAI_OAUTH_JWKS_URI"),
             authorization_endpoint=values.get("NINAI_OAUTH_AUTHORIZATION_ENDPOINT") or None,
             token_endpoint=values.get("NINAI_OAUTH_TOKEN_ENDPOINT") or None,
-            workspace_claim=values.get("NINAI_OAUTH_WORKSPACE_CLAIM", "ninai_workspace_id"),
-            client_connection_claim=values.get(
-                "NINAI_OAUTH_CLIENT_CONNECTION_CLAIM", "ninai_client_connection_id"
+            workspace_claim=values.get(
+                "NINAI_OAUTH_WORKSPACE_CLAIM", "https://ninai.io/workspace_id"
             ),
+            oauth_client_claim=values.get("NINAI_OAUTH_CLIENT_ID_CLAIM", "client_id"),
         )
 
     def protected_resource_metadata(self) -> dict[str, Any]:
@@ -98,15 +99,83 @@ class JWTValidator:
                 algorithms=["RS256", "ES256"],
                 issuer=self.settings.issuer,
                 audience=self.settings.audience,
-                options={"require": ["exp", "iss", "aud", "sub", "resource"]},
+                options={"require": ["exp", "iss", "aud", "sub"]},
             )
         except Exception as exc:
             raise AuthenticationError("Bearer token validation failed") from exc
         resource = claims.get("resource")
-        resources = resource if isinstance(resource, list) else [resource]
-        if self.settings.resource not in resources:
-            raise AuthenticationError("Bearer token is not valid for this resource")
+        if resource is not None:
+            resources = resource if isinstance(resource, list) else [resource]
+            if self.settings.resource not in resources:
+                raise AuthenticationError("Bearer token is not valid for this resource")
+        elif self.settings.audience != self.settings.resource:
+            raise AuthenticationError(
+                "Bearer token has no resource claim and its audience is not the MCP resource"
+            )
         return claims
+
+
+class OAuthIdentityResolver:
+    """Map an issuer subject to a stable internal UUID user."""
+
+    def __init__(self, connect: Callable[[], ContextManager[Any]], settings: AuthSettings) -> None:
+        self._connect = connect
+        self.settings = settings
+
+    def resolve_user(self, claims: Mapping[str, Any], *, create: bool = False) -> str:
+        subject = claims.get("sub")
+        if not isinstance(subject, str) or not subject.strip():
+            raise AuthenticationError("Bearer token is missing its subject")
+        with self._connect() as db:
+            row = db.execute(
+                """SELECT user_id FROM oauth_identities
+                   WHERE issuer=%s AND subject=%s""", (self.settings.issuer, subject)
+            ).fetchone()
+            if row:
+                db.execute(
+                    """UPDATE oauth_identities SET last_seen_at=now(),
+                       email=COALESCE(%s,email),display_name=COALESCE(%s,display_name)
+                       WHERE issuer=%s AND subject=%s""",
+                    (claims.get("email"), claims.get("name"), self.settings.issuer, subject),
+                )
+                return str(row["user_id"])
+            if not create:
+                raise AuthenticationError("OAuth account has not completed Ninai setup")
+            user_id = str(uuid.uuid4())
+            email = claims.get("email") if isinstance(claims.get("email"), str) else None
+            display_name = claims.get("name") if isinstance(claims.get("name"), str) else None
+            # Never link accounts by email. A collision receives an internal placeholder.
+            stored_email = email or f"{user_id}@identity.invalid"
+            if db.execute("SELECT 1 FROM users WHERE email=%s", (stored_email,)).fetchone():
+                stored_email = f"{user_id}@identity.invalid"
+            db.execute(
+                "INSERT INTO users(id,email,display_name) VALUES(%s,%s,%s)",
+                (user_id, stored_email, display_name or stored_email.split("@", 1)[0]),
+            )
+            db.execute(
+                """INSERT INTO oauth_identities
+                   (id,issuer,subject,user_id,email,display_name)
+                   VALUES(%s,%s,%s,%s,%s,%s)""",
+                (str(uuid.uuid4()), self.settings.issuer, subject, user_id, email, display_name),
+            )
+            return user_id
+
+    def workspace_for(self, user_id: str, requested: Any = None) -> str | None:
+        if requested is not None:
+            try:
+                requested = str(uuid.UUID(str(requested)))
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise AuthenticationError("Bearer token has an invalid workspace claim") from exc
+        with self._connect() as db:
+            rows = db.execute(
+                """SELECT workspace_id FROM workspace_members m JOIN workspaces w ON w.id=m.workspace_id
+                   WHERE m.user_id=%s AND m.revoked_at IS NULL AND w.deleted_at IS NULL
+                     AND (%s::uuid IS NULL OR m.workspace_id=%s::uuid) ORDER BY m.created_at""",
+                (user_id, requested, requested),
+            ).fetchall()
+        if requested is not None and not rows:
+            raise AuthenticationError("Requested workspace is unavailable")
+        return str(rows[0]["workspace_id"]) if len(rows) == 1 else None
 
 
 class PrincipalResolver:
@@ -115,31 +184,40 @@ class PrincipalResolver:
     def __init__(self, connect: Callable[[], ContextManager[Any]], settings: AuthSettings) -> None:
         self._connect = connect
         self.settings = settings
+        self.identities = OAuthIdentityResolver(connect, settings)
 
     def resolve(self, claims: Mapping[str, Any]) -> Principal:
-        values = {
-            "user_id": claims.get("sub"),
-            "workspace_id": claims.get(self.settings.workspace_claim),
-            "client_connection_id": claims.get(self.settings.client_connection_claim),
-        }
-        if any(not isinstance(value, str) or not value.strip() for value in values.values()):
-            raise AuthenticationError("Bearer token is missing Ninai identity claims")
-        principal = Principal(**values)  # type: ignore[arg-type]
+        user_id = self.identities.resolve_user(claims)
+        oauth_client_id = claims.get(self.settings.oauth_client_claim) or claims.get("azp")
+        if not isinstance(oauth_client_id, str) or not oauth_client_id.strip():
+            raise AuthenticationError("Bearer token is missing its OAuth client identity")
+        requested_workspace = claims.get(self.settings.workspace_claim)
+        if requested_workspace is not None:
+            try:
+                requested_workspace = str(uuid.UUID(str(requested_workspace)))
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise AuthenticationError("Bearer token has an invalid workspace claim") from exc
         with self._connect() as db:
             row = db.execute(
-                """SELECT 1 FROM client_connections c
+                """SELECT c.user_id,c.workspace_id,c.id AS client_connection_id
+                   FROM oauth_client_bindings b JOIN client_connections c
+                     ON c.workspace_id=b.workspace_id AND c.id=b.client_connection_id
                    JOIN workspace_members m ON m.workspace_id=c.workspace_id AND m.user_id=%s
                    JOIN workspaces w ON w.id=c.workspace_id
                    JOIN users u ON u.id=m.user_id
-                   WHERE c.id=%s AND c.workspace_id=%s AND c.user_id=%s
+                   WHERE b.issuer=%s AND b.oauth_client_id=%s AND b.user_id=%s
+                     AND (%s::uuid IS NULL OR b.workspace_id=%s::uuid) AND b.revoked_at IS NULL
                      AND c.status='active' AND c.revoked_at IS NULL
                      AND m.revoked_at IS NULL AND w.deleted_at IS NULL AND u.deleted_at IS NULL""",
-                (principal.user_id, principal.client_connection_id,
-                 principal.workspace_id, principal.user_id),
+                (user_id, self.settings.issuer, oauth_client_id, user_id,
+                 requested_workspace, requested_workspace),
             ).fetchone()
         if not row:
-            raise AuthenticationError("Client, membership, or workspace is revoked or unknown")
-        return principal
+            raise AuthenticationError(
+                "OAuth client is not connected, is ambiguous, or has been revoked"
+            )
+        return Principal(str(row["user_id"]), str(row["workspace_id"]),
+                         str(row["client_connection_id"]))
 
 
 class BearerAuthenticator:
@@ -207,29 +285,34 @@ class OAuthControlTokenVerifier(TokenVerifier):
     bootstrap cycle; it must never protect MCP memory tools.
     """
 
-    def __init__(self, validator: JWTValidator, settings: AuthSettings) -> None:
+    def __init__(self, validator: JWTValidator, settings: AuthSettings,
+                 identities: OAuthIdentityResolver) -> None:
         self.validator = validator
         self.settings = settings
+        self.identities = identities
 
     async def verify_token(self, token: str) -> AccessToken | None:
         try:
             claims = self.validator.validate(token)
         except AuthenticationError:
             return None
-        subject = claims.get("sub")
-        if not isinstance(subject, str) or not subject.strip():
+        try:
+            user_id = self.identities.resolve_user(claims, create=True)
+            workspace_id = self.identities.workspace_for(
+                user_id, claims.get(self.settings.workspace_claim)
+            )
+        except AuthenticationError:
             return None
-        workspace_id = claims.get(self.settings.workspace_claim)
-        trusted = {"user_id": subject}
-        if isinstance(workspace_id, str) and workspace_id.strip():
+        trusted = {"user_id": user_id}
+        if workspace_id:
             trusted["workspace_id"] = workspace_id
         for name in ("email", "name"):
             if isinstance(claims.get(name), str):
                 trusted[name] = claims[name]
         return AccessToken(
-            token=token, client_id=str(claims.get("client_id") or subject),
+            token=token, client_id=str(claims.get("client_id") or claims.get("azp") or user_id),
             scopes=[], expires_at=int(claims["exp"]) if claims.get("exp") is not None else None,
-            resource=self.settings.resource, subject=subject, claims=trusted,
+            resource=self.settings.resource, subject=str(claims.get("sub")), claims=trusted,
         )
 
 

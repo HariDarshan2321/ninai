@@ -3,7 +3,7 @@
 ## Hosted beta
 
 - The service is not deployed by this repository. The local PAT-backed Claude Code → Codex → Claude Code and post-revocation gate passed on 25 July 2026, but production OAuth/HTTPS acceptance is still pending.
-- OAuth depends on an external issuer. Minimal signed-subject workspace/project/client provisioning is implemented, but issuer-hosted consent, MFA, dynamic client registration, and production browser sessions remain external/deployment work.
+- OAuth depends on an external issuer. Auth0 external-subject and dynamic-client mappings are implemented, but tenant-side login, consent, MFA, DCR enablement/default grants, and production browser sessions remain deployment work.
 - PAT mode is for trusted private self-hosting. It has expiry and live revocation but no browser consent, MFA, refresh flow, or JWT audience/resource claims.
 - PostgreSQL search is lexical. There are no embeddings, semantic reranker, consolidation, automatic conflict resolution, or measured retrieval-quality benchmark.
 - The hosted control center is a dependency-light authenticated ASGI surface mounted with the MCP service. Its security posture has not been browser-hardened or independently reviewed.
