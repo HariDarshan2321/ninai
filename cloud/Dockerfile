@@ -6,4 +6,4 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY migrations ./migrations
 RUN pip install --no-cache-dir .
-CMD ["python", "-m", "ninai_cloud.migrations"]
+CMD ["ninai-cloud-mcp"]

@@ -7,6 +7,16 @@ from .postgres_store import (
     PostgresStore,
     Principal,
 )
+from .auth import (
+    AuthSettings,
+    AuthenticationError,
+    BearerAuthenticator,
+    JWTValidator,
+    MCPTokenVerifier,
+    NinaiAccessToken,
+    PrincipalResolver,
+    build_token_verifier,
+)
 
 __all__ = [
     "AuthorizationError",
@@ -14,4 +24,12 @@ __all__ = [
     "IdempotencyConflict",
     "PostgresStore",
     "Principal",
+    "AuthSettings",
+    "AuthenticationError",
+    "BearerAuthenticator",
+    "JWTValidator",
+    "MCPTokenVerifier",
+    "NinaiAccessToken",
+    "PrincipalResolver",
+    "build_token_verifier",
 ]
