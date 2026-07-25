@@ -30,6 +30,31 @@ Recorded evidence:
 
 **Core cross-provider host gate: PASS.**
 
+## Recorded ephemeral HTTPS transport run — 25 July 2026
+
+The current `main` container was exposed temporarily through an account-less
+Cloudflare Quick Tunnel using fresh one-day PATs. This run proves the remote MCP
+transport, public TLS endpoint, resource metadata, authenticated bidirectional
+memory flow, and live connection revocation. The tunnel was stopped after the
+run and is not a durable deployment.
+
+| Field | Evidence |
+| --- | --- |
+| Git commit | `08586ce` plus the Compose public-resource override recorded in the next commit |
+| Container | Non-root UID/GID `10001:10001`; automatic migrations through `0003_memory_lifecycle.sql`; healthy |
+| Transport | Public Cloudflare HTTPS tunnel to the loopback-only Compose service |
+| Authentication | Fresh explicit PAT-mode staging connections expiring after one day |
+| Discovery | `/health` returned `200`; protected-resource metadata advertised the exact HTTPS `/mcp` resource |
+| Challenge | Unauthenticated MCP initialization returned `401` with matching `resource_metadata` |
+| Tools | `fetch`, `propose_memory`, `recall`, `remember`, and `search` listed over HTTPS |
+| Round trip | Claude-labelled connection wrote; OpenAI-labelled connection recalled with exact source; OpenAI wrote; Claude recalled with exact source |
+| Revocation | The already-issued OpenAI PAT returned HTTP `401` after its connection was revoked |
+| Continuity | The Claude connection still recalled the OpenAI-authored memory after OpenAI revocation |
+
+**Ephemeral HTTPS/PAT transport gate: PASS.** This is stronger transport
+evidence than the loopback run, but it deliberately does not claim production
+OAuth, durable hosting, independent tester completion, or production operations.
+
 **Production hosted launch gate: NOT YET PASSED.** HTTPS deployment, external
 OAuth/OIDC configuration, restore testing, rate limiting, and production
 operations remain outstanding.

@@ -9,6 +9,7 @@ class LocalHostedStackTests(unittest.TestCase):
         self.assertIn("service_completed_successfully", compose)
         self.assertIn('"ninai_cloud.migrations"', compose)
         self.assertIn("NINAI_AUTH_MODE: pat", compose)
+        self.assertIn("NINAI_PUBLIC_RESOURCE_URL:-http://localhost:", compose)
         self.assertIn("/health", compose)
         active = "\n".join(line for line in compose.splitlines() if not line.lstrip().startswith("#"))
         self.assertNotIn(".ninai", active)

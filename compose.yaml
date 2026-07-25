@@ -38,7 +38,7 @@ services:
       HOST: 0.0.0.0
       PORT: 8000
       NINAI_AUTH_MODE: pat
-      NINAI_PUBLIC_RESOURCE_URL: http://localhost:${NINAI_DEV_CLOUD_PORT:-8000}/mcp
+      NINAI_PUBLIC_RESOURCE_URL: ${NINAI_PUBLIC_RESOURCE_URL:-http://localhost:${NINAI_DEV_CLOUD_PORT:-8000}/mcp}
     ports:
       - "127.0.0.1:${NINAI_DEV_CLOUD_PORT:-8000}:8000"
     depends_on:
