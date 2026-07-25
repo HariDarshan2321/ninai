@@ -10,6 +10,13 @@ from pathlib import Path
 from typing import Iterator
 
 from .config import database_path
+from .contracts import (
+    CreateMemoryRequest,
+    DisclosureEvent,
+    MemoryCandidate,
+    PrincipalContext,
+    SearchRequest,
+)
 from .models import (
     ALLOWED_MEMORY_TYPES,
     ALLOWED_SCOPES,
@@ -192,6 +199,18 @@ class MemoryStore:
             except sqlite3.OperationalError:
                 pass
         return memory
+
+    def create_memory(self, request: CreateMemoryRequest) -> Memory:
+        """Create a memory through the storage-independent backend contract."""
+        return self.remember(
+            request.content,
+            memory_type=request.memory_type,
+            scope=request.scope,
+            source_uri=request.source_uri,
+            importance=request.importance,
+            confidence=request.confidence,
+            sensitivity=request.sensitivity,
+        )
 
     def update(
         self,
@@ -449,6 +468,25 @@ class MemoryStore:
                 ).fetchall()
         return [dict(row) for row in rows]
 
+    def search_candidates(self, request: SearchRequest) -> list[MemoryCandidate]:
+        """Return candidates already filtered to the request's allowed scopes."""
+        if request.limit < 1:
+            return []
+        if not request.scopes:
+            return []
+        unknown_scopes = set(request.scopes) - ALLOWED_SCOPES
+        if unknown_scopes:
+            raise ValueError(f"Unsupported scope: {sorted(unknown_scopes)[0]}")
+        return self._search_candidates(
+            request.query, set(request.scopes), request.limit
+        )
+
+    def get_memory(
+        self, principal: PrincipalContext, memory_id: str
+    ) -> MemoryCandidate | None:
+        """Fetch one active memory while enforcing the caller's scope grants."""
+        return self.explain(memory_id, client_id=principal.client_id)
+
     def explain(
         self, memory_id: str, *, client_id: str | None = None
     ) -> dict[str, object] | None:
@@ -586,3 +624,14 @@ class MemoryStore:
                     now_iso(),
                 ),
             )
+
+    def record_disclosure(self, event: DisclosureEvent) -> None:
+        """Persist a disclosure emitted by a storage-independent caller."""
+        self._log_access(
+            event.client_id,
+            event.purpose,
+            event.query,
+            list(event.scopes),
+            list(event.memory_ids),
+            event.estimated_tokens,
+        )
