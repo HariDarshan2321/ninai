@@ -146,10 +146,10 @@ git commit -m "feat: launch Ninai MVP"
 gh repo create HariDarshan2321/ninai --public --source=. --remote=origin --push
 ```
 
-The recommended website host is Vercel with `website/` configured as the project root.
-It provides a deployment preview before the domain is changed and native Next.js support
-if the site later moves beyond a static export. The included GitHub Pages workflow remains
-a supported static alternative.
+The website is deployed from `main` through Vercel with `website/` configured as
+the project root. It provides deployment previews and native Next.js support if
+the site later moves beyond a static export. Cloudflare Pages and GitHub Pages
+remain documented alternatives, but no second deployment workflow runs on pushes.
 
 The public website assumes the repository exists at
 `https://github.com/HariDarshan2321/ninai`; create it before launch so the source links and

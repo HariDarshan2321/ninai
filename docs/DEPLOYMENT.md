@@ -119,9 +119,15 @@ Client registration and API examples are in [HOSTED-BETA.md](HOSTED-BETA.md). De
 
 ## Static website
 
-### Vercel (recommended)
+### Vercel (active)
 
 Import the repository, set the project root to `website`, keep Next.js detection and `npm run build`, deploy a preview, then add `ninai.io` and `www.ninai.io`. Make the apex canonical and redirect `www` to it.
+
+The repository's active production project deploys `main` to `ninai.io` through
+Vercel. Confirm the commit status named `Vercel` is successful before treating a
+website change as released. Ninai intentionally does not run a parallel GitHub
+Pages deployment, which would require separate repository Pages administration
+and create a second source of release state.
 
 Official references:
 
@@ -129,9 +135,12 @@ Official references:
 - <https://vercel.com/docs/deployments/overview>
 - <https://vercel.com/docs/domains/working-with-domains/add-a-domain>
 
-### GitHub Pages
+### GitHub Pages (alternative)
 
-The repository includes `.github/workflows/pages.yml`. Select GitHub Actions as the Pages source, configure the custom domain, update DNS using GitHub's apex-domain instructions, and enable HTTPS after verification.
+If the website is intentionally migrated away from Vercel, configure a GitHub
+Pages workflow, select GitHub Actions as the Pages source, configure the custom
+domain, update DNS using GitHub's apex-domain instructions, and enable HTTPS
+after verification. Do not enable two production deployers for the same domain.
 
 - <https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site>
 - <https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site>
