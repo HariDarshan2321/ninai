@@ -179,7 +179,7 @@ class ControlService:
               m.importance,m.confidence,m.created_at,m.updated_at,s.source_uri
               FROM memories m LEFT JOIN LATERAL (SELECT source_uri FROM memory_sources s
               WHERE s.workspace_id=m.workspace_id AND s.memory_id=m.id ORDER BY s.created_at LIMIT 1) s ON true
-              WHERE m.workspace_id=%s AND (%s IS NULL OR m.status=%s) ORDER BY m.updated_at DESC LIMIT %s""",
+              WHERE m.workspace_id=%s AND (%s::text IS NULL OR m.status=%s) ORDER BY m.updated_at DESC LIMIT %s""",
               (identity.workspace_id, status, status, max(1, min(int(limit), 200)))).fetchall()
             return [dict(row) for row in rows]
 
