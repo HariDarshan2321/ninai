@@ -67,7 +67,27 @@ docker build -t ninai-cloud:beta cloud
 docker run --rm -p 8000:8000 --env-file cloud/.env -e HOST=0.0.0.0 ninai-cloud:beta
 ```
 
-The image does not include PostgreSQL, TLS termination, an OAuth issuer, provisioning, migrations at startup, the control-center WSGI deployment, or a reverse proxy. Operate those separately; do not treat the image as a complete production stack.
+The container entrypoint applies all pending migrations before it starts the
+service. Migration startup is serialized with a PostgreSQL advisory transaction
+lock, so simultaneous replicas cannot race the same schema change. A migration
+or database connection failure stops the container instead of serving against an
+unknown schema. The final process runs as an unprivileged numeric user and the
+image reports health through `GET /health`.
+
+The image is the provider-neutral deployment artifact; this repository does not
+include a provider manifest because there is no selected compute provider,
+PostgreSQL service, region, domain, or OAuth issuer to describe honestly. Supply
+at least the environment above through the chosen platform's secret manager,
+terminate TLS at a trusted ingress, keep PostgreSQL on its private network, and
+run at least one replica. The image still does not include PostgreSQL, TLS
+termination, an OAuth issuer, initial principal provisioning, or a reverse
+proxy. Operate those separately; do not treat the image as a complete production
+stack.
+
+Before promoting a new image, run it against staging and confirm both the
+container health status and the applied rows in `schema_migrations`. Back up the
+database and rehearse restore/rollback procedures independently; automatic
+forward migration is not a substitute for a recovery plan.
 
 ### Verify staging
 

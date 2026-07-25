@@ -16,6 +16,10 @@ def apply_migrations(database_url: str) -> None:
         raise RuntimeError("Install ninai-cloud before applying migrations") from exc
 
     with psycopg.connect(database_url) as connection:
+        # A deploy platform may start several replicas at once. Keep schema
+        # changes serialized for the lifetime of this transaction rather than
+        # allowing two entrypoints to apply the same migration concurrently.
+        connection.execute("SELECT pg_advisory_xact_lock(%s)", (0x4E494E4149,))
         connection.execute(
             "CREATE TABLE IF NOT EXISTS schema_migrations "
             "(version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"

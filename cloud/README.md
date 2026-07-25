@@ -39,6 +39,12 @@ issuer values shown in `.env.example`:
 ninai-cloud-mcp
 ```
 
+The included container runs `python -m ninai_cloud.migrations` before executing
+the service, stops on migration failure, runs the service as a non-root user,
+and includes a `/health` container check. The image remains provider-neutral and
+requires externally managed PostgreSQL, HTTPS ingress, secrets, OAuth/OIDC, and
+initial provisioning for a public deployment.
+
 The service exposes `GET /health`, MCP at `/mcp`, and RFC 9728 protected-resource
 metadata. Its `search`, `fetch`, and `recall` tools enforce live client grants and
 write disclosure logs. `propose_memory` requires propose permission; `remember`
