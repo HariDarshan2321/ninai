@@ -26,8 +26,8 @@ export function ContextAperture() {
         <div className={styles.identity}>
           <img src="/assets/ninai-app-icon.svg" alt="" width="30" height="30" />
           <div>
-            <strong>Local vault</strong>
-            <span>37 durable memories</span>
+            <strong>Example local vault</strong>
+            <span>37 illustrative memories</span>
           </div>
         </div>
         <span className={styles.localState}><i /> On this device</span>
@@ -64,7 +64,7 @@ export function ContextAperture() {
               </article>
               <div className={styles.releaseCount}>
                 <strong>2</strong>
-                <span>of 37 memories released</span>
+                <span>of 37 example memories released</span>
               </div>
             </div>
           </div>

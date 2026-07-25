@@ -105,3 +105,21 @@ a remote font dependency to the local-first MVP.
 - Use asymmetry to distinguish human explanation from system evidence.
 - Let the aperture open, close, and return; avoid ambient motion with no meaning.
 - Respect reduced-motion preferences.
+
+## Brand lock
+
+The following elements are stable brand assets, not page-level implementation
+details. Product-status or copy updates must preserve them unless the founder
+explicitly approves a brand redesign:
+
+- the Vault, Paper, Signal, Permit, Ink, and Moss palette and their meanings;
+- The Return wordmark and app icon;
+- the interactive context aperture as the homepage's signature product visual;
+- the editorial serif, humanist sans, and evidence-monospace hierarchy;
+- the calm, asymmetric, evidence-led homepage composition;
+- Signal for calls to action and returning memory, and Permit only for allowed state.
+
+Before merging a website change, compare the rendered homepage with the latest
+approved production reference at desktop and mobile widths. Updating product
+truth, compatibility, or calls to action does not authorize replacing the
+visual system with a generic landing-page theme or decorative card grid.
