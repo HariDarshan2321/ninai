@@ -4,13 +4,13 @@ import Link from "next/link";
 import { CopyCommand } from "@/components/copy-command";
 
 export const metadata: Metadata = {
-  title: "Install the local MCP memory MVP",
+  title: "Choose hosted beta or local installation",
   description:
-    "Install Ninai locally, grant Claude Code selected memory scopes, register the MCP server, and enable optional PostToolUse capture.",
+    "Compare Ninai's hosted beta in development with the available open-source local engine, then install local MCP memory.",
   alternates: { canonical: "/install/" },
   openGraph: {
-    title: "Install the Ninai local memory MVP",
-    description: "Run a permissioned AI memory server locally in minutes.",
+    title: "Choose how to run Ninai",
+    description: "Hosted beta status and the complete local engine installation path.",
     url: "/install/",
     images: [
       {
@@ -47,24 +47,29 @@ export default function InstallPage() {
       <section className="page-hero page-hero--install">
         <div className="shell page-hero__grid">
           <div>
-            <p className="section-label">Install / MVP 0.1</p>
-            <h1>Run Ninai on your machine.</h1>
+            <p className="section-label">Choose your mode</p>
+            <h1>Run local now. Follow hosted development.</h1>
           </div>
           <div className="page-hero__aside">
             <p>
-              The current MVP is a Python MCP server backed by local SQLite. It is built
-              for technical evaluation and the Claude Code integration path.
+              The local engine is available today. The hosted cross-provider beta is under
+              development and will not be presented as ready until its acceptance tests pass.
             </p>
             <div className="requirement-row">
-              <span>Python</span><strong>3.11+</strong>
-              <span>Account</span><strong>Not required</strong>
-              <span>Storage</span><strong>Local SQLite</strong>
+              <span>Local</span><strong>Available</strong>
+              <span>Hosted</span><strong>In development</strong>
+              <span>Cloud sync</span><strong>Never automatic</strong>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="install-layout shell">
+      <section className="install-choice shell" aria-label="Deployment choices">
+        <article><span className="status-pill status-pill--ready">Available now</span><h2>Local engine</h2><p>Keep the complete vault in SQLite on this machine. No account is required.</p><a href="#local-install">Continue to local install ↓</a></article>
+        <article><span className="status-pill">Under development</span><h2>Hosted Beta</h2><p>Remote shared memory for tested OpenAI and Anthropic clients is not yet generally available.</p><a href="mailto:hello@ninai.io?subject=Ninai%20hosted%20beta">Request beta updates ↗</a></article>
+      </section>
+
+      <section className="install-layout shell" id="local-install">
         <aside className="install-toc">
           <p className="section-label">On this page</p>
           <a href="#engine">01 · Install engine</a>

@@ -25,7 +25,8 @@ class PageParser(HTMLParser):
 website = Path(__file__).resolve().parents[1] / "website"
 root = website / "out"
 required = [
-    "index.html", "install/index.html", "research/index.html", "privacy/index.html",
+    "index.html", "install/index.html", "local/index.html", "compatibility/index.html",
+    "research/index.html", "privacy/index.html",
     "404.html", "robots.txt", "sitemap.xml", "site.webmanifest", "llms.txt",
     ".well-known/security.txt", "assets/og-image.png", "assets/ninai-wordmark.svg",
     "CNAME",
@@ -39,6 +40,8 @@ descriptions: set[str] = set()
 indexable_pages = [
     root / "index.html",
     root / "install/index.html",
+    root / "local/index.html",
+    root / "compatibility/index.html",
     root / "research/index.html",
     root / "privacy/index.html",
 ]

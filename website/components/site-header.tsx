@@ -29,13 +29,13 @@ export function SiteHeader() {
       <div className="site-header__inner shell">
         <Brand />
         <nav className="main-nav" aria-label="Primary navigation">
-          <Link href="/#product">Product</Link>
-          <Link href="/#how-it-works">How it works</Link>
+          <Link href="/local/">Local</Link>
+          <Link href="/compatibility/">Compatibility</Link>
           <Link href="/privacy/">Trust</Link>
           <Link href="/research/">Research</Link>
         </nav>
         <Link className="button button--compact button--ink" href="/install/">
-          Install Ninai
+          Choose a mode
           <span aria-hidden="true">↗</span>
         </Link>
         <details
@@ -47,12 +47,12 @@ export function SiteHeader() {
             Menu
           </summary>
           <nav className="mobile-nav__panel" aria-label="Mobile navigation">
-            <Link href="/#product" onClick={closeMobileMenu}>Product</Link>
-            <Link href="/#how-it-works" onClick={closeMobileMenu}>How it works</Link>
+            <Link href="/local/" onClick={closeMobileMenu}>Local engine</Link>
+            <Link href="/compatibility/" onClick={closeMobileMenu}>Compatibility</Link>
             <Link href="/privacy/" onClick={closeMobileMenu}>Trust</Link>
             <Link href="/research/" onClick={closeMobileMenu}>Research</Link>
             <Link className="mobile-nav__install" href="/install/" onClick={closeMobileMenu}>
-              Install Ninai ↗
+              Choose a mode ↗
             </Link>
           </nav>
         </details>

@@ -11,11 +11,11 @@ const siteUrl = "https://ninai.io";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Ninai — AI memory with boundaries",
+    default: "Ninai — shared AI memory with boundaries",
     template: "%s — Ninai",
   },
   description:
-    "Ninai remembers useful AI work across sessions, keeps the complete vault local, and releases only the context each assistant is allowed to recall.",
+    "Permissioned, source-backed memory for AI tools, with an open-source local engine and hosted cross-provider beta in development.",
   applicationName: "Ninai",
   alternates: { canonical: "/" },
   manifest: "/site.webmanifest",
@@ -27,9 +27,9 @@ export const metadata: Metadata = {
     type: "website",
     url: siteUrl,
     siteName: "Ninai",
-    title: "Your AI should remember the work. Not your whole life.",
+    title: "One memory for OpenAI and Claude — in development",
     description:
-      "Local-first AI memory with explicit permissions, provenance, and compact context packets.",
+      "Explore Ninai's available local engine and hosted cross-provider beta in development.",
     images: [
       {
         url: "/assets/og-image.png",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Ninai — AI memory with boundaries",
     description:
-      "Your AI should remember the work—not your whole life.",
+      "Permissioned AI memory: local today, hosted cross-provider beta in development.",
     images: ["/assets/og-image.png"],
   },
   robots: {
@@ -92,7 +92,7 @@ const organizationSchema = {
       operatingSystem: "macOS, Linux, Windows",
       url: `${siteUrl}/`,
       description:
-        "A local-first, permissioned memory layer for AI tools and MCP clients.",
+        "A permissioned memory layer for AI tools, with an available local engine and hosted mode in development.",
       softwareVersion: "0.1",
       offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
       publisher: { "@id": `${siteUrl}/#organization` },

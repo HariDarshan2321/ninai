@@ -1,10 +1,12 @@
 # Ninai
 
-Ninai is a local-first, user-owned memory and permission layer for AI tools.
+Ninai is a permissioned, source-backed memory layer for AI tools. Its local engine is available; its hosted cross-provider beta is under development.
 
 ## Canonical pages
 - Home: https://ninai.io/
 - Install: https://ninai.io/install/
+- Local engine: https://ninai.io/local/
+- Compatibility: https://ninai.io/compatibility/
 - Research: https://ninai.io/research/
 - Privacy: https://ninai.io/privacy/
 
@@ -15,4 +17,7 @@ Ninai is a local-first, user-owned memory and permission layer for AI tools.
 - Returned context packets include provenance and a token budget.
 - The full vault stays local, but released context is sent to the selected AI provider.
 - Automatic capture currently targets Claude Code PostToolUse hooks.
+- Hosted OpenAI/Anthropic interoperability is not yet release-tested or generally available.
+- MCP does not give Ninai silent access to all ChatGPT or Claude conversations.
+- Local vaults are never uploaded or synchronized automatically.
 - The MVP is not production encrypted or independently audited.

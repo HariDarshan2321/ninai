@@ -4,11 +4,11 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Privacy architecture",
   description:
-    "Understand Ninai's local vault, scope permissions, context release boundary, disclosure logs, secret filtering, and current MVP limitations.",
+    "Compare Ninai's implemented local privacy boundary with the planned hosted cloud boundary and current security limitations.",
   alternates: { canonical: "/privacy/" },
   openGraph: {
     title: "Ninai privacy architecture",
-    description: "Local by default. Honest about context release.",
+    description: "Separate local and hosted trust boundaries, stated plainly.",
     url: "/privacy/",
     images: [
       {
@@ -28,15 +28,22 @@ export default function PrivacyPage() {
         <div className="shell page-hero__grid">
           <div>
             <p className="section-label section-label--light">Privacy architecture</p>
-            <h1>Local by default.<br />Honest after release.</h1>
+            <h1>Two modes.<br />Two trust boundaries.</h1>
           </div>
           <div className="page-hero__aside">
             <p>
-              Ninai keeps the complete vault on your machine. A selected packet leaves the
-              device only when you use it with a cloud AI provider.
+              Local mode keeps its vault on your machine. Hosted mode will store workspace
+              memory in managed cloud infrastructure and is still under development.
             </p>
-            <span className="privacy-version">MVP model · July 2026</span>
+            <span className="privacy-version">Current product model · July 2026</span>
           </div>
+        </div>
+      </section>
+
+      <section className="mode-section shell">
+        <div className="mode-grid">
+          <article className="mode-card"><span className="status-pill status-pill--ready">Implemented</span><h2>Local trust boundary</h2><p>The complete SQLite vault, grants, sources, and logs remain on your machine. There is no automatic cloud upload or sync.</p><p>When you send a selected context packet to a cloud AI, that packet leaves the device and the provider's policy applies.</p></article>
+          <article className="mode-card mode-card--future"><span className="status-pill">Under development</span><h2>Hosted trust boundary</h2><p>Hosted workspaces will persist memory in managed cloud storage so authorized clients can connect remotely.</p><p>Authentication, tenant isolation, deletion, export, disclosure logging, and revocation must pass testing before release. No hosted security certification is claimed.</p></article>
         </div>
       </section>
 
@@ -132,7 +139,7 @@ export default function PrivacyPage() {
               <li>No SQLCipher or full-database encryption yet</li>
               <li>No signed and notarized desktop package</li>
               <li>No prompt-injection classifier or independent audit</li>
-              <li>No cloud sync, account system, or remote relay</li>
+              <li>Hosted storage, authentication, export, and deletion are not yet release-tested</li>
             </ul>
           </div>
         </article>
