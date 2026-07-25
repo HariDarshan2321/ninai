@@ -14,6 +14,7 @@ This is an implementation review, not an independent audit or certification. The
 - Stored and returned memories retain a source URI. Search, fetch, and recall create disclosure records.
 - Idempotency keys are unique per workspace and client connection; reusing a key with different content is rejected.
 - Common credential patterns and bounded request sizes are rejected by the store/transport.
+- Per-workspace/client sliding-window read and write quotas are enforced in process, and streamed HTTP request bodies are capped at 64 KiB before tool dispatch.
 - Client revocation also revokes its grants and is checked before its next request.
 - Workspace export and soft deletion exist in the control service; destructive workspace deletion requires owner role and exact slug confirmation.
 
@@ -26,9 +27,9 @@ The automated suite covers JWT validation, identity resolution, revoked-client r
 - No independent penetration test, security audit, compliance certification, threat-model sign-off, or production incident exercise.
 - No database-at-rest encryption managed by Ninai, field-level encryption, customer-managed keys, or zero-knowledge design. Deployment-provider disk encryption is an operator concern.
 - No refresh-token storage or authorization server in Ninai. In OAuth mode, issuer configuration, consent, MFA, session policy, token lifetime, key rotation, and client registration remain external responsibilities. Self-hosted PAT mode has expiry and live revocation but no MFA, consent, refresh, or audience-bearing JWT.
-- No rate limiting, abuse detection, WAF policy, per-tenant quotas, or denial-of-service protection in the application.
+- The in-process limiter is not distributed across replicas and does not replace platform/WAF abuse controls, global quotas, or denial-of-service protection.
 - No cryptographically tamper-evident disclosure log, external log sink, alerting, backup/restore proof, retention scheduler, or hard-delete job.
-- The control API requires an injected production identity resolver and deployment wiring; do not expose it with a trust-on-header or request-body identity.
+- The control UI/API is mounted with the hosted service and verifies the same bearer credentials. Existing-workspace identity comes only from verified token claims; first-workspace OAuth onboarding accepts only the signed subject. Browser hardening and production session/consent design remain deployment work.
 - Secret-pattern filtering is defense in depth, not a complete data-loss-prevention system. Prompt injection and malicious source content are not classified.
 - No browser security policy, CSRF design, hardened session cookie flow, or content-security-policy review has been proven for a hosted control-center deployment.
 - Dependency scanning, container scanning, SBOM generation, TLS policy, network segmentation, database roles, and secret rotation are not yet recorded release evidence.

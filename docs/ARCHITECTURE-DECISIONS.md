@@ -23,6 +23,6 @@
 - What rate limits and quotas apply per connection and workspace?
 - How will schema migrations, rollback, backup restore, key rotation, and incident revocation be operated and audited?
 - Is PostgreSQL lexical search sufficient for beta quality, and what benchmark would justify embeddings or reranking?
-- How are conflicts, supersession, expiration, and memory-type restrictions exposed in the control center?
+- How should conflict groups, supersession chains, and freshness policy receive richer visualization beyond the current status/source fields in the control center?
 - Which exact Claude, Codex, OpenAI Responses API, and Anthropic API versions passed the release gate?
 - What security review is required before external user data is accepted?
