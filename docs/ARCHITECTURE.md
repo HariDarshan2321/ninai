@@ -6,9 +6,20 @@ Ninai stores durable memory locally, controls which scopes each AI client may ac
 
 ## Deployment modes
 
-The implemented MVP is local-first: SQLite remains on the user's machine and nothing is uploaded or synced automatically. A hosted cloud service is a separate, future opt-in mode for clients that cannot reliably reach a local MCP server; it is not implemented in this repository today. Enabling hosted mode must be an explicit user choice, not a change to local mode's storage boundary.
+Local mode is local-first: SQLite remains on the user's machine and nothing is uploaded or synced automatically. The repository also contains a separate, explicit opt-in hosted beta for clients that cannot reliably reach a local MCP server. Hosted mode uses PostgreSQL and authenticated Streamable HTTP MCP; it does not read or synchronize the local vault. It is implemented and automated-testable, and its local real-host Claude Code/Codex gate passed on 25 July 2026. Production HTTPS/OAuth deployment remains pending.
 
-Both modes must share the same core invariants: permission checks happen before retrieval, every memory retains provenance, and disclosures are audited. Hosted storage or sync must not bypass those controls.
+Both modes share the same core invariants: permission checks happen before retrieval, every memory retains provenance, and disclosures are audited. Hosted storage must not bypass those controls.
+
+Hosted data flow:
+
+```text
+Claude, Codex, or an API integration
+        -> HTTPS Streamable HTTP MCP + bearer token
+        -> OAuth JWT or explicit self-hosted PAT validation + live principal check
+        -> active workspace/client scope grants
+        -> PostgreSQL retrieval or review-first write
+        -> provenance-backed result + disclosure log
+```
 
 ## Data flow
 
@@ -122,7 +133,7 @@ Present in the MVP:
 - soft deletion;
 - bounded memory size and context budgets.
 
-These are also required invariants for any future hosted mode. The list above describes the current local implementation; it is not evidence that hosted storage, remote MCP, accounts, or sync exist.
+The hosted implementation adds tenant-bound PostgreSQL records, asymmetric JWT validation against an external issuer, live membership/client revocation checks, distinct propose/auto-activate grants, idempotent writes, and disclosure records. These controls have repository tests; they are not an independent security audit or proof of a hardened production deployment. See [SECURITY-REPORT.md](SECURITY-REPORT.md).
 
 Not present yet:
 

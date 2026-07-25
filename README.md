@@ -5,13 +5,14 @@
 Ninai is a local-first, permissioned memory layer for AI tools. This repository contains:
 
 - `engine/` — an installable Python MCP server with local SQLite memory, scoped permissions, provenance, access logs, and compact context packets.
+- `cloud/` — an explicit opt-in PostgreSQL store, authenticated Streamable HTTP MCP service, and hosted control-center API/UI.
 - `website/` — a statically exported Next.js launch site for `ninai.io`, including an interactive permission model, sitemap, robots.txt, JSON-LD, Open Graph metadata, privacy page, install guide, and research page.
 - `.claude/` — an optional Claude Code `PostToolUse` hook that captures durable results from existing MCP tools without asking users to reconnect Linear, GitHub, or other services.
 - `docs/` — product architecture, brand guidance, deployment instructions, and the SEO launch checklist.
 
 The MVP intentionally keeps the trust boundary small: memory is stored on the user's machine and only permission-filtered context packets are returned to an AI client.
 
-The implemented mode is local-first and never uploads or syncs the vault automatically. A hosted cloud mode is planned as a separate, explicit opt-in for clients that cannot reach a local MCP server; it is not implemented in this repository. Local and future hosted modes share the same required permission, provenance, and disclosure-audit invariants.
+Local mode is local-first and never uploads or syncs the vault automatically. A separate hosted beta is now implemented in `cloud/` for clients that cannot reach a local MCP server. It is not automatically enabled and does not inspect the local vault. Its local real-host Claude Code → Codex → Claude Code gate passed on 25 July 2026; production OAuth/HTTPS deployment remains pending. Both modes share the same required permission, provenance, and disclosure-audit invariants.
 
 ## 1. Run the engine locally
 
@@ -105,6 +106,23 @@ npm run dev
 
 Open `http://localhost:3000`. Production output is generated with `npm run build` in `website/out/`.
 
+## 4b. Run the hosted beta service
+
+Hosted mode requires Python 3.11+ and PostgreSQL. OAuth/OIDC is the default. A separate opaque personal-access-token mode exists for a trusted private self-hosted beta; it must be explicitly enabled.
+
+```bash
+cd cloud
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install .
+cp .env.example .env
+# Export the values from .env with real PostgreSQL and authentication settings.
+python -m ninai_cloud.migrations
+ninai-cloud-mcp
+```
+
+The service exposes `GET /health`, authenticated Streamable HTTP MCP at `/mcp`, and protected-resource metadata. See [hosted client setup and API examples](docs/HOSTED-BETA.md), the [compatibility matrix](docs/COMPATIBILITY.md), and [deployment guide](docs/DEPLOYMENT.md). A running service still needs provisioned users, workspaces, client connections, and grants before a client can access memory.
+
 ## 5. Publish and deploy
 
 ```bash
@@ -129,13 +147,23 @@ hosting alternatives, and domain setup.
 
 Ninai does not claim that cloud AI providers never receive context. The full vault stays local; a selected AI receives only the smallest permissioned packet needed for a request. The receiving provider's policy applies after release.
 
-## Current MVP boundaries
+## Current boundaries
 
 - SQLite + FTS5 retrieval; no vector embeddings yet.
 - Claude Code automatic capture through a local hook.
 - Other clients use explicit `remember` and `recall` MCP calls.
-- No hosted cloud mode, cloud sync, accounts, billing, Gmail OAuth, or production encryption. Any future hosted mode must be separately enabled; local mode must not upload automatically.
+- Hosted PostgreSQL and remote MCP are implemented, and the local PAT-backed real-host compatibility gate passed. Production deployment, issuer onboarding, billing, and automated local-to-hosted sync are not implemented. Local mode never uploads automatically.
 - Vector search, local-model extraction, consolidation, and richer temporal state remain post-MVP evaluation work. They should be added behind explicit interfaces only when benchmarks justify the extra installation and security surface.
+
+## Hosted beta evidence and release gate
+
+- [Hosted setup, Claude Code, Codex, OpenAI, and Anthropic examples](docs/HOSTED-BETA.md)
+- [Compatibility matrix](docs/COMPATIBILITY.md)
+- [Security report](docs/SECURITY-REPORT.md)
+- [Cross-provider smoke-test report](docs/CROSS-PROVIDER-SMOKE-TEST.md)
+- [Hosted launch checklist](docs/HOSTED-LAUNCH-CHECKLIST.md)
+- [Known limitations and deferred work](docs/KNOWN-LIMITATIONS.md)
+- [Architecture decisions and open questions](docs/ARCHITECTURE-DECISIONS.md)
 
 ## Engine architecture
 

@@ -55,17 +55,20 @@ Deployment, client, and release evidence:
 - [Hosted security report](../docs/SECURITY-REPORT.md)
 - [Cross-provider release-gate report](../docs/CROSS-PROVIDER-SMOKE-TEST.md)
 - [Launch checklist](../docs/HOSTED-LAUNCH-CHECKLIST.md)
+- [Known limitations](../docs/KNOWN-LIMITATIONS.md)
 
-The real Claude → OpenAI → Claude round trip and existing-token revocation gate are still pending. Automated protocol tests do not establish compatibility with those live hosts.
+The real Claude Code → Codex → Claude Code round trip and existing-token revocation gate passed locally in explicit PAT mode on 25 July 2026. Automated protocol and PostgreSQL tests also pass. Production OAuth/HTTPS deployment remains a separate unverified gate.
 
 ## Authentication boundary
 
-The hosted package is an OAuth protected resource, not an authorization
-server. Configure an external OAuth/OIDC issuer using `.env.example`. Access
-tokens must be asymmetric signed JWTs with matching `iss`, `aud`, `resource`,
-and unexpired `exp` claims. The signed `sub`, `ninai_workspace_id`, and
-`ninai_client_connection_id` claims identify the principal; request bodies and
-query strings are never trusted for identity.
+OAuth is the default hosted boundary, and Ninai is a protected resource rather
+than an authorization server. Configure an external OAuth/OIDC issuer using
+`.env.example`. OAuth access tokens must be asymmetric signed JWTs with matching
+`iss`, `aud`, `resource`, and unexpired `exp` claims. The signed `sub`,
+`ninai_workspace_id`, and `ninai_client_connection_id` claims identify the
+principal. Explicit PAT mode instead resolves the opaque token's stored digest
+to that same fixed principal; request bodies and query strings are never trusted
+for identity in either mode.
 
 Every authenticated request also checks the current PostgreSQL client,
 membership, workspace, and user state, so revoking a client takes effect on its
