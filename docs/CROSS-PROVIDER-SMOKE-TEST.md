@@ -30,6 +30,27 @@ Recorded evidence:
 
 **Core cross-provider host gate: PASS.**
 
+## Recorded Compose real-host rerun — 25 July 2026
+
+The current Compose service was exercised again with fresh one-day credentials
+held in macOS Keychain and injected into temporary host configurations only by
+environment-variable reference. Claude Code `2.1.219` (Claude Opus 5) wrote and
+recalled memory `99adc906-a5f4-48a6-a492-df840e57ca74`, preserving source
+`claude-code://cloud-acceptance/20260725/1`. Codex CLI `0.145.0` using
+`gpt-5.6-sol` recalled it, then wrote memory
+`add1ba8b-e35e-425e-a08d-edaadb7fa775` with source
+`codex://cloud-acceptance/20260725/2`. Claude recalled that exact Codex-authored
+memory and source. After live revocation of the already-issued Codex connection,
+Codex MCP initialization failed with `401 invalid_token`, while Claude recalled
+the Codex-authored memory again. Four successful reads are present in the
+workspace disclosure log. The Claude connection was then revoked, both temporary
+credentials were removed from macOS Keychain, and the token-free temporary host
+configuration was deleted.
+
+**Current Compose real-host and revocation gate: PASS.** This was still operated
+by the implementation team over loopback HTTP/PAT and is not independent-user,
+production OAuth, or durable public-deployment evidence.
+
 ## Recorded ephemeral HTTPS transport run — 25 July 2026
 
 The current `main` container was exposed temporarily through an account-less
@@ -62,6 +83,12 @@ operations remain outstanding.
 Copy this file to a dated report and replace every `PENDING` with command output, IDs, timestamps, screenshots, or log queries. The gate fails if any required row is pending, skipped, or inferred.
 
 `scripts/verify_cross_provider.py` is a useful PostgreSQL service-level prerequisite. Its report intentionally says `host_invocation: not_run`; even a passing result does not satisfy this real Claude/OpenAI host report.
+
+Use `scripts/prepare_external_tester_acceptance.py --endpoint https://<host>` to
+preflight a release endpoint and generate a uniquely marked independent-tester
+report. The generator deliberately leaves the release decision at PENDING/FAIL;
+only an actual non-operator tester can complete and sign it. A loopback rehearsal
+requires `--allow-http-local` and is labelled ineligible as release evidence.
 
 ## Run metadata
 
