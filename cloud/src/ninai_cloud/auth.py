@@ -8,6 +8,7 @@ identities before any hosted operation is allowed.
 from __future__ import annotations
 
 import os
+import hashlib
 from dataclasses import dataclass
 from typing import Any, Callable, ContextManager, Mapping
 
@@ -188,6 +189,63 @@ class MCPTokenVerifier(TokenVerifier):
             workspace_id=principal.workspace_id,
             client_connection_id=principal.client_connection_id,
         )
+
+
+class PATTokenVerifier(TokenVerifier):
+    """Verify opaque self-hosted tokens by digest and live database state.
+
+    The plaintext credential is never persisted. The single query checks token
+    expiry/revocation and all enclosing identity state on every request.
+    """
+
+    def __init__(self, connect: Callable[[], ContextManager[Any]], resource: str) -> None:
+        self._connect = connect
+        self.resource = resource
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        if not token or len(token) > 512:
+            return None
+        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        with self._connect() as db:
+            row = db.execute(
+                """SELECT t.user_id,t.workspace_id,t.client_connection_id,
+                          extract(epoch from t.expires_at)::bigint AS expires_at
+                   FROM personal_access_tokens t
+                   JOIN client_connections c ON c.workspace_id=t.workspace_id
+                     AND c.id=t.client_connection_id AND c.user_id=t.user_id
+                   JOIN workspace_members m ON m.workspace_id=t.workspace_id AND m.user_id=t.user_id
+                   JOIN workspaces w ON w.id=t.workspace_id
+                   JOIN users u ON u.id=t.user_id
+                   WHERE t.token_hash=%s AND t.revoked_at IS NULL AND t.expires_at > now()
+                     AND c.status='active' AND c.revoked_at IS NULL
+                     AND m.revoked_at IS NULL AND w.deleted_at IS NULL AND u.deleted_at IS NULL""",
+                (digest,),
+            ).fetchone()
+            if not row:
+                return None
+            db.execute(
+                "UPDATE personal_access_tokens SET last_used_at=now() WHERE token_hash=%s",
+                (digest,),
+            )
+        user_id = str(row["user_id"])
+        workspace_id = str(row["workspace_id"])
+        client_id = str(row["client_connection_id"])
+        return NinaiAccessToken(
+            token=token, client_id=client_id,
+            scopes=["ninai:read", "ninai:propose", "ninai:remember"],
+            expires_at=int(row["expires_at"]), resource=self.resource, subject=user_id,
+            claims={"user_id": user_id, "workspace_id": workspace_id,
+                    "client_connection_id": client_id, "auth_mode": "pat"},
+            user_id=user_id, workspace_id=workspace_id, client_connection_id=client_id,
+        )
+
+
+def auth_mode(env: Mapping[str, str] | None = None) -> str:
+    """Return the explicitly configured authentication mode."""
+    mode = (os.environ if env is None else env).get("NINAI_AUTH_MODE", "oauth").strip().lower()
+    if mode not in {"oauth", "pat"}:
+        raise ValueError("NINAI_AUTH_MODE must be 'oauth' or 'pat'")
+    return mode
 
 
 def build_token_verifier(database_url: str, settings: AuthSettings | None = None) -> MCPTokenVerifier:

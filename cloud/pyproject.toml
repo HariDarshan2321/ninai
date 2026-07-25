@@ -12,6 +12,7 @@ dependencies = [
 
 [project.scripts]
 ninai-cloud-mcp = "ninai_cloud.mcp_server:main"
+ninai-cloud-bootstrap = "ninai_cloud.bootstrap:main"
 
 [project.optional-dependencies]
 test = []

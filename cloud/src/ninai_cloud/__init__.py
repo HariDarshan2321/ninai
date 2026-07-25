@@ -9,6 +9,7 @@ from .postgres_store import (
 )
 from .auth import (
     AuthSettings,
+    PATTokenVerifier,
     AuthenticationError,
     BearerAuthenticator,
     JWTValidator,
@@ -16,6 +17,7 @@ from .auth import (
     NinaiAccessToken,
     PrincipalResolver,
     build_token_verifier,
+    auth_mode,
 )
 
 __all__ = [
@@ -25,6 +27,7 @@ __all__ = [
     "PostgresStore",
     "Principal",
     "AuthSettings",
+    "PATTokenVerifier",
     "AuthenticationError",
     "BearerAuthenticator",
     "JWTValidator",
@@ -32,4 +35,5 @@ __all__ = [
     "NinaiAccessToken",
     "PrincipalResolver",
     "build_token_verifier",
+    "auth_mode",
 ]

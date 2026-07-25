@@ -27,7 +27,8 @@ class HostedStoreUnitTest(unittest.TestCase):
 
     def test_core_migration_has_tenant_indexes_and_constraints(self) -> None:
         files = migration_files()
-        self.assertEqual([path.name for path in files], ["0001_hosted_core.sql"])
+        self.assertEqual([path.name for path in files],
+                         ["0001_hosted_core.sql", "0002_personal_access_tokens.sql"])
         sql = files[0].read_text(encoding="utf-8")
         for table in (
             "users", "workspaces", "workspace_members", "projects", "client_connections",
@@ -37,6 +38,12 @@ class HostedStoreUnitTest(unittest.TestCase):
             self.assertIn(f"CREATE TABLE {table}", sql)
         self.assertIn("memories_workspace_search_idx", sql)
         self.assertIn("PRIMARY KEY(workspace_id,client_connection_id,idempotency_key)", sql)
+        pat_sql = files[1].read_text(encoding="utf-8")
+        self.assertIn("CREATE TABLE personal_access_tokens", pat_sql)
+        self.assertIn("token_hash char(64) NOT NULL UNIQUE", pat_sql)
+        self.assertNotIn("token text", pat_sql.lower())
+        self.assertIn("expires_at timestamptz NOT NULL", pat_sql)
+        self.assertIn("revoked_at timestamptz", pat_sql)
 
 
 if __name__ == "__main__":

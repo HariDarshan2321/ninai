@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import unittest
 import asyncio
+import hashlib
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,6 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from ninai_cloud.auth import (
     AuthSettings, AuthenticationError, BearerAuthenticator, JWTValidator, MCPTokenVerifier,
     PrincipalResolver,
+    PATTokenVerifier, auth_mode,
 )
 
 
@@ -24,6 +26,13 @@ class FakeResult:
 class FakeDb:
     def __init__(self, row=(1,)): self.row, self.params = row, None
     def execute(self, _sql, params): self.params = params; return FakeResult(self.row)
+
+
+class PATFakeDb:
+    def __init__(self, row): self.row, self.calls = row, []
+    def execute(self, sql, params):
+        self.calls.append((sql, params))
+        return FakeResult(self.row if sql.lstrip().startswith("SELECT") else None)
 
 
 class FakeValidator:
@@ -119,6 +128,35 @@ class AuthTest(unittest.TestCase):
         expired = jwt.encode({**base, "exp": int(time.time()) - 1}, private_key, algorithm="RS256")
         with self.assertRaisesRegex(AuthenticationError, "validation failed"):
             validator.validate(expired)
+
+    def test_pat_mode_must_be_explicit_and_valid(self):
+        self.assertEqual(auth_mode({}), "oauth")
+        self.assertEqual(auth_mode({"NINAI_AUTH_MODE": "pat"}), "pat")
+        with self.assertRaisesRegex(ValueError, "oauth.*pat"):
+            auth_mode({"NINAI_AUTH_MODE": "basic"})
+
+    def test_pat_verifier_hashes_token_and_returns_database_identity(self):
+        raw = "ninai_pat_secret-that-is-never-stored"
+        db = PATFakeDb({"user_id": "user-1", "workspace_id": "workspace-1",
+                        "client_connection_id": "client-1", "expires_at": 2_000_000_000})
+        @contextmanager
+        def connect(): yield db
+        access = asyncio.run(PATTokenVerifier(connect, "https://ninai.test/mcp").verify_token(raw))
+        self.assertIsNotNone(access)
+        self.assertEqual(access.client_id, "client-1")
+        self.assertEqual(access.claims["auth_mode"], "pat")
+        expected = hashlib.sha256(raw.encode()).hexdigest()
+        self.assertEqual(db.calls[0][1], (expected,))
+        self.assertEqual(db.calls[1][1], (expected,))
+        self.assertNotIn(raw, " ".join(sql for sql, _ in db.calls))
+
+    def test_pat_verifier_rejects_expired_or_revoked_token(self):
+        db = PATFakeDb(None)
+        @contextmanager
+        def connect(): yield db
+        self.assertIsNone(asyncio.run(PATTokenVerifier(connect, "https://ninai.test/mcp")
+                                      .verify_token("expired")))
+        self.assertEqual(len(db.calls), 1)
 
 
 if __name__ == "__main__":

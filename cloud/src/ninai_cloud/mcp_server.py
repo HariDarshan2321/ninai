@@ -209,12 +209,23 @@ def main() -> None:
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url:
         raise SystemExit("DATABASE_URL is required")
-    from .auth import AuthSettings, JWTValidator, MCPTokenVerifier, PrincipalResolver as AuthPrincipalResolver
-    settings = AuthSettings.from_env()
+    from .auth import (AuthSettings, JWTValidator, MCPTokenVerifier, PATTokenVerifier,
+                       PrincipalResolver as AuthPrincipalResolver, auth_mode)
     store = PostgresStore(database_url)
-    verifier = MCPTokenVerifier(JWTValidator(settings), AuthPrincipalResolver(store._connection, settings))
-    sdk_auth = MCPAuthSettings(issuer_url=settings.issuer, resource_server_url=settings.resource,
-                               service_documentation_url=settings.resource, required_scopes=[])
+    mode = auth_mode()
+    if mode == "pat":
+        resource = os.environ.get("NINAI_PUBLIC_RESOURCE_URL", "").strip()
+        if not resource:
+            raise SystemExit("NINAI_PUBLIC_RESOURCE_URL is required in PAT mode")
+        verifier = PATTokenVerifier(store._connection, resource)
+        # PAT mode is deliberately self-hosted; no external issuer is contacted.
+        sdk_auth = MCPAuthSettings(issuer_url=resource, resource_server_url=resource,
+                                   service_documentation_url=resource, required_scopes=[])
+    else:
+        settings = AuthSettings.from_env()
+        verifier = MCPTokenVerifier(JWTValidator(settings), AuthPrincipalResolver(store._connection, settings))
+        sdk_auth = MCPAuthSettings(issuer_url=settings.issuer, resource_server_url=settings.resource,
+                                   service_documentation_url=settings.resource, required_scopes=[])
     create_mcp(store, token_verifier=verifier, auth=sdk_auth,
                host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000"))).run(
                    transport="streamable-http")

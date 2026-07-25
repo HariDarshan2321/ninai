@@ -22,12 +22,41 @@ write disclosure logs. `propose_memory` requires propose permission; `remember`
 requires a separate auto-activate grant. Every returned or stored memory includes
 its source URI. Local SQLite data is never read or synchronized by this process.
 
+### Self-hosted personal access tokens
+
+OAuth remains the default. For a private self-hosted server, explicitly set
+`NINAI_AUTH_MODE=pat` and `NINAI_PUBLIC_RESOURCE_URL` to the externally reachable
+MCP URL. Bootstrap a workspace, project, distinct Claude/Codex clients, grants,
+and credentials with:
+
+```bash
+DATABASE_URL=postgresql://... ninai-cloud-bootstrap --email you@example.com
+NINAI_AUTH_MODE=pat NINAI_PUBLIC_RESOURCE_URL=https://ninai.example/mcp ninai-cloud-mcp
+```
+
+The bootstrap command prints each token exactly once. Ninai stores only SHA-256
+digests. Tokens expire (90 days by default), and token, client, membership, or
+workspace revocation takes effect on the next request. Use a different token for
+Claude and Codex, keep them out of source control, and terminate TLS at the server
+or a trusted reverse proxy.
+
 Run tests (integration tests require a disposable database):
 
 ```bash
 python -m unittest discover -s tests -v
 NINAI_TEST_DATABASE_URL=postgresql://... python -m unittest discover -s tests -v
 ```
+
+Deployment, client, and release evidence:
+
+- [Deployment guide](../docs/DEPLOYMENT.md)
+- [Claude Code and Codex setup plus OpenAI/Anthropic API examples](../docs/HOSTED-BETA.md)
+- [Compatibility matrix](../docs/COMPATIBILITY.md)
+- [Hosted security report](../docs/SECURITY-REPORT.md)
+- [Cross-provider release-gate report](../docs/CROSS-PROVIDER-SMOKE-TEST.md)
+- [Launch checklist](../docs/HOSTED-LAUNCH-CHECKLIST.md)
+
+The real Claude → OpenAI → Claude round trip and existing-token revocation gate are still pending. Automated protocol tests do not establish compatibility with those live hosts.
 
 ## Authentication boundary
 
