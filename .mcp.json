@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ninai-cloud": {
+      "type": "http",
+      "url": "https://ninai-cloud.onrender.com/mcp"
+    }
+  }
+}
