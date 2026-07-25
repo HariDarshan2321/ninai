@@ -6,7 +6,7 @@ import { CopyCommand } from "@/components/copy-command";
 export const metadata: Metadata = {
   title: "Choose hosted beta or local installation",
   description:
-    "Compare Ninai's hosted beta in development with the available open-source local engine, then install local MCP memory.",
+    "Join Ninai's operator-assisted hosted beta or install the available open-source local MCP memory engine.",
   alternates: { canonical: "/install/" },
   openGraph: {
     title: "Choose how to run Ninai",
@@ -41,6 +41,14 @@ cp /path/to/ninai/.claude/hooks/ninai_post_tool_use.py .claude/hooks/
 cp /path/to/ninai/.claude/settings.example.json .claude/settings.json
 chmod +x .claude/hooks/ninai_post_tool_use.py`;
 
+const hostedClaudeCommand = `claude mcp add --transport http --scope user ninai \\
+  https://ninai-cloud.onrender.com/mcp
+claude`;
+
+const hostedCodexCommand = `codex mcp add ninai --url https://ninai-cloud.onrender.com/mcp
+codex mcp login ninai --scopes ninai:read,ninai:propose,ninai:remember
+codex mcp list`;
+
 export default function InstallPage() {
   return (
     <main id="main-content">
@@ -48,16 +56,16 @@ export default function InstallPage() {
         <div className="shell page-hero__grid">
           <div>
             <p className="section-label">Choose your mode</p>
-            <h1>Run local now. Follow hosted development.</h1>
+            <h1>Run local now. Join the hosted beta by invitation.</h1>
           </div>
           <div className="page-hero__aside">
             <p>
-              The local engine is available today. The hosted cross-provider beta is under
-              development and will not be presented as ready until its acceptance tests pass.
+              The local engine is available today. The hosted endpoint and OAuth login are
+              live, while workspace and client grants remain operator-assisted during beta.
             </p>
             <div className="requirement-row">
               <span>Local</span><strong>Available</strong>
-              <span>Hosted</span><strong>In development</strong>
+              <span>Hosted</span><strong>Invitation beta</strong>
               <span>Cloud sync</span><strong>Never automatic</strong>
             </div>
           </div>
@@ -66,7 +74,40 @@ export default function InstallPage() {
 
       <section className="install-choice shell" aria-label="Deployment choices">
         <article><span className="status-pill status-pill--ready">Available now</span><h2>Local engine</h2><p>Keep the complete vault in SQLite on this machine. No account is required.</p><a href="#local-install">Continue to local install ↓</a></article>
-        <article><span className="status-pill">Under development</span><h2>Hosted Beta</h2><p>Remote shared memory for tested OpenAI and Anthropic clients is not yet generally available.</p><a href="mailto:hello@ninai.io?subject=Ninai%20hosted%20beta">Request beta updates ↗</a></article>
+        <article><span className="status-pill">Invitation beta</span><h2>Hosted Beta</h2><p>OAuth login is live for Claude Code and Codex. An operator still provisions each workspace, connection, and least-privilege grant.</p><a href="#hosted-beta">Configure a beta client ↓</a></article>
+      </section>
+
+      <section className="install-layout shell" id="hosted-beta">
+        <aside className="install-toc">
+          <p className="section-label">Hosted beta</p>
+          <a href="#hosted-claude">Claude Code</a>
+          <a href="#hosted-codex">Codex</a>
+          <a href="https://ninai-cloud.onrender.com/control">Control center ↗</a>
+        </aside>
+        <div className="install-content">
+          <section className="install-step" id="hosted-claude">
+            <div className="install-step__number">01</div>
+            <div>
+              <p className="install-step__label">Claude Code</p>
+              <h2>Add Ninai, then authenticate in the browser.</h2>
+              <p>Open <code>/mcp</code>, approve Ninai, and choose Authenticate. Tell the beta operator when login finishes so they can bind the public OAuth client ID and grant your project. Never send them a token or secret.</p>
+              <CopyCommand>{hostedClaudeCommand}</CopyCommand>
+            </div>
+          </section>
+          <section className="install-step" id="hosted-codex">
+            <div className="install-step__number">02</div>
+            <div>
+              <p className="install-step__label">Codex</p>
+              <h2>Add the same endpoint as a separate connection.</h2>
+              <p>Complete browser login, then wait for the operator to bind the Codex client and grant the requested project. Restart Codex and confirm the server reports OAuth.</p>
+              <CopyCommand>{hostedCodexCommand}</CopyCommand>
+            </div>
+          </section>
+          <div className="notice notice--good">
+            <strong>Operator-assisted while the beta is small</strong>
+            <p>OAuth dynamic registration does not silently grant memory access. Sign in to the <a href="https://ninai-cloud.onrender.com/control">hosted control center</a> to manage projects, grants, review, export, and revocation. See the <a href="https://github.com/HariDarshan2321/ninai/blob/main/docs/HOSTED-BETA.md">complete beta guide</a>.</p>
+          </div>
+        </div>
       </section>
 
       <section className="install-layout shell" id="local-install">

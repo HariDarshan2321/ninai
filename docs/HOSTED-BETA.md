@@ -2,9 +2,80 @@
 
 ## Status
 
-The hosted service is implemented and covered by unit and PostgreSQL integration tests. It is an explicit opt-in service: it never reads or synchronizes the local SQLite vault. A production deployment and the real Claude → OpenAI → Claude acceptance run are still required before hosted compatibility may be described as verified.
+The invitation beta is online at `https://ninai-cloud.onrender.com/mcp` and is
+covered by unit and PostgreSQL integration tests. It is an explicit opt-in
+service: it never reads or synchronizes the local SQLite vault. OAuth login and
+dynamic client registration are live, but account setup and client-to-workspace
+binding are still operator-assisted. The independent external-tester release
+gate must pass before hosted compatibility is described as generally available.
 
-The public MCP endpoint is `https://<host>/mcp`. It uses Streamable HTTP and requires an OAuth access token. `GET https://<host>/health` is unauthenticated. The MCP protected-resource metadata is published at `/.well-known/oauth-protected-resource/mcp`.
+The beta MCP endpoint is `https://ninai-cloud.onrender.com/mcp`. It uses
+Streamable HTTP and requires an OAuth access token. `GET
+https://ninai-cloud.onrender.com/health` is unauthenticated. The MCP
+protected-resource metadata is published at
+`/.well-known/oauth-protected-resource/mcp`.
+
+## Invitation-beta setup
+
+Ask the beta operator to provision your Ninai workspace first. Then configure
+one client at a time; Claude and Codex receive distinct client connections and
+grants.
+
+### Claude Code
+
+```bash
+claude mcp add --transport http --scope user ninai \
+  https://ninai-cloud.onrender.com/mcp
+claude
+```
+
+In Claude Code, open `/mcp`, approve the `ninai` server, select **Authenticate**,
+and complete the browser login. Dynamic registration creates a public OAuth
+client identifier; it does not create a Ninai scope grant. During the invitation
+beta, tell the operator that you completed Claude login. The operator locates
+the newly registered application in the OAuth dashboard, binds its public client
+ID to your Claude connection, and grants only the requested Ninai project. Never
+send an access token, refresh token, authorization code, or client secret.
+
+Restart Claude Code, open `/mcp`, and verify `ninai` is connected and exposes
+`search`, `fetch`, `recall`, `propose_memory`, and `remember`.
+
+### Codex CLI and IDE
+
+```bash
+codex mcp add ninai --url https://ninai-cloud.onrender.com/mcp
+codex mcp login ninai --scopes ninai:read,ninai:propose,ninai:remember
+codex mcp list
+```
+
+Complete the browser login, then tell the beta operator that Codex registration
+finished. As with Claude, the operator binds only the public OAuth client ID and
+adds least-privilege project grants. Restart Codex after the operator confirms
+the binding. `codex mcp list` should report `ninai` as enabled with OAuth.
+
+The hosted [control center](https://ninai-cloud.onrender.com/control) is the
+operator-assisted dashboard for workspaces, projects, connections, grants,
+review, disclosures, export, and revocation. Use its **Create account** or **Sign
+in** button; the browser completes OAuth with PKCE and keeps the resulting
+session credential in an HTTP-only cookie. The access-token field is only for
+explicit PAT-mode private self-hosting. Do not paste a token into chat, email,
+support tickets, or screenshots.
+
+### Verify and disconnect
+
+Ask the client to recall a synthetic beta fact and confirm that the response
+includes its source URI. Ask the operator to revoke the connection, then repeat
+the recall using the already-issued login: it must be denied immediately.
+
+To remove the local client configuration later:
+
+```bash
+claude mcp remove ninai --scope user
+codex mcp remove ninai
+```
+
+Removing local configuration does not delete hosted data. Use the control
+center or ask the operator to revoke the connection and handle export/deletion.
 
 ## Available MCP tools
 
@@ -22,7 +93,13 @@ All write calls require `source_uri` and `idempotency_key`. Requests cannot choo
 
 OAuth is the default and is required for a normal multi-user hosted deployment. A private operator can explicitly set `NINAI_AUTH_MODE=pat`, run `ninai-cloud-bootstrap`, and receive separate opaque credentials for Claude and Codex. PAT plaintext is printed once and only its SHA-256 digest is stored. PAT mode has no browser login or refresh flow; it is intended for a trusted self-hosted beta, not as a substitute for public OAuth onboarding.
 
-## Claude Code setup
+## Self-hosted and manual-token setup
+
+The remaining examples are for operators and private self-hosting. Invitation
+beta customers should use the OAuth flow above and should not handle bearer
+tokens manually.
+
+### Claude Code
 
 Prerequisites: a deployed HTTPS endpoint, a Ninai client connection and grants, plus either the configured OAuth issuer or a self-hosted PAT.
 
@@ -55,7 +132,7 @@ Start Claude Code from a shell where `NINAI_ACCESS_TOKEN` is set. Treat this tok
 
 Official reference: [Claude Code MCP setup and remote OAuth](https://docs.anthropic.com/en/docs/claude-code/mcp).
 
-## Codex CLI and IDE setup
+### Codex CLI and IDE
 
 For an issuer that supports MCP OAuth discovery:
 
