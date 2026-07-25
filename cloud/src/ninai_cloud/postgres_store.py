@@ -1,0 +1,331 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import uuid
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Callable, ContextManager, Mapping
+
+
+class AuthorizationError(PermissionError):
+    """The principal is not active or lacks the required scope capability."""
+
+
+class IdempotencyConflict(ValueError):
+    """An idempotency key was reused for a different request."""
+
+
+@dataclass(frozen=True, slots=True)
+class Principal:
+    user_id: str
+    workspace_id: str
+    client_connection_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class HostedMemory:
+    id: str
+    workspace_id: str
+    project_id: str | None
+    memory_type: str
+    scope_kind: str
+    scope_id: str
+    content: str
+    status: str
+    source_uri: str
+    importance: float
+    confidence: float
+    created_at: datetime
+    updated_at: datetime
+
+
+def _normalize(content: str) -> str:
+    return " ".join(content.split()).strip()
+
+
+def _request_hash(payload: Mapping[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+_SECRET_PATTERNS = (
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.I),
+    re.compile(r"\b(?:sk|pk)-(?:live|test)-[A-Za-z0-9_-]{16,}\b"),
+    re.compile(r"\b(?:ghp|github_pat)_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{16,}\b", re.I),
+)
+
+
+def _contains_secret(value: str) -> bool:
+    return any(pattern.search(value) for pattern in _SECRET_PATTERNS)
+
+
+class PostgresStore:
+    """Tenant-scoped hosted store.
+
+    Every externally reachable operation starts by checking that the principal's
+    user and client are active in the workspace. Scope IDs are then derived from
+    grants; callers cannot expand access by supplying another workspace ID.
+    """
+
+    def __init__(self, database_url: str, *, connect: Callable[[], ContextManager[Any]] | None = None) -> None:
+        self.database_url = database_url
+        self._connect_override = connect
+
+    def _connection(self) -> ContextManager[Any]:
+        if self._connect_override:
+            return self._connect_override()
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("Install ninai-cloud to use PostgresStore") from exc
+        return psycopg.connect(self.database_url, row_factory=dict_row)
+
+    @staticmethod
+    def _validate_principal(db: Any, principal: Principal) -> None:
+        row = db.execute(
+            """
+            SELECT 1 FROM client_connections c
+            JOIN workspace_members m ON m.workspace_id=c.workspace_id AND m.user_id=%s
+            JOIN workspaces w ON w.id=c.workspace_id
+            JOIN users u ON u.id=m.user_id
+            WHERE c.id=%s AND c.workspace_id=%s AND c.user_id=%s
+              AND c.status='active' AND c.revoked_at IS NULL
+              AND m.revoked_at IS NULL AND w.deleted_at IS NULL AND u.deleted_at IS NULL
+            """,
+            (principal.user_id, principal.client_connection_id, principal.workspace_id, principal.user_id),
+        ).fetchone()
+        if not row:
+            raise AuthorizationError("Client, membership, or workspace is not active")
+
+    @staticmethod
+    def _grant(db: Any, principal: Principal, scope_kind: str, scope_id: str, capability: str) -> None:
+        if capability not in {"can_read", "can_propose", "can_auto_activate"}:
+            raise ValueError("Unknown capability")
+        row = db.execute(
+            f"""
+            SELECT 1 FROM client_scope_grants
+            WHERE workspace_id=%s AND client_connection_id=%s
+              AND scope_kind=%s AND scope_id=%s AND {capability}=true
+              AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())
+            """,
+            (principal.workspace_id, principal.client_connection_id, scope_kind, scope_id),
+        ).fetchone()
+        if not row:
+            raise AuthorizationError(f"Client lacks {capability} for requested scope")
+
+    def create_memory(
+        self,
+        principal: Principal,
+        *,
+        content: str,
+        memory_type: str,
+        scope_kind: str,
+        scope_id: str,
+        source_uri: str,
+        idempotency_key: str,
+        project_id: str | None = None,
+        importance: float = 0.6,
+        confidence: float = 1.0,
+        activate: bool = False,
+        source_type: str = "client",
+        request_id: str | None = None,
+    ) -> HostedMemory:
+        clean = _normalize(content)
+        if not clean or len(clean) > 4000:
+            raise ValueError("Memory content must be between 1 and 4,000 characters")
+        if not source_uri.strip() or len(source_uri) > 1000:
+            raise ValueError("source_uri is required and must be at most 1,000 characters")
+        if _contains_secret(clean) or _contains_secret(source_uri):
+            raise ValueError("Potential credential detected; Ninai refused to store it")
+        if scope_kind not in {"workspace", "project", "user"}:
+            raise ValueError("Unsupported scope_kind")
+        if not idempotency_key.strip() or len(idempotency_key) > 200:
+            raise ValueError("A compact idempotency_key is required")
+
+        payload = {
+            "content": clean, "memory_type": memory_type, "scope_kind": scope_kind,
+            "scope_id": scope_id, "source_uri": source_uri, "project_id": project_id,
+            "activate": activate,
+        }
+        digest = _request_hash(payload)
+        capability = "can_auto_activate" if activate else "can_propose"
+        with self._connection() as db:
+            self._validate_principal(db, principal)
+            self._grant(db, principal, scope_kind, scope_id, capability)
+            existing = db.execute(
+                """SELECT i.request_hash,m.*,s.source_uri FROM idempotency_keys i
+                   JOIN memories m ON m.workspace_id=i.workspace_id AND m.id=i.memory_id
+                   JOIN LATERAL (SELECT source_uri FROM memory_sources s WHERE s.workspace_id=m.workspace_id
+                     AND s.memory_id=m.id ORDER BY s.created_at LIMIT 1) s ON true
+                   WHERE i.workspace_id=%s AND i.client_connection_id=%s AND i.idempotency_key=%s""",
+                (principal.workspace_id, principal.client_connection_id, idempotency_key),
+            ).fetchone()
+            if existing:
+                if existing["request_hash"] != digest:
+                    raise IdempotencyConflict("Idempotency key already represents another request")
+                return self._memory(existing)
+
+            memory_id, source_id = str(uuid.uuid4()), str(uuid.uuid4())
+            status = "active" if activate else "proposed"
+            applied = "auto_activate" if activate else "propose"
+            row = db.execute(
+                """INSERT INTO memories(id,workspace_id,project_id,owner_user_id,memory_type,
+                     scope_kind,scope_id,content,normalized_content,status,confidence,importance,
+                     write_mode_requested,write_mode_applied,created_by_user_id,created_by_client_connection_id)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
+                (memory_id, principal.workspace_id, project_id, principal.user_id, memory_type,
+                 scope_kind, scope_id, clean, clean.lower(), status, max(0,min(1,float(confidence))),
+                 max(0,min(1,float(importance))), applied, applied, principal.user_id,
+                 principal.client_connection_id),
+            ).fetchone()
+            db.execute(
+                """INSERT INTO memory_sources(id,workspace_id,memory_id,source_type,source_uri,
+                     client_connection_id,request_id,content_hash)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (source_id, principal.workspace_id, memory_id, source_type, source_uri.strip(),
+                 principal.client_connection_id, request_id, hashlib.sha256(clean.encode()).hexdigest()),
+            )
+            db.execute(
+                "INSERT INTO idempotency_keys(workspace_id,client_connection_id,idempotency_key,request_hash,memory_id) VALUES(%s,%s,%s,%s,%s)",
+                (principal.workspace_id, principal.client_connection_id, idempotency_key, digest, memory_id),
+            )
+            result = dict(row)
+            result["source_uri"] = source_uri.strip()
+            return self._memory(result)
+
+    def get_memory(self, principal: Principal, memory_id: str) -> HostedMemory | None:
+        with self._connection() as db:
+            self._validate_principal(db, principal)
+            row = db.execute(
+                """SELECT m.*,s.source_uri FROM memories m
+                   JOIN client_scope_grants g ON g.workspace_id=m.workspace_id
+                     AND g.client_connection_id=%s AND g.scope_kind=m.scope_kind AND g.scope_id=m.scope_id
+                     AND g.can_read=true AND g.revoked_at IS NULL
+                     AND (g.expires_at IS NULL OR g.expires_at > now())
+                   JOIN LATERAL (SELECT source_uri FROM memory_sources s WHERE s.workspace_id=m.workspace_id
+                     AND s.memory_id=m.id ORDER BY s.created_at LIMIT 1) s ON true
+                   WHERE m.workspace_id=%s AND m.id=%s AND m.status='active' AND m.deleted_at IS NULL
+                     AND (m.valid_until IS NULL OR m.valid_until > now())""",
+                (principal.client_connection_id, principal.workspace_id, memory_id),
+            ).fetchone()
+            return self._memory(row) if row else None
+
+    def search(self, principal: Principal, query: str, *, limit: int = 20) -> list[HostedMemory]:
+        limit = max(1, min(100, int(limit)))
+        terms = " ".join(re.findall(r"[\w-]+", query.lower())[:20])
+        with self._connection() as db:
+            self._validate_principal(db, principal)
+            rows = db.execute(
+                """SELECT m.*,s.source_uri FROM memories m
+                   JOIN client_scope_grants g ON g.workspace_id=m.workspace_id
+                     AND g.client_connection_id=%s AND g.scope_kind=m.scope_kind AND g.scope_id=m.scope_id
+                     AND g.can_read=true AND g.revoked_at IS NULL
+                     AND (g.expires_at IS NULL OR g.expires_at > now())
+                   JOIN LATERAL (SELECT source_uri FROM memory_sources s WHERE s.workspace_id=m.workspace_id
+                     AND s.memory_id=m.id ORDER BY s.created_at LIMIT 1) s ON true
+                   WHERE m.workspace_id=%s AND m.status='active' AND m.deleted_at IS NULL
+                     AND (m.valid_until IS NULL OR m.valid_until > now())
+                     AND (%s='' OR to_tsvector('simple',m.normalized_content) @@ plainto_tsquery('simple',%s))
+                   ORDER BY CASE WHEN %s='' THEN 0 ELSE ts_rank(to_tsvector('simple',m.normalized_content),plainto_tsquery('simple',%s)) END DESC,
+                     m.importance DESC,m.updated_at DESC LIMIT %s""",
+                (principal.client_connection_id, principal.workspace_id, terms, terms, terms, terms, limit),
+            ).fetchall()
+            return [self._memory(row) for row in rows]
+
+    def transition(self, principal: Principal, memory_id: str, status: str) -> HostedMemory | None:
+        if status not in {"proposed", "active", "deleted"}:
+            raise ValueError("Unsupported lifecycle status")
+        with self._connection() as db:
+            self._validate_principal(db, principal)
+            row = db.execute(
+                """UPDATE memories m SET status=%s,deleted_at=CASE WHEN %s='deleted' THEN now() ELSE NULL END,
+                     updated_at=now() FROM memory_sources s
+                   WHERE m.workspace_id=%s AND m.id=%s AND m.owner_user_id=%s
+                     AND s.workspace_id=m.workspace_id AND s.memory_id=m.id
+                   RETURNING m.*,s.source_uri""",
+                (status, status, principal.workspace_id, memory_id, principal.user_id),
+            ).fetchone()
+            return self._memory(row) if row else None
+
+    def supersede(self, principal: Principal, old_memory_id: str, new_memory_id: str) -> bool:
+        with self._connection() as db:
+            self._validate_principal(db, principal)
+            new = db.execute(
+                "SELECT 1 FROM memories WHERE workspace_id=%s AND id=%s AND status='active' AND deleted_at IS NULL",
+                (principal.workspace_id, new_memory_id),
+            ).fetchone()
+            if not new:
+                return False
+            changed = db.execute(
+                """UPDATE memories SET status='superseded',updated_at=now()
+                   WHERE workspace_id=%s AND id=%s AND status='active' AND deleted_at IS NULL""",
+                (principal.workspace_id, old_memory_id),
+            )
+            if changed.rowcount == 1:
+                db.execute(
+                    "UPDATE memories SET supersedes_memory_id=%s,updated_at=now() WHERE workspace_id=%s AND id=%s",
+                    (old_memory_id, principal.workspace_id, new_memory_id),
+                )
+            return changed.rowcount == 1
+
+    def record_disclosure(self, principal: Principal, *, tool_name: str, query: str,
+                          purpose: str, returned_memory_ids: list[str], denied_memory_count: int = 0,
+                          estimated_tokens: int = 0, decision: str = "allow", denial_reason: str | None = None,
+                          request_id: str | None = None) -> str:
+        log_id = str(uuid.uuid4())
+        with self._connection() as db:
+            self._validate_principal(db, principal)
+            scopes = db.execute(
+                """SELECT scope_kind,scope_id FROM client_scope_grants WHERE workspace_id=%s
+                   AND client_connection_id=%s AND can_read=true AND revoked_at IS NULL
+                   AND (expires_at IS NULL OR expires_at > now()) ORDER BY scope_kind,scope_id""",
+                (principal.workspace_id, principal.client_connection_id),
+            ).fetchall()
+            snapshot = [{"kind": row["scope_kind"], "id": str(row["scope_id"])} for row in scopes]
+            db.execute(
+                """INSERT INTO disclosure_logs(id,workspace_id,user_id,client_connection_id,tool_name,
+                   query_hash,purpose,allowed_scope_snapshot,returned_memory_ids,denied_memory_count,
+                   estimated_tokens,decision,denial_reason,request_id)
+                   VALUES(%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s)""",
+                (log_id, principal.workspace_id, principal.user_id, principal.client_connection_id,
+                 tool_name, hashlib.sha256(query.encode()).hexdigest(), purpose, json.dumps(snapshot),
+                 json.dumps(returned_memory_ids), denied_memory_count, estimated_tokens, decision,
+                 denial_reason, request_id),
+            )
+        return log_id
+
+    def revoke_client(self, workspace_id: str, client_connection_id: str, acting_user_id: str) -> bool:
+        with self._connection() as db:
+            role = db.execute(
+                """SELECT role FROM workspace_members WHERE workspace_id=%s AND user_id=%s
+                   AND revoked_at IS NULL AND role IN ('owner','admin')""",
+                (workspace_id, acting_user_id),
+            ).fetchone()
+            if not role:
+                raise AuthorizationError("Owner or admin role required")
+            changed = db.execute(
+                """UPDATE client_connections SET status='revoked',revoked_at=now()
+                   WHERE workspace_id=%s AND id=%s AND revoked_at IS NULL""",
+                (workspace_id, client_connection_id),
+            )
+            db.execute(
+                """UPDATE client_scope_grants SET revoked_at=now() WHERE workspace_id=%s
+                   AND client_connection_id=%s AND revoked_at IS NULL""",
+                (workspace_id, client_connection_id),
+            )
+            return changed.rowcount == 1
+
+    @staticmethod
+    def _memory(row: Mapping[str, Any]) -> HostedMemory:
+        return HostedMemory(
+            id=str(row["id"]), workspace_id=str(row["workspace_id"]),
+            project_id=str(row["project_id"]) if row.get("project_id") else None,
+            memory_type=str(row["memory_type"]), scope_kind=str(row["scope_kind"]),
+            scope_id=str(row["scope_id"]), content=str(row["content"]), status=str(row["status"]),
+            source_uri=str(row["source_uri"]), importance=float(row["importance"]),
+            confidence=float(row["confidence"]), created_at=row["created_at"], updated_at=row["updated_at"],
+        )
