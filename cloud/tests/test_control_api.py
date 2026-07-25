@@ -100,6 +100,21 @@ class ControlAppTest(unittest.TestCase):
         self.assertIn("Ninai Control Center", response.text)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIn("sessionStorage", response.text)
+        for label in ("Memories", "Permissions", "Download workspace export", "Delete workspace"):
+            self.assertIn(label, response.text)
+
+    def test_control_and_error_responses_have_security_headers(self):
+        for response in (
+            self.client.get("/control"),
+            self.client.get("/api/control/overview"),
+            self.client.get("/api/control/nope", headers=self.auth),
+        ):
+            with self.subTest(status=response.status_code):
+                self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+                self.assertEqual(response.headers["x-frame-options"], "DENY")
+                self.assertEqual(response.headers["referrer-policy"], "no-referrer")
+                self.assertIn("frame-ancestors 'none'", response.headers["content-security-policy"])
+                self.assertIn("camera=()", response.headers["permissions-policy"])
 
     def test_api_requires_verified_bearer_token(self):
         for headers in ({}, {"Authorization": "Bearer invalid"}):

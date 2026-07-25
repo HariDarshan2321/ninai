@@ -285,13 +285,29 @@ class ControlApp:
     def __init__(self, service: ControlService, token_verifier: TokenVerifier) -> None:
         self.service, self.token_verifier = service, token_verifier
 
+    @staticmethod
+    def _security_headers() -> dict[str, str]:
+        return {
+            "Cache-Control": "no-store",
+            "Content-Security-Policy": (
+                "default-src 'none'; base-uri 'none'; form-action 'none'; "
+                "frame-ancestors 'none'; script-src 'unsafe-inline'; "
+                "style-src 'unsafe-inline'; connect-src 'self'"
+            ),
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+            "Referrer-Policy": "no-referrer",
+            "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        }
+
     async def handle(self, request: Request) -> Response:
         try:
             status, content_type, body = await self._dispatch(request)
         except AuthenticationError as exc:
             return JSONResponse(
                 {"error": str(exc)}, status_code=401,
-                headers={"WWW-Authenticate": 'Bearer realm="ninai-control"', "Cache-Control": "no-store"},
+                headers={**self._security_headers(),
+                         "WWW-Authenticate": 'Bearer realm="ninai-control"'},
             )
         except AuthorizationError as exc:
             status, content_type, body = 403, "application/json", {"error": str(exc)}
@@ -299,7 +315,7 @@ class ControlApp:
             status, content_type, body = 400, "application/json", {"error": str(exc)}
         except KeyError as exc:
             status, content_type, body = 404, "application/json", {"error": str(exc.args[0])}
-        headers = {"Cache-Control": "no-store"}
+        headers = self._security_headers()
         if isinstance(body, str):
             return HTMLResponse(body, status_code=status, headers=headers)
         return Response(json.dumps(body, default=_jsonable), status_code=status,
