@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from ninai_cloud.auth import (
     AuthSettings, AuthenticationError, BearerAuthenticator, JWTValidator, MCPTokenVerifier,
-    PrincipalResolver,
+    OAuthControlTokenVerifier, PrincipalResolver,
     PATTokenVerifier, auth_mode,
 )
 
@@ -104,6 +104,17 @@ class AuthTest(unittest.TestCase):
         resolver, _ = self.resolver(None)
         verifier = MCPTokenVerifier(FakeValidator({**self.claims, "exp": 2_000_000_000}), resolver)
         self.assertIsNone(asyncio.run(verifier.verify_token("signed.jwt")))
+
+    def test_control_oauth_verifier_allows_signed_first_workspace_identity(self):
+        claims = {"sub": "user-1", "email": "owner@example.test", "name": "Owner",
+                  "exp": 2_000_000_000}
+        validator = FakeValidator(claims)
+        access = asyncio.run(OAuthControlTokenVerifier(validator, self.settings)
+                             .verify_token("signed.jwt"))
+        self.assertEqual(access.claims, {"user_id": "user-1", "email": "owner@example.test",
+                                         "name": "Owner"})
+        self.assertNotIn("workspace_id", access.claims)
+        self.assertEqual(validator.token, "signed.jwt")
 
     def test_oversized_bearer_is_rejected_before_validation_or_database_access(self):
         resolver, db = self.resolver()

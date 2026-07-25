@@ -7,10 +7,12 @@ other than ``Authorization`` and request JSON can never select an identity.
 from __future__ import annotations
 
 import json
+import hashlib
 import re
+import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, ContextManager, Mapping
 from urllib.parse import parse_qs
 
@@ -25,7 +27,9 @@ from .control_ui import CONTROL_CENTER_HTML
 @dataclass(frozen=True, slots=True)
 class ControlIdentity:
     user_id: str
-    workspace_id: str
+    workspace_id: str | None
+    email: str | None = None
+    display_name: str | None = None
 
 
 def _jsonable(value: Any) -> Any:
@@ -37,8 +41,97 @@ def _jsonable(value: Any) -> Any:
 
 
 class ControlService:
-    def __init__(self, connect: Callable[[], ContextManager[Any]]) -> None:
+    def __init__(self, connect: Callable[[], ContextManager[Any]], *, self_hosted: bool = False,
+                 public_mcp_url: str = "/mcp") -> None:
         self._connect = connect
+        self.self_hosted = self_hosted
+        self.public_mcp_url = public_mcp_url
+
+    @staticmethod
+    def _slug(value: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")[:40]
+        return slug or "ninai"
+
+    def create_workspace(self, identity: ControlIdentity, data: Mapping[str, Any]) -> dict[str, Any]:
+        """Create the first tenant using only the verified token subject as owner."""
+        name = str(data.get("name", "")).strip()
+        if not name:
+            raise ValueError("name is required")
+        workspace_id = str(uuid.uuid4())
+        slug = f"{self._slug(name)}-{workspace_id.split('-')[0]}"
+        email = identity.email or f"{identity.user_id}@identity.invalid"
+        display_name = identity.display_name or email.split("@", 1)[0]
+        with self._connect() as db:
+            db.execute("""INSERT INTO users(id,email,display_name) VALUES(%s,%s,%s)
+              ON CONFLICT(id) DO UPDATE SET display_name=EXCLUDED.display_name""",
+              (identity.user_id, email, display_name))
+            row = db.execute("""INSERT INTO workspaces(id,name,slug,owner_user_id)
+              VALUES(%s,%s,%s,%s) RETURNING id,name,slug,plan,default_write_mode,created_at""",
+              (workspace_id, name, slug, identity.user_id)).fetchone()
+            db.execute("INSERT INTO workspace_members(workspace_id,user_id,role) VALUES(%s,%s,'owner')",
+                       (workspace_id, identity.user_id))
+            return dict(row)
+
+    def create_project(self, identity: ControlIdentity, data: Mapping[str, Any]) -> dict[str, Any]:
+        name = str(data.get("name", "")).strip()
+        if not name:
+            raise ValueError("name is required")
+        with self._connect() as db:
+            self._member(db, identity, admin=True)
+            row = db.execute("""INSERT INTO projects(id,workspace_id,name,slug,description)
+              VALUES(%s,%s,%s,%s,%s) RETURNING id,name,slug,description,created_at""",
+              (str(uuid.uuid4()), identity.workspace_id, name,
+               f"{self._slug(name)}-{secrets.token_hex(3)}", str(data.get("description", "")).strip())).fetchone()
+            return dict(row)
+
+    def projects(self, identity: ControlIdentity) -> list[dict[str, Any]]:
+        with self._connect() as db:
+            self._member(db, identity)
+            rows = db.execute("""SELECT id,name,slug,description,created_at,archived_at FROM projects
+              WHERE workspace_id=%s ORDER BY created_at""", (identity.workspace_id,)).fetchall()
+            return [dict(row) for row in rows]
+
+    def create_connection(self, identity: ControlIdentity, data: Mapping[str, Any]) -> dict[str, Any]:
+        provider = str(data.get("provider", "")).strip().lower()
+        client_type = str(data.get("client_type", "")).strip().lower()
+        display_name = str(data.get("display_name", "")).strip()
+        if provider not in {"anthropic", "openai"} or not client_type or not display_name:
+            raise ValueError("provider (anthropic or openai), client_type, and display_name are required")
+        connection_id = str(uuid.uuid4())
+        raw_token = "ninai_pat_" + secrets.token_urlsafe(32) if self.self_hosted else None
+        expires_at = datetime.now(timezone.utc) + timedelta(days=90)
+        with self._connect() as db:
+            self._member(db, identity, admin=True)
+            row = db.execute("""INSERT INTO client_connections
+              (id,workspace_id,user_id,provider,client_type,display_name,metadata_json)
+              VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING id,provider,client_type,display_name,status,created_at""",
+              (connection_id, identity.workspace_id, identity.user_id, provider, client_type,
+               display_name, json.dumps({"setup_status": "created", "mcp_url": self.public_mcp_url}))).fetchone()
+            if raw_token:
+                db.execute("""INSERT INTO personal_access_tokens
+                  (id,workspace_id,user_id,client_connection_id,token_hash,label,expires_at)
+                  VALUES(%s,%s,%s,%s,%s,%s,%s)""", (str(uuid.uuid4()), identity.workspace_id,
+                  identity.user_id, connection_id, hashlib.sha256(raw_token.encode()).hexdigest(),
+                  display_name, expires_at))
+        result = dict(row)
+        result["setup"] = {"mcp_url": self.public_mcp_url, "auth_mode": "pat" if raw_token else "oauth"}
+        if raw_token:
+            result["personal_access_token"] = raw_token
+            result["token_expires_at"] = expires_at
+        return result
+
+    def test_connection(self, identity: ControlIdentity, connection_id: str) -> dict[str, Any]:
+        checked_at = datetime.now(timezone.utc)
+        with self._connect() as db:
+            self._member(db, identity, admin=True)
+            row = db.execute("""UPDATE client_connections SET metadata_json=metadata_json || %s::jsonb
+              WHERE workspace_id=%s AND id=%s AND status='active' AND revoked_at IS NULL
+              RETURNING id,provider,client_type,status,metadata_json""",
+              (json.dumps({"connection_test": {"status": "ready", "checked_at": checked_at.isoformat(),
+                           "mcp_url": self.public_mcp_url}}), identity.workspace_id, connection_id)).fetchone()
+            if not row:
+                raise KeyError("Connection not found")
+            return dict(row)
 
     @staticmethod
     def _member(db: Any, identity: ControlIdentity, *, admin: bool = False) -> Mapping[str, Any]:
@@ -64,7 +157,7 @@ class ControlService:
             return {"workspace": dict(workspace), "counts": {**dict(counts), "active_connections": connections["n"], "disclosures": disclosures["n"]}}
 
     def memories(self, identity: ControlIdentity, status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        if status and status not in {"proposed", "active", "superseded", "deleted"}:
+        if status and status not in {"proposed", "active", "conflicted", "superseded", "rejected", "deleted"}:
             raise ValueError("Unsupported memory status")
         with self._connect() as db:
             self._member(db, identity)
@@ -108,16 +201,27 @@ class ControlService:
         kind, scope_id = data.get("scope_kind"), data.get("scope_id")
         if kind not in {"workspace", "project", "user"} or not scope_id:
             raise ValueError("scope_kind and scope_id are required")
+        can_read, can_propose = bool(data.get("can_read")), bool(data.get("can_propose"))
+        can_auto_activate = bool(data.get("can_auto_activate"))
+        if not any((can_read, can_propose, can_auto_activate)):
+            raise ValueError("At least one permission is required")
+        if can_auto_activate and not can_propose:
+            raise ValueError("can_auto_activate requires can_propose")
         with self._connect() as db:
             self._member(db, identity, admin=True)
             row = db.execute("""INSERT INTO client_scope_grants(id,workspace_id,client_connection_id,scope_kind,scope_id,
               can_read,can_propose,can_auto_activate,memory_types,expires_at,created_by_user_id)
               SELECT %s,%s,c.id,%s,%s,%s,%s,%s,%s,%s,%s FROM client_connections c
               WHERE c.workspace_id=%s AND c.id=%s AND c.revoked_at IS NULL
+                AND ((%s='workspace' AND %s=%s)
+                  OR (%s='project' AND EXISTS (SELECT 1 FROM projects p WHERE p.workspace_id=%s AND p.id=%s AND p.archived_at IS NULL))
+                  OR (%s='user' AND EXISTS (SELECT 1 FROM workspace_members m WHERE m.workspace_id=%s AND m.user_id=%s AND m.revoked_at IS NULL)))
               RETURNING id,client_connection_id,scope_kind,scope_id,can_read,can_propose,can_auto_activate,expires_at""",
-              (str(uuid.uuid4()), identity.workspace_id, kind, scope_id, bool(data.get("can_read")),
-               bool(data.get("can_propose")), bool(data.get("can_auto_activate")), data.get("memory_types"),
-               data.get("expires_at"), identity.user_id, identity.workspace_id, connection_id)).fetchone()
+              (str(uuid.uuid4()), identity.workspace_id, kind, scope_id, can_read,
+               can_propose, can_auto_activate, data.get("memory_types"), data.get("expires_at"),
+               identity.user_id, identity.workspace_id, connection_id, kind, scope_id,
+               identity.workspace_id, kind, identity.workspace_id, scope_id, kind,
+               identity.workspace_id, scope_id)).fetchone()
             if not row:
                 raise KeyError("Connection not found")
             return dict(row)
@@ -211,9 +315,13 @@ class ControlApp:
         claims = token.claims or {}
         user_id = getattr(token, "user_id", None) or claims.get("user_id")
         workspace_id = getattr(token, "workspace_id", None) or claims.get("workspace_id")
-        if not isinstance(user_id, str) or not user_id.strip() or not isinstance(workspace_id, str) or not workspace_id.strip():
-            raise AuthenticationError("Verified token is missing Ninai identity")
-        return ControlIdentity(user_id=user_id, workspace_id=workspace_id)
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise AuthenticationError("Verified token is missing Ninai user identity")
+        if workspace_id is not None and (not isinstance(workspace_id, str) or not workspace_id.strip()):
+            raise AuthenticationError("Verified token has an invalid Ninai workspace identity")
+        return ControlIdentity(user_id=user_id, workspace_id=workspace_id,
+                               email=claims.get("email") if isinstance(claims.get("email"), str) else None,
+                               display_name=claims.get("name") if isinstance(claims.get("name"), str) else None)
 
     async def _dispatch(self, request: Request):
         path, method = request.url.path, request.method.upper()
@@ -226,15 +334,20 @@ class ControlApp:
         raw = await request.body()
         data = json.loads(raw or b"{}") if raw else {}
         suffix = path.removeprefix("/api/control")
-        if method == "GET" and suffix == "/overview": result = self.service.overview(identity)
+        if method == "POST" and suffix == "/workspaces": result = self.service.create_workspace(identity, data)
+        elif method == "GET" and suffix == "/overview": result = self.service.overview(identity)
+        elif method == "GET" and suffix == "/projects": result = {"items": self.service.projects(identity)}
+        elif method == "POST" and suffix == "/projects": result = self.service.create_project(identity, data)
         elif method == "GET" and suffix == "/memories": result = {"items": self.service.memories(identity, query.get("status", [None])[0], query.get("limit", [100])[0])}
         elif method == "GET" and suffix == "/connections": result = {"items": self.service.connections(identity)}
+        elif method == "POST" and suffix == "/connections": result = self.service.create_connection(identity, data)
         elif method == "GET" and (m := re.fullmatch(r"/connections/([^/]+)/grants", suffix)): result = {"items": self.service.grants(identity, m[1])}
         elif method == "GET" and suffix == "/activity": result = {"items": self.service.activity(identity, query.get("limit", [100])[0])}
         elif method == "GET" and suffix == "/export": result = self.service.export(identity)
         elif method == "POST" and (m := re.fullmatch(r"/memories/([^/]+)/(approve|reject)", suffix)): result = self.service.review(identity, m[1], approve=m[2] == "approve")
         elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/grants", suffix)): result = self.service.create_grant(identity, m[1], data)
         elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/revoke", suffix)): result = {"revoked": self.service.revoke_connection(identity, m[1])}
+        elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/test", suffix)): result = self.service.test_connection(identity, m[1])
         elif method == "POST" and (m := re.fullmatch(r"/grants/([^/]+)/revoke", suffix)): result = {"revoked": self.service.revoke_grant(identity, m[1])}
         elif method == "POST" and suffix == "/delete-workspace": result = {"deleted": self.service.delete_workspace(identity, data.get("confirmation", ""))}
         else: raise KeyError("Route not found")

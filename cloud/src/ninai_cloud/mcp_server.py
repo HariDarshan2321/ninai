@@ -14,6 +14,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .postgres_store import AuthorizationError, HostedMemory, IdempotencyConflict, PostgresStore, Principal
+from .policy import validate_memory_type
 from .control_api import ControlService, create_control_app
 from .rate_limit import (MAX_REQUEST_BODY_BYTES, RateLimitError, RequestBodyLimitMiddleware,
                          SlidingWindowRateLimiter)
@@ -147,6 +148,7 @@ class HostedMCPTools:
                importance: float = 0.6, confidence: float = 1.0) -> dict[str, Any]:
         content = _required_text(content, "content", MAX_CONTENT_CHARS)
         memory_type = _required_text(memory_type, "memory_type", MAX_IDENTIFIER_CHARS)
+        validate_memory_type(memory_type)
         scope_kind = _required_text(scope_kind, "scope_kind", MAX_IDENTIFIER_CHARS)
         scope_id = _required_text(scope_id, "scope_id", MAX_IDENTIFIER_CHARS)
         source_uri = _required_text(source_uri, "source_uri", MAX_SOURCE_URI_CHARS)
@@ -183,6 +185,7 @@ class HostedMCPTools:
 
 
 def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
+               control_token_verifier: TokenVerifier | None = None,
                principal_resolver: PrincipalResolver = _principal_from_access_token,
                auth: MCPAuthSettings,
                host: str = "127.0.0.1", port: int = 8000,
@@ -259,7 +262,8 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     if connect is None:  # Allows transport registration with contract-test stores.
         def connect():
             raise RuntimeError("The control center requires a PostgreSQL-backed store")
-    control = create_control_app(control_service or ControlService(connect), token_verifier)
+    control = create_control_app(control_service or ControlService(connect),
+                                 control_token_verifier or token_verifier)
 
     @mcp.custom_route("/control", methods=["GET"])
     async def control_page(request: Request):
@@ -275,7 +279,7 @@ def main() -> None:
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url:
         raise SystemExit("DATABASE_URL is required")
-    from .auth import (AuthSettings, JWTValidator, MCPTokenVerifier, PATTokenVerifier,
+    from .auth import (AuthSettings, JWTValidator, MCPTokenVerifier, OAuthControlTokenVerifier, PATTokenVerifier,
                        PrincipalResolver as AuthPrincipalResolver, auth_mode)
     store = PostgresStore(database_url)
     mode = auth_mode()
@@ -287,12 +291,18 @@ def main() -> None:
         # PAT mode is deliberately self-hosted; no external issuer is contacted.
         sdk_auth = MCPAuthSettings(issuer_url=resource, resource_server_url=resource,
                                    service_documentation_url=resource, required_scopes=[])
+        control_verifier = verifier
     else:
         settings = AuthSettings.from_env()
-        verifier = MCPTokenVerifier(JWTValidator(settings), AuthPrincipalResolver(store._connection, settings))
+        validator = JWTValidator(settings)
+        verifier = MCPTokenVerifier(validator, AuthPrincipalResolver(store._connection, settings))
+        control_verifier = OAuthControlTokenVerifier(validator, settings)
         sdk_auth = MCPAuthSettings(issuer_url=settings.issuer, resource_server_url=settings.resource,
                                    service_documentation_url=settings.resource, required_scopes=[])
-    create_mcp(store, token_verifier=verifier, auth=sdk_auth,
+    control_service = ControlService(store._connection, self_hosted=mode == "pat",
+                                     public_mcp_url=str(sdk_auth.resource_server_url))
+    create_mcp(store, token_verifier=verifier, control_token_verifier=control_verifier,
+               auth=sdk_auth, control_service=control_service,
                host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")),
                read_calls_per_minute=int(os.environ.get("NINAI_READ_CALLS_PER_MINUTE", DEFAULT_READ_CALLS_PER_MINUTE)),
                write_calls_per_minute=int(os.environ.get("NINAI_WRITE_CALLS_PER_MINUTE", DEFAULT_WRITE_CALLS_PER_MINUTE)),

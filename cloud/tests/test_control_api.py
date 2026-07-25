@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import sys
+import hashlib
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 from mcp.server.auth.provider import AccessToken, TokenVerifier
@@ -13,7 +15,31 @@ from starlette.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ninai_cloud.control_api import ControlApp, ControlIdentity
+from ninai_cloud.control_api import ControlApp, ControlIdentity, ControlService
+
+
+class RecordingDB:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, sql, params=()):
+        self.calls.append((sql, params))
+        self.sql = sql
+        self.params = params
+        return self
+
+    def fetchone(self):
+        if "SELECT w.id" in self.sql:
+            return {"id": "workspace-1", "name": "Acme", "slug": "acme", "role": "owner"}
+        if "RETURNING id,provider" in self.sql:
+            return {"id": self.params[0], "provider": self.params[3], "client_type": self.params[4],
+                    "display_name": self.params[5], "status": "active"}
+        return None
+
+
+@contextmanager
+def recording_connection(db):
+    yield db
 
 
 class FakeService:
@@ -28,6 +54,15 @@ class FakeService:
         self.calls.append(("memories", who, status, limit)); return [{"id": "m1", "status": status}]
 
     def connections(self, who): return []
+    def projects(self, who): return [{"id": "p1", "name": "Shared"}]
+    def create_workspace(self, who, data):
+        self.calls.append(("create_workspace", who, data)); return {"id": "new-workspace", "name": data["name"]}
+    def create_project(self, who, data):
+        self.calls.append(("create_project", who, data)); return {"id": "p1", "name": data["name"]}
+    def create_connection(self, who, data):
+        self.calls.append(("create_connection", who, data)); return {"id": "c2", **data, "setup": {"auth_mode": "oauth"}}
+    def test_connection(self, who, connection_id):
+        self.calls.append(("test_connection", who, connection_id)); return {"id": connection_id, "metadata_json": {"connection_test": {"status": "ready"}}}
     def grants(self, who, connection_id): return [{"id": "g1", "client_connection_id": connection_id}]
     def activity(self, who, limit): return []
     def export(self, who): return {"format": "ninai-export-v1"}
@@ -44,13 +79,14 @@ class Verifier(TokenVerifier):
         if token != "valid-token":
             return None
         return AccessToken(token=token, client_id="client-1", scopes=[],
-                           claims={"user_id": "user-1", "workspace_id": "workspace-1"})
+                           claims={"user_id": "user-1", "workspace_id": "workspace-1",
+                                   "email": "owner@example.test", "name": "Owner"})
 
 
 class ControlAppTest(unittest.TestCase):
     def setUp(self):
         self.service = FakeService()
-        self.identity = ControlIdentity("user-1", "workspace-1")
+        self.identity = ControlIdentity("user-1", "workspace-1", "owner@example.test", "Owner")
         endpoint = ControlApp(self.service, Verifier()).handle
         self.client = TestClient(Starlette(routes=[
             Route("/control", endpoint, methods=["GET"]),
@@ -107,10 +143,55 @@ class ControlAppTest(unittest.TestCase):
         self.assertEqual(self.client.get("/api/control/export", headers=self.auth).json()["format"], "ninai-export-v1")
         self.assertEqual(self.client.get("/api/control/connections/c1/grants", headers=self.auth).json()["items"][0]["id"], "g1")
 
+    def test_provisioning_routes_derive_identity_from_token_not_body(self):
+        cases = [
+            ("/api/control/workspaces", {"name": "Acme", "user_id": "attacker"}, "create_workspace"),
+            ("/api/control/projects", {"name": "Shared", "workspace_id": "attacker"}, "create_project"),
+            ("/api/control/connections", {"provider": "openai", "client_type": "codex",
+             "display_name": "Codex", "workspace_id": "attacker", "user_id": "attacker"}, "create_connection"),
+        ]
+        for path, body, call_name in cases:
+            with self.subTest(path=path):
+                response = self.client.post(path, json=body, headers=self.auth)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(self.service.calls[-1][0], call_name)
+                self.assertEqual(self.service.calls[-1][1], self.identity)
+        response = self.client.post("/api/control/connections/c2/test",
+                                    json={"workspace_id": "attacker"}, headers=self.auth)
+        self.assertEqual(response.json()["metadata_json"]["connection_test"]["status"], "ready")
+        self.assertEqual(self.service.calls[-1], ("test_connection", self.identity, "c2"))
+        self.assertEqual(self.client.get("/api/control/projects", headers=self.auth).json()["items"][0]["id"], "p1")
+
     def test_unknown_route_is_json_404(self):
         response = self.client.get("/api/control/nope", headers=self.auth)
         self.assertEqual(response.status_code, 404)
         self.assertIn("Route not found", response.json()["error"])
+
+    def test_connection_pat_is_returned_once_only_in_explicit_self_hosted_mode(self):
+        who = self.identity
+        body = {"provider": "openai", "client_type": "codex", "display_name": "Codex"}
+        hosted_db = RecordingDB()
+        hosted = ControlService(lambda: recording_connection(hosted_db), self_hosted=False)
+        self.assertNotIn("personal_access_token", hosted.create_connection(who, body))
+        self.assertFalse(any("personal_access_tokens" in sql for sql, _ in hosted_db.calls))
+
+        self_hosted_db = RecordingDB()
+        self_hosted = ControlService(lambda: recording_connection(self_hosted_db), self_hosted=True)
+        result = self_hosted.create_connection(who, body)
+        token = result["personal_access_token"]
+        self.assertTrue(token.startswith("ninai_pat_"))
+        token_insert = next(params for sql, params in self_hosted_db.calls
+                            if "INSERT INTO personal_access_tokens" in sql)
+        self.assertEqual(token_insert[4], hashlib.sha256(token.encode()).hexdigest())
+        self.assertNotIn(token, token_insert)
+
+    def test_grants_require_an_explicit_coherent_permission(self):
+        service = ControlService(lambda: recording_connection(RecordingDB()))
+        with self.assertRaisesRegex(ValueError, "At least one permission"):
+            service.create_grant(self.identity, "c1", {"scope_kind": "project", "scope_id": "p1"})
+        with self.assertRaisesRegex(ValueError, "requires can_propose"):
+            service.create_grant(self.identity, "c1", {"scope_kind": "project", "scope_id": "p1",
+                                                        "can_auto_activate": True})
 
     def test_health_control_and_api_are_mounted_on_hosted_service(self):
         from ninai_cloud.mcp_server import create_mcp

@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from ninai_cloud.migrations import migration_files
-from ninai_cloud.postgres_store import PostgresStore, _contains_secret, _normalize, _request_hash
+from ninai_cloud.postgres_store import PostgresStore, _contains_secret, _looks_conflicting, _normalize, _request_hash
 
 
 class HostedStoreUnitTest(unittest.TestCase):
@@ -28,7 +28,7 @@ class HostedStoreUnitTest(unittest.TestCase):
     def test_core_migration_has_tenant_indexes_and_constraints(self) -> None:
         files = migration_files()
         self.assertEqual([path.name for path in files],
-                         ["0001_hosted_core.sql", "0002_personal_access_tokens.sql"])
+                         ["0001_hosted_core.sql", "0002_personal_access_tokens.sql", "0003_memory_lifecycle.sql"])
         sql = files[0].read_text(encoding="utf-8")
         for table in (
             "users", "workspaces", "workspace_members", "projects", "client_connections",
@@ -44,6 +44,15 @@ class HostedStoreUnitTest(unittest.TestCase):
         self.assertNotIn("token text", pat_sql.lower())
         self.assertIn("expires_at timestamptz NOT NULL", pat_sql)
         self.assertIn("revoked_at timestamptz", pat_sql)
+        lifecycle_sql = files[2].read_text(encoding="utf-8")
+        self.assertIn("'conflicted'", lifecycle_sql)
+        self.assertIn("'rejected'", lifecycle_sql)
+        self.assertIn("freshness_policy", lifecycle_sql)
+
+    def test_conflict_signal_is_conservative(self) -> None:
+        self.assertTrue(_looks_conflicting("Nova uses PostgreSQL for production", "Nova uses SQLite for production"))
+        self.assertFalse(_looks_conflicting("Nova uses PostgreSQL", "The website is blue"))
+        self.assertFalse(_looks_conflicting("same exact claim", "same exact claim"))
 
 
 if __name__ == "__main__":

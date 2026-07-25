@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from ninai_cloud.migrations import apply_migrations
 from ninai_cloud.auth import PATTokenVerifier
+from ninai_cloud.control_api import ControlIdentity, ControlService
 from ninai_cloud.postgres_store import AuthorizationError, IdempotencyConflict, PostgresStore, Principal
 
 
@@ -85,6 +86,67 @@ class PostgresLifecycleTest(unittest.TestCase):
         with self.assertRaises(AuthorizationError):
             self.store.search(foreign, "anything")
 
+    def test_duplicate_aggregates_sources_and_expiry_is_surfaced(self) -> None:
+        expires = datetime.now(timezone.utc) + timedelta(days=7)
+        common = dict(content="Nova uses PostgreSQL", memory_type="decision", scope_kind="project",
+                      scope_id=self.project, project_id=self.project, activate=True,
+                      valid_until=expires, freshness_policy="verify_weekly")
+        first = self.store.create_memory(
+            self.principal, **common, source_uri="claude://session/one", idempotency_key="duplicate-1")
+        second = self.store.create_memory(
+            self.principal, **common, source_uri="codex://session/two", idempotency_key="duplicate-2")
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(second.freshness_policy, "verify_weekly")
+        self.assertEqual(second.valid_until, expires)
+        self.assertFalse(second.is_expired)
+        with self.psycopg.connect(DATABASE_URL, row_factory=self.__class__.dict_row) as db:
+            sources = db.execute(
+                "SELECT source_uri FROM memory_sources WHERE workspace_id=%s AND memory_id=%s ORDER BY source_uri",
+                (self.workspace, first.id),
+            ).fetchall()
+        self.assertEqual([row["source_uri"] for row in sources],
+                         ["claude://session/one", "codex://session/two"])
+
+    def test_conflict_rejection_and_supersession_are_excluded_from_recall(self) -> None:
+        first = self.store.create_memory(
+            self.principal, content="Nova uses PostgreSQL for production", memory_type="decision",
+            scope_kind="project", scope_id=self.project, project_id=self.project,
+            source_uri="claude://decision/one", idempotency_key="conflict-1", activate=True)
+        competing = self.store.create_memory(
+            self.principal, content="Nova uses SQLite for production", memory_type="decision",
+            scope_kind="project", scope_id=self.project, project_id=self.project,
+            source_uri="codex://decision/two", idempotency_key="conflict-2", activate=True)
+        self.assertEqual(competing.status, "conflicted")
+        self.assertIsNotNone(competing.conflict_group_id)
+        self.assertIsNone(self.store.get_memory(self.principal, first.id))
+        self.assertEqual(self.store.search(self.principal, "Nova production"), [])
+
+        rejected = self.store.transition(self.principal, competing.id, "rejected")
+        self.assertEqual(rejected.status, "rejected")
+        replacement = self.store.create_memory(
+            self.principal, content="Nova production database is PostgreSQL 18", memory_type="fact",
+            scope_kind="project", scope_id=self.project, project_id=self.project,
+            source_uri="user://review/three", idempotency_key="replacement", activate=True)
+        self.assertTrue(self.store.supersede(self.principal, first.id, replacement.id))
+        fetched = self.store.get_memory(self.principal, replacement.id)
+        self.assertEqual(fetched.supersedes_memory_id, first.id)
+        with self.psycopg.connect(DATABASE_URL, row_factory=self.__class__.dict_row) as db:
+            old = db.execute("SELECT status FROM memories WHERE id=%s", (first.id,)).fetchone()
+            old_sources = db.execute("SELECT source_uri FROM memory_sources WHERE memory_id=%s", (first.id,)).fetchall()
+        self.assertEqual(old["status"], "superseded")
+        self.assertEqual([row["source_uri"] for row in old_sources], ["claude://decision/one"])
+
+    def test_expired_memory_is_not_recalled(self) -> None:
+        memory = self.store.create_memory(
+            self.principal, content="Temporary launch flag is enabled", memory_type="event",
+            scope_kind="project", scope_id=self.project, project_id=self.project,
+            source_uri="codex://session/expiry", idempotency_key="expiry", activate=True,
+            valid_until=datetime.now(timezone.utc) + timedelta(minutes=5))
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("UPDATE memories SET valid_until=now()-interval '1 second' WHERE id=%s", (memory.id,))
+        self.assertIsNone(self.store.get_memory(self.principal, memory.id))
+        self.assertEqual(self.store.search(self.principal, "launch flag"), [])
+
     def test_pat_is_hashed_expires_and_observes_live_revocation(self) -> None:
         raw = "ninai_pat_" + uuid.uuid4().hex
         digest = hashlib.sha256(raw.encode()).hexdigest()
@@ -115,6 +177,52 @@ class PostgresLifecycleTest(unittest.TestCase):
                  hashlib.sha256(expired_raw.encode()).hexdigest(),
                  datetime.now(timezone.utc) - timedelta(seconds=1)))
         self.assertIsNone(asyncio.run(verifier.verify_token(expired_raw)))
+
+    def test_control_provisions_project_connection_grant_and_setup_metadata(self) -> None:
+        control = ControlService(self.store._connection, self_hosted=True,
+                                 public_mcp_url="http://localhost:8000/mcp")
+        identity = ControlIdentity(self.user, self.workspace)
+        project = control.create_project(identity, {"name": "Provisioned", "description": "Shared"})
+        connection = control.create_connection(identity, {
+            "provider": "anthropic", "client_type": "claude-code", "display_name": "Claude Code 2",
+            # These must never override the verified identity.
+            "workspace_id": str(uuid.uuid4()), "user_id": str(uuid.uuid4()),
+        })
+        raw = connection.pop("personal_access_token")
+        grant = control.create_grant(identity, connection["id"], {
+            "scope_kind": "project", "scope_id": project["id"],
+            "can_read": True, "can_propose": True, "can_auto_activate": False,
+        })
+        tested = control.test_connection(identity, connection["id"])
+        self.assertEqual(grant["scope_id"], project["id"])
+        self.assertEqual(tested["metadata_json"]["connection_test"]["status"], "ready")
+        with self.psycopg.connect(DATABASE_URL) as db:
+            row = db.execute("""SELECT c.workspace_id,c.user_id,t.token_hash FROM client_connections c
+                JOIN personal_access_tokens t ON t.client_connection_id=c.id AND t.workspace_id=c.workspace_id
+                WHERE c.id=%s""", (connection["id"],)).fetchone()
+        self.assertEqual(str(row[0]), self.workspace)
+        self.assertEqual(str(row[1]), self.user)
+        self.assertEqual(row[2], hashlib.sha256(raw.encode()).hexdigest())
+
+    def test_authenticated_subject_can_create_workspace_without_body_identity(self) -> None:
+        control = ControlService(self.store._connection)
+        created = control.create_workspace(
+            ControlIdentity(self.user, None, f"{self.user}@test.invalid", "Verified Owner"),
+            {"name": "Second Workspace", "user_id": str(uuid.uuid4()),
+             "workspace_id": str(uuid.uuid4())},
+        )
+        try:
+            with self.psycopg.connect(DATABASE_URL) as db:
+                row = db.execute("""SELECT w.owner_user_id,m.user_id,m.role FROM workspaces w
+                    JOIN workspace_members m ON m.workspace_id=w.id WHERE w.id=%s""",
+                    (created["id"],)).fetchone()
+            self.assertEqual(str(row[0]), self.user)
+            self.assertEqual(str(row[1]), self.user)
+            self.assertEqual(row[2], "owner")
+        finally:
+            with self.psycopg.connect(DATABASE_URL) as db:
+                db.execute("DELETE FROM workspace_members WHERE workspace_id=%s", (created["id"],))
+                db.execute("DELETE FROM workspaces WHERE id=%s", (created["id"],))
 
 
 if __name__ == "__main__":

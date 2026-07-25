@@ -4,11 +4,13 @@ from dataclasses import dataclass
 
 ALLOWED_MEMORY_TYPES = {
     "commitment",
+    "constraint",
     "decision",
     "event",
     "fact",
     "preference",
     "procedure",
+    "project_state",
 }
 
 ALLOWED_SCOPES = {

@@ -199,6 +199,40 @@ class MCPTokenVerifier(TokenVerifier):
         )
 
 
+class OAuthControlTokenVerifier(TokenVerifier):
+    """Verify an issuer token for account setup without requiring a client yet.
+
+    Existing-workspace control operations still perform a live membership check
+    in ``ControlService``. This verifier exists only to break the first-workspace
+    bootstrap cycle; it must never protect MCP memory tools.
+    """
+
+    def __init__(self, validator: JWTValidator, settings: AuthSettings) -> None:
+        self.validator = validator
+        self.settings = settings
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        try:
+            claims = self.validator.validate(token)
+        except AuthenticationError:
+            return None
+        subject = claims.get("sub")
+        if not isinstance(subject, str) or not subject.strip():
+            return None
+        workspace_id = claims.get(self.settings.workspace_claim)
+        trusted = {"user_id": subject}
+        if isinstance(workspace_id, str) and workspace_id.strip():
+            trusted["workspace_id"] = workspace_id
+        for name in ("email", "name"):
+            if isinstance(claims.get(name), str):
+                trusted[name] = claims[name]
+        return AccessToken(
+            token=token, client_id=str(claims.get("client_id") or subject),
+            scopes=[], expires_at=int(claims["exp"]) if claims.get("exp") is not None else None,
+            resource=self.settings.resource, subject=subject, claims=trusted,
+        )
+
+
 class PATTokenVerifier(TokenVerifier):
     """Verify opaque self-hosted tokens by digest and live database state.
 
