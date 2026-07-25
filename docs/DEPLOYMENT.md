@@ -117,6 +117,12 @@ That verifier models distinct Claude and Codex principals but deliberately recor
 
 Client registration and API examples are in [HOSTED-BETA.md](HOSTED-BETA.md). Deployment security requirements and unresolved risks are in [SECURITY-REPORT.md](SECURITY-REPORT.md) and [HOSTED-LAUNCH-CHECKLIST.md](HOSTED-LAUNCH-CHECKLIST.md).
 
+For a Render deployment, complete the database network restriction, backup,
+restore-drill, health, monitoring, and account-level steps in
+[RENDER-OPERATIONS.md](RENDER-OPERATIONS.md). In particular, use Render's
+internal database URL for the service and clear the PostgreSQL external IP allow
+list before storing beta data.
+
 ## Static website
 
 ### Vercel (active)

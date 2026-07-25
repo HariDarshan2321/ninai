@@ -8,6 +8,8 @@ Unchecked items block a truthful public hosted-beta launch.
 - [ ] Run the complete engine, cloud unit, PostgreSQL integration, website, and validator suites with no skipped required tests.
 - [ ] Apply migrations to staging, verify schema, then rehearse production migration and rollback/restore.
 - [ ] Provision private PostgreSQL, a least-privilege runtime role, encrypted backups, retention, and a successful restore test.
+- [ ] For Render, use the internal database URL and clear the external IP allow list; record evidence using [RENDER-OPERATIONS.md](RENDER-OPERATIONS.md).
+- [ ] Verify paid-plan PITR, create and retain a logical export, and pass the read-only restore verifier against an isolated recovery database.
 - [ ] Seed users, workspace memberships, client connections, and least-privilege grants through an auditable operator flow.
 
 ## Identity and network
@@ -17,6 +19,7 @@ Unchecked items block a truthful public hosted-beta launch.
 - [ ] Serve `/mcp` and `/health` over HTTPS; keep the database off the public network.
 - [ ] Validate protected-resource metadata and, in OAuth mode, issuer metadata from outside the deployment network.
 - [ ] Add rate limits, request/time limits, trusted-host/CORS rules, redacted centralized logs, monitoring, and alerts.
+- [ ] On Render, set `/health`, enable failure notifications, add an external HTTPS monitor, and record database capacity/connection alert thresholds.
 
 ## Product controls
 
@@ -39,3 +42,4 @@ Unchecked items block a truthful public hosted-beta launch.
 - [ ] Run the website SEO/domain checklist and verify production DNS, redirects, certificates, metadata, and forms.
 - [ ] Establish rollback authority and perform a go/no-go review.
 - [ ] Tag the verified release and retain the test report, logs, migration output, and image digest.
+- [ ] Retain the backup checksum, restore-verifier output, recovery timing, operator, and approval with the release evidence.
