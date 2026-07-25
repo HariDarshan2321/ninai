@@ -25,20 +25,20 @@ from ninai_cloud.postgres_store import AuthorizationError, PostgresStore, Princi
 
 
 NAMESPACE = uuid.UUID("2caa28f8-71b7-4cb1-b351-854892c22620")
-
-
-def _id(name: str) -> str:
-    return str(uuid.uuid5(NAMESPACE, name))
-
-
-IDS = {name: _id(name) for name in (
+ID_NAMES = (
     "user", "workspace", "shared-project", "private-project", "claude-client",
     "codex-client", "claude-grant", "codex-grant", "private-grant",
-)}
+)
 
 
-def _delete_fixture(db: Any) -> None:
-    workspace, user = IDS["workspace"], IDS["user"]
+def _ids(run_id: str) -> dict[str, str]:
+    """Return stable fixture IDs isolated to one verifier invocation."""
+    run_namespace = uuid.uuid5(NAMESPACE, run_id)
+    return {name: str(uuid.uuid5(run_namespace, name)) for name in ID_NAMES}
+
+
+def _delete_fixture(db: Any, ids: dict[str, str]) -> None:
+    workspace, user = ids["workspace"], ids["user"]
     for table in (
         "disclosure_logs", "memory_feedback", "idempotency_keys", "memory_relations",
         "memory_sources", "memories", "client_scope_grants", "client_connections", "projects",
@@ -49,44 +49,47 @@ def _delete_fixture(db: Any) -> None:
     db.execute("DELETE FROM users WHERE id=%s", (user,))
 
 
-def _seed(database_url: str) -> tuple[PostgresStore, Principal, Principal]:
+def _seed(
+    database_url: str, ids: dict[str, str], run_id: str,
+) -> tuple[PostgresStore, Principal, Principal]:
     import psycopg
 
+    fixture_key = uuid.uuid5(NAMESPACE, run_id).hex
     apply_migrations(database_url)
     with psycopg.connect(database_url) as db:
-        _delete_fixture(db)
+        _delete_fixture(db, ids)
         db.execute(
             "INSERT INTO users(id,email,display_name) VALUES(%s,%s,'Acceptance Owner')",
-            (IDS["user"], "cross-provider-acceptance@ninai.invalid"),
+            (ids["user"], f"cross-provider-{fixture_key}@ninai.invalid"),
         )
         db.execute(
-            "INSERT INTO workspaces(id,name,slug,owner_user_id) VALUES(%s,'Acceptance','cross-provider-acceptance',%s)",
-            (IDS["workspace"], IDS["user"]),
+            "INSERT INTO workspaces(id,name,slug,owner_user_id) VALUES(%s,'Acceptance',%s,%s)",
+            (ids["workspace"], f"cross-provider-{fixture_key}", ids["user"]),
         )
         db.execute(
             "INSERT INTO workspace_members(workspace_id,user_id,role) VALUES(%s,%s,'owner')",
-            (IDS["workspace"], IDS["user"]),
+            (ids["workspace"], ids["user"]),
         )
         db.execute(
             "INSERT INTO projects(id,workspace_id,name,slug) VALUES(%s,%s,'Shared','shared')",
-            (IDS["shared-project"], IDS["workspace"]),
+            (ids["shared-project"], ids["workspace"]),
         )
         db.execute(
             "INSERT INTO projects(id,workspace_id,name,slug) VALUES(%s,%s,'Claude private','claude-private')",
-            (IDS["private-project"], IDS["workspace"]),
+            (ids["private-project"], ids["workspace"]),
         )
         db.execute(
             """INSERT INTO client_connections
                (id,workspace_id,user_id,provider,client_type,display_name)
                VALUES(%s,%s,%s,'anthropic','claude-code','Claude Code'),
                      (%s,%s,%s,'openai','codex','Codex')""",
-            (IDS["claude-client"], IDS["workspace"], IDS["user"],
-             IDS["codex-client"], IDS["workspace"], IDS["user"]),
+            (ids["claude-client"], ids["workspace"], ids["user"],
+             ids["codex-client"], ids["workspace"], ids["user"]),
         )
         grants = (
-            (IDS["claude-grant"], IDS["claude-client"], IDS["shared-project"]),
-            (IDS["codex-grant"], IDS["codex-client"], IDS["shared-project"]),
-            (IDS["private-grant"], IDS["claude-client"], IDS["private-project"]),
+            (ids["claude-grant"], ids["claude-client"], ids["shared-project"]),
+            (ids["codex-grant"], ids["codex-client"], ids["shared-project"]),
+            (ids["private-grant"], ids["claude-client"], ids["private-project"]),
         )
         for grant_id, client_id, project_id in grants:
             db.execute(
@@ -94,28 +97,32 @@ def _seed(database_url: str) -> tuple[PostgresStore, Principal, Principal]:
                    (id,workspace_id,client_connection_id,scope_kind,scope_id,
                     can_read,can_propose,can_auto_activate,created_by_user_id)
                    VALUES(%s,%s,%s,'project',%s,true,true,true,%s)""",
-                (grant_id, IDS["workspace"], client_id, project_id, IDS["user"]),
+                (grant_id, ids["workspace"], client_id, project_id, ids["user"]),
             )
 
     store = PostgresStore(database_url)
     return (
         store,
-        Principal(IDS["user"], IDS["workspace"], IDS["claude-client"]),
-        Principal(IDS["user"], IDS["workspace"], IDS["codex-client"]),
+        Principal(ids["user"], ids["workspace"], ids["claude-client"]),
+        Principal(ids["user"], ids["workspace"], ids["codex-client"]),
     )
 
 
-def run_verification(database_url: str, *, cleanup: bool = True) -> dict[str, Any]:
+def run_verification(
+    database_url: str, *, cleanup: bool = True, run_id: str | None = None,
+) -> dict[str, Any]:
     """Run the release-gate semantics and return a machine-readable report."""
     import psycopg
     from psycopg.rows import dict_row
 
-    store, claude, codex = _seed(database_url)
+    run_id = run_id or uuid.uuid4().hex
+    ids = _ids(run_id)
+    store, claude, codex = _seed(database_url, ids, run_id)
     checks: dict[str, bool] = {}
     try:
         claude_memory = store.create_memory(
             claude, content="The launch theme is shared continuity", memory_type="decision",
-            scope_kind="project", scope_id=IDS["shared-project"], project_id=IDS["shared-project"],
+            scope_kind="project", scope_id=ids["shared-project"], project_id=ids["shared-project"],
             source_uri="claude-code://session/acceptance/turn-1",
             idempotency_key="acceptance-claude-to-codex", activate=True,
         )
@@ -128,7 +135,7 @@ def run_verification(database_url: str, *, cleanup: bool = True) -> dict[str, An
         checks["claude_scope_preserved"] = (
             len(codex_results) == 1
             and codex_results[0].scope_kind == "project"
-            and codex_results[0].scope_id == IDS["shared-project"]
+            and codex_results[0].scope_id == ids["shared-project"]
         )
         store.record_disclosure(
             codex, tool_name="search", query="shared continuity", purpose="cross-provider acceptance",
@@ -137,7 +144,7 @@ def run_verification(database_url: str, *, cleanup: bool = True) -> dict[str, An
 
         codex_memory = store.create_memory(
             codex, content="The verified release command is make acceptance", memory_type="fact",
-            scope_kind="project", scope_id=IDS["shared-project"], project_id=IDS["shared-project"],
+            scope_kind="project", scope_id=ids["shared-project"], project_id=ids["shared-project"],
             source_uri="codex://task/acceptance/turn-2",
             idempotency_key="acceptance-codex-to-claude", activate=True,
         )
@@ -150,7 +157,7 @@ def run_verification(database_url: str, *, cleanup: bool = True) -> dict[str, An
         checks["openai_scope_preserved"] = (
             len(claude_results) == 1
             and claude_results[0].scope_kind == "project"
-            and claude_results[0].scope_id == IDS["shared-project"]
+            and claude_results[0].scope_id == ids["shared-project"]
         )
         store.record_disclosure(
             claude, tool_name="search", query="verified release command",
@@ -160,7 +167,7 @@ def run_verification(database_url: str, *, cleanup: bool = True) -> dict[str, An
 
         private = store.create_memory(
             claude, content="Claude private marker zephyr", memory_type="fact",
-            scope_kind="project", scope_id=IDS["private-project"], project_id=IDS["private-project"],
+            scope_kind="project", scope_id=ids["private-project"], project_id=ids["private-project"],
             source_uri="claude-code://session/acceptance/private",
             idempotency_key="acceptance-private-scope", activate=True,
         )
@@ -170,7 +177,7 @@ def run_verification(database_url: str, *, cleanup: bool = True) -> dict[str, An
         checks["claude_scope_allowed"] = store.get_memory(claude, private.id) is not None
 
         checks["openai_revoked"] = store.revoke_client(
-            IDS["workspace"], IDS["codex-client"], IDS["user"]
+            ids["workspace"], ids["codex-client"], ids["user"]
         )
         try:
             store.search(codex, "shared continuity")
@@ -186,7 +193,7 @@ def run_verification(database_url: str, *, cleanup: bool = True) -> dict[str, An
             rows = db.execute(
                 """SELECT request_id,decision,returned_memory_ids,allowed_scope_snapshot
                    FROM disclosure_logs WHERE workspace_id=%s ORDER BY request_id""",
-                (IDS["workspace"],),
+                (ids["workspace"],),
             ).fetchall()
         checks["disclosures_audited"] = (
             len(rows) == 2
@@ -213,7 +220,7 @@ def run_verification(database_url: str, *, cleanup: bool = True) -> dict[str, An
     finally:
         if cleanup:
             with psycopg.connect(database_url) as db:
-                _delete_fixture(db)
+                _delete_fixture(db, ids)
 
 
 def main() -> None:

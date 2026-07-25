@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
@@ -26,6 +27,16 @@ class CrossProviderAcceptanceTest(unittest.TestCase):
         self.assertTrue(report["passed"])
         self.assertEqual(report["host_invocation"], "not_run")
         self.assertTrue(all(report["checks"].values()))
+
+    def test_parallel_runs_use_isolated_fixtures(self) -> None:
+        verifier = _load_verifier()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            reports = list(executor.map(
+                lambda _: verifier.run_verification(DATABASE_URL), range(2),
+            ))
+
+        self.assertTrue(all(report["passed"] for report in reports))
+        self.assertTrue(all(all(report["checks"].values()) for report in reports))
 
 
 if __name__ == "__main__":
