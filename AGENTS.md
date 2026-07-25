@@ -4,7 +4,7 @@ Read `docs/ARCHITECTURE.md` before making architectural changes.
 
 ## Product invariants
 
-1. Ninai is local-first. Do not add cloud persistence to the MVP.
+1. Ninai's implemented local mode is local-first: keep its vault on the user's machine and do not add cloud persistence to that mode. A hosted cloud mode may be developed separately, but it must be explicitly enabled and must never upload or sync local data automatically.
 2. Never return memories outside the configured client scopes.
 3. Never silently grant a client access to a new scope.
 4. Preserve provenance (`source_uri`) for every stored memory.
@@ -12,6 +12,7 @@ Read `docs/ARCHITECTURE.md` before making architectural changes.
 6. Context packets must respect the requested token budget.
 7. Raw tool output is not durable memory. Capture only compact outcomes, decisions, commitments, and state changes.
 8. The website must remain accessible, fast, dependency-light, and truthful about current MVP boundaries.
+9. Local and any future hosted mode must enforce the same permission, provenance, and disclosure-audit invariants.
 
 ## Engineering rules
 

@@ -4,6 +4,12 @@
 
 Ninai stores durable memory locally, controls which scopes each AI client may access, and sends compact provenance-backed context packets rather than the full vault.
 
+## Deployment modes
+
+The implemented MVP is local-first: SQLite remains on the user's machine and nothing is uploaded or synced automatically. A hosted cloud service is a separate, future opt-in mode for clients that cannot reliably reach a local MCP server; it is not implemented in this repository today. Enabling hosted mode must be an explicit user choice, not a change to local mode's storage boundary.
+
+Both modes must share the same core invariants: permission checks happen before retrieval, every memory retains provenance, and disclosures are audited. Hosted storage or sync must not bypass those controls.
+
 ## Data flow
 
 ```text
@@ -115,6 +121,8 @@ Present in the MVP:
 - append-only access records (by convention; not yet cryptographically tamper-evident);
 - soft deletion;
 - bounded memory size and context budgets.
+
+These are also required invariants for any future hosted mode. The list above describes the current local implementation; it is not evidence that hosted storage, remote MCP, accounts, or sync exist.
 
 Not present yet:
 

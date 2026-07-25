@@ -11,6 +11,8 @@ Ninai is a local-first, permissioned memory layer for AI tools. This repository 
 
 The MVP intentionally keeps the trust boundary small: memory is stored on the user's machine and only permission-filtered context packets are returned to an AI client.
 
+The implemented mode is local-first and never uploads or syncs the vault automatically. A hosted cloud mode is planned as a separate, explicit opt-in for clients that cannot reach a local MCP server; it is not implemented in this repository. Local and future hosted modes share the same required permission, provenance, and disclosure-audit invariants.
+
 ## 1. Run the engine locally
 
 Requirements: Python 3.11+. On macOS the default `python3` is often 3.9, which
@@ -132,7 +134,7 @@ Ninai does not claim that cloud AI providers never receive context. The full vau
 - SQLite + FTS5 retrieval; no vector embeddings yet.
 - Claude Code automatic capture through a local hook.
 - Other clients use explicit `remember` and `recall` MCP calls.
-- No cloud sync, accounts, billing, Gmail OAuth, or production encryption.
+- No hosted cloud mode, cloud sync, accounts, billing, Gmail OAuth, or production encryption. Any future hosted mode must be separately enabled; local mode must not upload automatically.
 - Vector search, local-model extraction, consolidation, and richer temporal state remain post-MVP evaluation work. They should be added behind explicit interfaces only when benchmarks justify the extra installation and security surface.
 
 ## Engine architecture
