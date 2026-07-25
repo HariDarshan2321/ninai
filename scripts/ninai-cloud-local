@@ -1,0 +1,41 @@
+#!/bin/sh
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+compose_file="$repo_dir/compose.yaml"
+
+usage() { echo "Usage: scripts/ninai-cloud-local {setup|start|doctor|logs|stop|bootstrap}" >&2; }
+compose() { docker compose -f "$compose_file" "$@"; }
+require_docker() {
+  command -v docker >/dev/null 2>&1 || { echo "error: Docker with Compose v2 is required" >&2; exit 1; }
+  docker compose version >/dev/null 2>&1 || { echo "error: Docker Compose v2 is unavailable" >&2; exit 1; }
+}
+doctor() {
+  require_docker
+  failed=0
+  echo "Ninai hosted development stack"
+  if compose ps --status running postgres | grep -q postgres; then echo "[ok] PostgreSQL container is running"; else echo "[fail] PostgreSQL container is not running"; failed=1; fi
+  if compose exec -T postgres pg_isready -U "${NINAI_DEV_DB_USER:-ninai}" -d "${NINAI_DEV_DB_NAME:-ninai}" >/dev/null 2>&1; then echo "[ok] PostgreSQL accepts connections"; else echo "[fail] PostgreSQL is not ready"; failed=1; fi
+  if compose ps --status running cloud | grep -q cloud; then echo "[ok] Cloud container is running"; else echo "[fail] Cloud container is not running"; failed=1; fi
+  health_url="http://localhost:${NINAI_DEV_CLOUD_PORT:-8000}/health"
+  if command -v curl >/dev/null 2>&1 && curl --silent --show-error --fail "$health_url" >/dev/null; then echo "[ok] $health_url"; else echo "[fail] $health_url is not healthy (curl is required for this check)"; failed=1; fi
+  migration_count=$(compose exec -T postgres psql -U "${NINAI_DEV_DB_USER:-ninai}" -d "${NINAI_DEV_DB_NAME:-ninai}" -Atc "SELECT count(*) FROM schema_migrations" 2>/dev/null || true)
+  if [ "${migration_count:-0}" -gt 0 ] 2>/dev/null; then echo "[ok] $migration_count database migration(s) applied"; else echo "[fail] No applied database migrations found"; failed=1; fi
+  if [ -e "$HOME/.ninai/ninai.sqlite3" ]; then echo "[ok] Local desktop vault remains separate at $HOME/.ninai/ninai.sqlite3"; else echo "[ok] Hosted stack has no local desktop vault mount"; fi
+  return "$failed"
+}
+
+command=${1:-}
+case "$command" in
+  setup|start) require_docker; compose up --build --detach --wait; doctor ;;
+  doctor) doctor ;;
+  logs) require_docker; compose logs --follow cloud postgres ;;
+  stop) require_docker; compose down; echo "Stopped containers; hosted PostgreSQL data remains in its Docker volume." ;;
+  bootstrap)
+    require_docker; shift
+    [ "$#" -gt 0 ] || { echo "Usage: scripts/ninai-cloud-local bootstrap --email you@example.com [options]" >&2; exit 2; }
+    compose run --rm cloud ninai-cloud-bootstrap "$@"
+    ;;
+  *) usage; exit 2 ;;
+esac
+

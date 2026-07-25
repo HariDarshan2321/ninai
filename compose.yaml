@@ -1,0 +1,56 @@
+name: ninai-hosted-dev
+
+# Explicitly opt-in hosted development stack. It never mounts the local desktop vault.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${NINAI_DEV_DB_NAME:-ninai}
+      POSTGRES_USER: ${NINAI_DEV_DB_USER:-ninai}
+      POSTGRES_PASSWORD: ${NINAI_DEV_DB_PASSWORD:-ninai-local-dev-only}
+    ports:
+      - "127.0.0.1:${NINAI_DEV_DB_PORT:-5432}:5432"
+    volumes:
+      - ninai_hosted_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: ./cloud
+    environment:
+      DATABASE_URL: postgresql://${NINAI_DEV_DB_USER:-ninai}:${NINAI_DEV_DB_PASSWORD:-ninai-local-dev-only}@postgres:5432/${NINAI_DEV_DB_NAME:-ninai}
+    command: ["python", "-m", "ninai_cloud.migrations"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  cloud:
+    build:
+      context: ./cloud
+    environment:
+      DATABASE_URL: postgresql://${NINAI_DEV_DB_USER:-ninai}:${NINAI_DEV_DB_PASSWORD:-ninai-local-dev-only}@postgres:5432/${NINAI_DEV_DB_NAME:-ninai}
+      HOST: 0.0.0.0
+      PORT: 8000
+      NINAI_AUTH_MODE: pat
+      NINAI_PUBLIC_RESOURCE_URL: http://localhost:${NINAI_DEV_CLOUD_PORT:-8000}/mcp
+    ports:
+      - "127.0.0.1:${NINAI_DEV_CLOUD_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+    restart: unless-stopped
+
+volumes:
+  ninai_hosted_postgres:

@@ -105,6 +105,14 @@ class AuthTest(unittest.TestCase):
         verifier = MCPTokenVerifier(FakeValidator({**self.claims, "exp": 2_000_000_000}), resolver)
         self.assertIsNone(asyncio.run(verifier.verify_token("signed.jwt")))
 
+    def test_oversized_bearer_is_rejected_before_validation_or_database_access(self):
+        resolver, db = self.resolver()
+        validator = FakeValidator({**self.claims, "exp": 2_000_000_000})
+        verifier = MCPTokenVerifier(validator, resolver)
+        self.assertIsNone(asyncio.run(verifier.verify_token("x" * 8193)))
+        self.assertIsNone(validator.token)
+        self.assertIsNone(db.params)
+
     def test_jwt_validator_checks_signature_issuer_audience_expiry_and_resource(self):
         import jwt
         from cryptography.hazmat.primitives.asymmetric import rsa
@@ -157,6 +165,14 @@ class AuthTest(unittest.TestCase):
         self.assertIsNone(asyncio.run(PATTokenVerifier(connect, "https://ninai.test/mcp")
                                       .verify_token("expired")))
         self.assertEqual(len(db.calls), 1)
+
+    def test_oversized_pat_is_rejected_without_hashing_or_database_access(self):
+        db = PATFakeDb(None)
+        @contextmanager
+        def connect(): yield db
+        self.assertIsNone(asyncio.run(PATTokenVerifier(connect, "https://ninai.test/mcp")
+                                      .verify_token("x" * 513)))
+        self.assertEqual(db.calls, [])
 
 
 if __name__ == "__main__":

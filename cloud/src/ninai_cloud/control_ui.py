@@ -8,10 +8,15 @@ h1{margin-bottom:4px}.muted{color:#61706a}.grid{display:grid;grid-template-colum
 .card{background:white;border:1px solid #dfe7e2;border-radius:12px;padding:18px;margin:12px 0}button{cursor:pointer}
 table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:8px;border-bottom:1px solid #e5ebe7}
 .danger{color:#9c2d25}code{font-size:12px}</style></head><body>
-<h1>Ninai</h1><p class="muted">Hosted memory control center</p><div id="app">Loading…</div>
+<h1>Ninai</h1><p class="muted">Hosted memory control center</p>
+<div class="card"><label>Access token <input id="token" type="password" autocomplete="off" placeholder="Bearer token"></label>
+<button onclick="connect()">Connect</button> <button onclick="disconnect()">Disconnect</button></div><div id="app">Enter an access token to continue.</div>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function api(path,options){let r=await fetch('/api/control'+path,{...options,headers:{'content-type':'application/json',...(options?.headers||{})}});if(!r.ok)throw Error((await r.json()).error||r.statusText);return r.status===204?null:r.json()}
+let accessToken=sessionStorage.getItem('ninai_access_token')||'';document.querySelector('#token').value=accessToken;
+function connect(){accessToken=document.querySelector('#token').value.trim();sessionStorage.setItem('ninai_access_token',accessToken);load()}
+function disconnect(){accessToken='';sessionStorage.removeItem('ninai_access_token');document.querySelector('#token').value='';document.querySelector('#app').textContent='Disconnected.'}
+async function api(path,options){if(!accessToken)throw Error('Enter an access token');let r=await fetch('/api/control'+path,{...options,headers:{'content-type':'application/json','authorization':'Bearer '+accessToken,...(options?.headers||{})}});if(!r.ok)throw Error((await r.json()).error||r.statusText);return r.status===204?null:r.json()}
 async function act(path,body){await api(path,{method:'POST',body:JSON.stringify(body||{})});load()}
 async function load(){try{let [o,m,c,a]=await Promise.all([api('/overview'),api('/memories?status=proposed'),api('/connections'),api('/activity')]);
 document.querySelector('#app').innerHTML=`<div class="grid"><div class="card"><b>${o.counts.active_memories}</b><br>Active memories</div><div class="card"><b>${o.counts.proposals}</b><br>Proposals</div><div class="card"><b>${o.counts.active_connections}</b><br>Connections</div><div class="card"><b>${o.counts.disclosures}</b><br>Disclosures</div></div>

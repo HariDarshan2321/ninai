@@ -3,6 +3,29 @@
 This package is the explicit opt-in PostgreSQL backend. It does not import,
 inspect, or synchronize the local SQLite vault.
 
+## Local hosted development stack
+
+From the repository root, Docker Compose can start an isolated PostgreSQL
+database, apply migrations, and run the PAT-mode cloud service:
+
+```bash
+scripts/ninai-cloud-local setup
+scripts/ninai-cloud-local doctor
+scripts/ninai-cloud-local bootstrap --email you@example.com
+```
+
+The bootstrap command prints the Claude and Codex development tokens once.
+Keep them out of shell history and source control. The compose defaults are
+intentionally development-only (`ninai-local-dev-only`) and may be overridden
+with `NINAI_DEV_DB_PASSWORD`, `NINAI_DEV_DB_PORT`, and
+`NINAI_DEV_CLOUD_PORT`. The MCP endpoint is `http://localhost:8000/mcp` by
+default. Run `scripts/ninai-cloud-local stop` to stop containers; the named
+PostgreSQL volume is retained. This stack has no mount for `~/.ninai` and never
+reads, uploads, or synchronizes the independent desktop SQLite vault.
+
+The local compose stack is for loopback development only: it uses HTTP and PAT
+authentication and is not a production deployment recipe.
+
 Apply migrations:
 
 ```bash

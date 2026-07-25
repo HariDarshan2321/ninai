@@ -16,6 +16,8 @@ from mcp.server.auth.provider import AccessToken, TokenVerifier
 
 from .postgres_store import AuthorizationError, Principal
 
+MAX_BEARER_TOKEN_CHARS = 8_192
+
 
 class AuthenticationError(AuthorizationError):
     """A bearer credential is absent, invalid, or cannot identify a client."""
@@ -86,6 +88,8 @@ class JWTValidator:
         self._keys = jwt.PyJWKClient(settings.jwks_uri)
 
     def validate(self, token: str) -> Mapping[str, Any]:
+        if not isinstance(token, str) or not token or len(token) > MAX_BEARER_TOKEN_CHARS:
+            raise AuthenticationError("Bearer token validation failed")
         try:
             key = self._keys.get_signing_key_from_jwt(token)
             claims = self._jwt.decode(
@@ -147,6 +151,8 @@ class BearerAuthenticator:
         scheme, separator, token = (authorization or "").partition(" ")
         if not separator or scheme.lower() != "bearer" or not token.strip():
             raise AuthenticationError("A Bearer authorization header is required")
+        if len(token) > MAX_BEARER_TOKEN_CHARS:
+            raise AuthenticationError("Bearer token validation failed")
         return self.resolver.resolve(self.validator.validate(token.strip()))
 
 
@@ -166,6 +172,8 @@ class MCPTokenVerifier(TokenVerifier):
         self.resolver = resolver
 
     async def verify_token(self, token: str) -> AccessToken | None:
+        if not token or len(token) > MAX_BEARER_TOKEN_CHARS:
+            return None
         try:
             claims = self.validator.validate(token)
             principal = self.resolver.resolve(claims)

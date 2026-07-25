@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import math
 from dataclasses import asdict
 from typing import Any, Protocol
 
@@ -13,12 +14,21 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .postgres_store import AuthorizationError, HostedMemory, IdempotencyConflict, PostgresStore, Principal
+from .control_api import ControlService, create_control_app
+from .rate_limit import (MAX_REQUEST_BODY_BYTES, RateLimitError, RequestBodyLimitMiddleware,
+                         SlidingWindowRateLimiter)
 
 MAX_QUERY_CHARS = 1_000
 MAX_PURPOSE_CHARS = 500
 MAX_SEARCH_ITEMS = 50
 MAX_RECALL_ITEMS = 12
 MAX_RECALL_TOKENS = 2_000
+MAX_CONTENT_CHARS = 4_000
+MAX_SOURCE_URI_CHARS = 1_000
+MAX_IDEMPOTENCY_KEY_CHARS = 200
+MAX_IDENTIFIER_CHARS = 100
+DEFAULT_READ_CALLS_PER_MINUTE = 120
+DEFAULT_WRITE_CALLS_PER_MINUTE = 30
 
 
 class PrincipalResolver(Protocol):
@@ -55,6 +65,8 @@ def _estimate_tokens(value: str) -> int:
 
 
 def _required_text(value: str, field: str, maximum: int) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be text")
     clean = " ".join(value.split()).strip()
     if not clean:
         raise ValueError(f"{field} is required")
@@ -66,15 +78,24 @@ def _required_text(value: str, field: str, maximum: int) -> str:
 class HostedMCPTools:
     """Transport-neutral MCP operations, suitable for direct contract testing."""
 
-    def __init__(self, store: PostgresStore, principal: PrincipalResolver = _principal_from_access_token) -> None:
+    def __init__(self, store: PostgresStore, principal: PrincipalResolver = _principal_from_access_token,
+                 *, read_limiter: SlidingWindowRateLimiter | None = None,
+                 write_limiter: SlidingWindowRateLimiter | None = None) -> None:
         self.store = store
         self.principal = principal
+        self.read_limiter = read_limiter or SlidingWindowRateLimiter(DEFAULT_READ_CALLS_PER_MINUTE)
+        self.write_limiter = write_limiter or SlidingWindowRateLimiter(DEFAULT_WRITE_CALLS_PER_MINUTE)
+
+    def _authorized(self, *, write: bool = False) -> Principal:
+        principal = self.principal()
+        (self.write_limiter if write else self.read_limiter).check(principal)
+        return principal
 
     def search(self, query: str, purpose: str, limit: int = 10) -> dict[str, Any]:
         query = _required_text(query, "query", MAX_QUERY_CHARS)
         purpose = _required_text(purpose, "purpose", MAX_PURPOSE_CHARS)
         limit = max(1, min(int(limit), MAX_SEARCH_ITEMS))
-        principal = self.principal()
+        principal = self._authorized()
         memories = self.store.search(principal, query, limit=limit)
         results = [_memory_result(memory) for memory in memories]
         self.store.record_disclosure(
@@ -86,7 +107,7 @@ class HostedMCPTools:
     def fetch(self, memory_id: str, purpose: str) -> dict[str, Any]:
         memory_id = _required_text(memory_id, "memory_id", 100)
         purpose = _required_text(purpose, "purpose", MAX_PURPOSE_CHARS)
-        principal = self.principal()
+        principal = self._authorized()
         memory = self.store.get_memory(principal, memory_id)
         result = _memory_result(memory) if memory else None
         self.store.record_disclosure(
@@ -101,7 +122,7 @@ class HostedMCPTools:
         purpose = _required_text(purpose, "purpose", MAX_PURPOSE_CHARS)
         max_items = max(1, min(int(max_items), MAX_RECALL_ITEMS))
         max_tokens = max(100, min(int(max_tokens), MAX_RECALL_TOKENS))
-        principal = self.principal()
+        principal = self._authorized()
         candidates = self.store.search(principal, query, limit=max_items * 3)
         results: list[dict[str, Any]] = []
         estimated_tokens = 0
@@ -124,8 +145,21 @@ class HostedMCPTools:
     def _write(self, *, activate: bool, content: str, memory_type: str, scope_kind: str,
                scope_id: str, source_uri: str, idempotency_key: str, project_id: str | None = None,
                importance: float = 0.6, confidence: float = 1.0) -> dict[str, Any]:
+        content = _required_text(content, "content", MAX_CONTENT_CHARS)
+        memory_type = _required_text(memory_type, "memory_type", MAX_IDENTIFIER_CHARS)
+        scope_kind = _required_text(scope_kind, "scope_kind", MAX_IDENTIFIER_CHARS)
+        scope_id = _required_text(scope_id, "scope_id", MAX_IDENTIFIER_CHARS)
+        source_uri = _required_text(source_uri, "source_uri", MAX_SOURCE_URI_CHARS)
+        idempotency_key = _required_text(idempotency_key, "idempotency_key", MAX_IDEMPOTENCY_KEY_CHARS)
+        if project_id is not None:
+            project_id = _required_text(project_id, "project_id", MAX_IDENTIFIER_CHARS)
+        if not math.isfinite(importance) or not 0 <= importance <= 1:
+            raise ValueError("importance must be between 0 and 1")
+        if not math.isfinite(confidence) or not 0 <= confidence <= 1:
+            raise ValueError("confidence must be between 0 and 1")
+        principal = self._authorized(write=True)
         memory = self.store.create_memory(
-            self.principal(), content=content, memory_type=memory_type, scope_kind=scope_kind,
+            principal, content=content, memory_type=memory_type, scope_kind=scope_kind,
             scope_id=scope_id, source_uri=source_uri, idempotency_key=idempotency_key,
             project_id=project_id, importance=importance, confidence=confidence, activate=activate,
         )
@@ -151,7 +185,11 @@ class HostedMCPTools:
 def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
                principal_resolver: PrincipalResolver = _principal_from_access_token,
                auth: MCPAuthSettings,
-               host: str = "127.0.0.1", port: int = 8000) -> FastMCP:
+               host: str = "127.0.0.1", port: int = 8000,
+               read_calls_per_minute: int = DEFAULT_READ_CALLS_PER_MINUTE,
+               write_calls_per_minute: int = DEFAULT_WRITE_CALLS_PER_MINUTE,
+               max_request_body_bytes: int = MAX_REQUEST_BODY_BYTES,
+               control_service: ControlService | None = None) -> FastMCP:
     """Build the authenticated, stateless hosted MCP application."""
     mcp = FastMCP(
         "Ninai Hosted",
@@ -161,7 +199,19 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
         token_verifier=token_verifier, auth=auth, host=host, port=port, streamable_http_path="/mcp",
         stateless_http=True, json_response=True,
     )
-    tools = HostedMCPTools(store, principal_resolver)
+    tools = HostedMCPTools(
+        store, principal_resolver,
+        read_limiter=SlidingWindowRateLimiter(read_calls_per_minute),
+        write_limiter=SlidingWindowRateLimiter(write_calls_per_minute),
+    )
+    original_http_app = mcp.streamable_http_app
+
+    def bounded_http_app() -> Any:
+        app = original_http_app()
+        app.add_middleware(RequestBodyLimitMiddleware, maximum=max_request_body_bytes)
+        return app
+
+    mcp.streamable_http_app = bounded_http_app  # type: ignore[method-assign]
 
     def guarded(operation: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
         try:
@@ -170,6 +220,8 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
             return {"ok": False, "error": {"code": "forbidden", "message": str(exc)}}
         except IdempotencyConflict as exc:
             return {"ok": False, "error": {"code": "idempotency_conflict", "message": str(exc)}}
+        except RateLimitError as exc:
+            return {"ok": False, "error": {"code": "rate_limited", "message": str(exc)}}
         except ValueError as exc:
             return {"ok": False, "error": {"code": "invalid_request", "message": str(exc)}}
 
@@ -202,6 +254,20 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> JSONResponse:
         return JSONResponse({"status": "ok", "service": "ninai-cloud-mcp"})
+
+    connect = getattr(store, "_connection", None)
+    if connect is None:  # Allows transport registration with contract-test stores.
+        def connect():
+            raise RuntimeError("The control center requires a PostgreSQL-backed store")
+    control = create_control_app(control_service or ControlService(connect), token_verifier)
+
+    @mcp.custom_route("/control", methods=["GET"])
+    async def control_page(request: Request):
+        return await control.handle(request)
+
+    @mcp.custom_route("/api/control/{path:path}", methods=["GET", "POST"])
+    async def control_api(request: Request):
+        return await control.handle(request)
     return mcp
 
 
@@ -227,8 +293,12 @@ def main() -> None:
         sdk_auth = MCPAuthSettings(issuer_url=settings.issuer, resource_server_url=settings.resource,
                                    service_documentation_url=settings.resource, required_scopes=[])
     create_mcp(store, token_verifier=verifier, auth=sdk_auth,
-               host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000"))).run(
+               host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")),
+               read_calls_per_minute=int(os.environ.get("NINAI_READ_CALLS_PER_MINUTE", DEFAULT_READ_CALLS_PER_MINUTE)),
+               write_calls_per_minute=int(os.environ.get("NINAI_WRITE_CALLS_PER_MINUTE", DEFAULT_WRITE_CALLS_PER_MINUTE)),
+               max_request_body_bytes=int(os.environ.get("NINAI_MAX_REQUEST_BODY_BYTES", MAX_REQUEST_BODY_BYTES))).run(
                    transport="streamable-http")
 
 
-__all__ = ["HostedMCPTools", "PrincipalResolver", "create_mcp", "main"]
+__all__ = ["HostedMCPTools", "PrincipalResolver", "RateLimitError", "RequestBodyLimitMiddleware",
+           "SlidingWindowRateLimiter", "create_mcp", "main"]

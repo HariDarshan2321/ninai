@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-import io
-import json
 import sys
 import unittest
 from pathlib import Path
+
+from mcp.server.auth.provider import AccessToken, TokenVerifier
+from mcp.server.auth.settings import AuthSettings as MCPAuthSettings
+from starlette.applications import Starlette
+from starlette.routing import Route
+from starlette.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -35,41 +39,57 @@ class FakeService:
     def delete_workspace(self, who, confirmation): return confirmation == "acme"
 
 
+class Verifier(TokenVerifier):
+    async def verify_token(self, token):
+        if token != "valid-token":
+            return None
+        return AccessToken(token=token, client_id="client-1", scopes=[],
+                           claims={"user_id": "user-1", "workspace_id": "workspace-1"})
+
+
 class ControlAppTest(unittest.TestCase):
     def setUp(self):
         self.service = FakeService()
         self.identity = ControlIdentity("user-1", "workspace-1")
-        self.app = ControlApp(self.service, lambda env: self.identity)
-
-    def request(self, path, method="GET", body=None, query=""):
-        raw = json.dumps(body).encode() if body is not None else b""
-        captured = {}
-        env = {"PATH_INFO": path, "REQUEST_METHOD": method, "QUERY_STRING": query,
-               "CONTENT_LENGTH": str(len(raw)), "wsgi.input": io.BytesIO(raw)}
-        result = b"".join(self.app(env, lambda status, headers: captured.update(status=status, headers=headers)))
-        return captured["status"], captured["headers"], result
+        endpoint = ControlApp(self.service, Verifier()).handle
+        self.client = TestClient(Starlette(routes=[
+            Route("/control", endpoint, methods=["GET"]),
+            Route("/api/control/{path:path}", endpoint, methods=["GET", "POST"]),
+        ]))
+        self.auth = {"Authorization": "Bearer valid-token"}
 
     def test_control_page_is_dependency_free_and_does_not_cache(self):
-        status, headers, body = self.request("/control")
-        self.assertEqual(status, "200 OK")
-        self.assertIn(b"Ninai Control Center", body)
-        self.assertIn(("Cache-Control", "no-store"), headers)
+        response = self.client.get("/control")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Ninai Control Center", response.text)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertIn("sessionStorage", response.text)
 
-    def test_overview_uses_resolved_identity(self):
-        status, _, body = self.request("/api/control/overview")
-        self.assertEqual(status, "200 OK")
-        self.assertEqual(json.loads(body)["workspace"]["id"], "workspace-1")
+    def test_api_requires_verified_bearer_token(self):
+        for headers in ({}, {"Authorization": "Bearer invalid"}):
+            with self.subTest(headers=headers):
+                response = self.client.get("/api/control/overview", headers=headers)
+                self.assertEqual(response.status_code, 401)
+                self.assertTrue(response.headers["www-authenticate"].startswith("Bearer"))
+
+    def test_overview_uses_only_token_identity(self):
+        response = self.client.get(
+            "/api/control/overview?workspace_id=attacker",
+            headers={**self.auth, "X-Workspace-Id": "attacker", "X-User-Id": "attacker"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["workspace"]["id"], "workspace-1")
         self.assertEqual(self.service.calls[-1], ("overview", self.identity))
 
     def test_proposal_review_routes(self):
-        status, _, body = self.request("/api/control/memories/m1/approve", "POST", {})
-        self.assertEqual(status, "200 OK")
-        self.assertEqual(json.loads(body)["status"], "active")
+        response = self.client.post("/api/control/memories/m1/approve", json={}, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "active")
         self.assertEqual(self.service.calls[-1], ("review", self.identity, "m1", True))
 
     def test_memory_filters_are_bounded_by_service(self):
-        status, _, _ = self.request("/api/control/memories", query="status=proposed&limit=25")
-        self.assertEqual(status, "200 OK")
+        response = self.client.get("/api/control/memories?status=proposed&limit=25", headers=self.auth)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(self.service.calls[-1], ("memories", self.identity, "proposed", "25"))
 
     def test_connection_grants_revocation_export_and_delete(self):
@@ -81,20 +101,35 @@ class ControlAppTest(unittest.TestCase):
         ]
         for path, data, field, expected in cases:
             with self.subTest(path=path):
-                status, _, body = self.request(path, "POST", data)
-                self.assertEqual(status, "200 OK")
-                self.assertEqual(json.loads(body)[field], expected)
-        status, _, body = self.request("/api/control/export")
-        self.assertEqual(status, "200 OK")
-        self.assertEqual(json.loads(body)["format"], "ninai-export-v1")
-        status, _, body = self.request("/api/control/connections/c1/grants")
-        self.assertEqual(status, "200 OK")
-        self.assertEqual(json.loads(body)["items"][0]["id"], "g1")
+                response = self.client.post(path, json=data, headers=self.auth)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()[field], expected)
+        self.assertEqual(self.client.get("/api/control/export", headers=self.auth).json()["format"], "ninai-export-v1")
+        self.assertEqual(self.client.get("/api/control/connections/c1/grants", headers=self.auth).json()["items"][0]["id"], "g1")
 
     def test_unknown_route_is_json_404(self):
-        status, _, body = self.request("/api/control/nope")
-        self.assertEqual(status, "404 Not Found")
-        self.assertIn("Route not found", json.loads(body)["error"])
+        response = self.client.get("/api/control/nope", headers=self.auth)
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("Route not found", response.json()["error"])
+
+    def test_health_control_and_api_are_mounted_on_hosted_service(self):
+        from ninai_cloud.mcp_server import create_mcp
+
+        server = create_mcp(
+            object(), token_verifier=Verifier(), control_service=self.service,
+            auth=MCPAuthSettings(issuer_url="https://auth.example.test",
+                                 resource_server_url="https://api.example.test/mcp",
+                                 required_scopes=[]),
+            principal_resolver=lambda: None,
+        )
+        paths = {route.path for route in server.streamable_http_app().routes}
+        self.assertTrue({"/health", "/control", "/api/control/{path:path}"}.issubset(paths))
+        with TestClient(server.streamable_http_app()) as client:
+            self.assertEqual(client.get("/health").json()["status"], "ok")
+            self.assertIn("Ninai Control Center", client.get("/control").text)
+            response = client.get("/api/control/overview", headers=self.auth)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["workspace"]["id"], "workspace-1")
 
 
 if __name__ == "__main__":

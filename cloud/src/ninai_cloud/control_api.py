@@ -1,7 +1,8 @@
-"""Small, framework-free hosted control API and WSGI application.
+"""Hosted control service and authenticated ASGI transport.
 
-Authentication is deliberately injected: production should pass ``identity_resolver``
-from the OAuth layer.  User/workspace identity is never accepted from request JSON.
+The transport verifies the bearer credential on every API request and derives
+user/workspace identity only from the resulting access token. Request headers
+other than ``Authorization`` and request JSON can never select an identity.
 """
 from __future__ import annotations
 
@@ -12,6 +13,10 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Callable, ContextManager, Mapping
 from urllib.parse import parse_qs
+
+from mcp.server.auth.provider import TokenVerifier
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, JSONResponse, Response
 
 from .postgres_store import AuthorizationError
 from .control_ui import CONTROL_CENTER_HTML
@@ -171,32 +176,55 @@ class ControlService:
 
 
 class ControlApp:
-    def __init__(self, service: ControlService, identity_resolver: Callable[[Mapping[str, Any]], ControlIdentity]) -> None:
-        self.service, self.identity_resolver = service, identity_resolver
+    """ASGI endpoint used both standalone and as FastMCP custom routes."""
 
-    def __call__(self, environ: Mapping[str, Any], start_response: Callable[..., Any]):
+    def __init__(self, service: ControlService, token_verifier: TokenVerifier) -> None:
+        self.service, self.token_verifier = service, token_verifier
+
+    async def handle(self, request: Request) -> Response:
         try:
-            status, content_type, body = self._dispatch(environ)
+            status, content_type, body = await self._dispatch(request)
+        except AuthenticationError as exc:
+            return JSONResponse(
+                {"error": str(exc)}, status_code=401,
+                headers={"WWW-Authenticate": 'Bearer realm="ninai-control"', "Cache-Control": "no-store"},
+            )
         except AuthorizationError as exc:
-            status, content_type, body = "403 Forbidden", "application/json", {"error": str(exc)}
+            status, content_type, body = 403, "application/json", {"error": str(exc)}
         except (ValueError, json.JSONDecodeError) as exc:
-            status, content_type, body = "400 Bad Request", "application/json", {"error": str(exc)}
+            status, content_type, body = 400, "application/json", {"error": str(exc)}
         except KeyError as exc:
-            status, content_type, body = "404 Not Found", "application/json", {"error": str(exc.args[0])}
-        payload = body.encode() if isinstance(body, str) else json.dumps(body, default=_jsonable).encode()
-        start_response(status, [("Content-Type", content_type), ("Content-Length", str(len(payload))), ("Cache-Control", "no-store")])
-        return [payload]
+            status, content_type, body = 404, "application/json", {"error": str(exc.args[0])}
+        headers = {"Cache-Control": "no-store"}
+        if isinstance(body, str):
+            return HTMLResponse(body, status_code=status, headers=headers)
+        return Response(json.dumps(body, default=_jsonable), status_code=status,
+                        media_type=content_type, headers=headers)
 
-    def _dispatch(self, env: Mapping[str, Any]):
-        path, method = env.get("PATH_INFO", "/"), env.get("REQUEST_METHOD", "GET").upper()
+    async def _identity(self, request: Request) -> ControlIdentity:
+        scheme, separator, credential = request.headers.get("authorization", "").partition(" ")
+        if not separator or scheme.lower() != "bearer" or not credential.strip():
+            raise AuthenticationError("A Bearer authorization header is required")
+        token = await self.token_verifier.verify_token(credential.strip())
+        if token is None:
+            raise AuthenticationError("Bearer token validation failed")
+        claims = token.claims or {}
+        user_id = getattr(token, "user_id", None) or claims.get("user_id")
+        workspace_id = getattr(token, "workspace_id", None) or claims.get("workspace_id")
+        if not isinstance(user_id, str) or not user_id.strip() or not isinstance(workspace_id, str) or not workspace_id.strip():
+            raise AuthenticationError("Verified token is missing Ninai identity")
+        return ControlIdentity(user_id=user_id, workspace_id=workspace_id)
+
+    async def _dispatch(self, request: Request):
+        path, method = request.url.path, request.method.upper()
         if path in {"/", "/control"} and method == "GET":
-            return "200 OK", "text/html; charset=utf-8", CONTROL_CENTER_HTML
+            return 200, "text/html; charset=utf-8", CONTROL_CENTER_HTML
         if not path.startswith("/api/control/"):
             raise KeyError("Route not found")
-        identity = self.identity_resolver(env)
-        query = parse_qs(env.get("QUERY_STRING", ""))
-        length = int(env.get("CONTENT_LENGTH") or 0)
-        data = json.loads(env["wsgi.input"].read(length) or b"{}") if length else {}
+        identity = await self._identity(request)
+        query = parse_qs(request.url.query)
+        raw = await request.body()
+        data = json.loads(raw or b"{}") if raw else {}
         suffix = path.removeprefix("/api/control")
         if method == "GET" and suffix == "/overview": result = self.service.overview(identity)
         elif method == "GET" and suffix == "/memories": result = {"items": self.service.memories(identity, query.get("status", [None])[0], query.get("limit", [100])[0])}
@@ -212,8 +240,12 @@ class ControlApp:
         else: raise KeyError("Route not found")
         if result is None:
             raise KeyError("Resource not found or no longer reviewable")
-        return "200 OK", "application/json", result
+        return 200, "application/json", result
 
 
-def create_control_app(service: ControlService, identity_resolver: Callable[[Mapping[str, Any]], ControlIdentity]) -> ControlApp:
-    return ControlApp(service, identity_resolver)
+class AuthenticationError(AuthorizationError):
+    """The request did not carry a valid bearer credential."""
+
+
+def create_control_app(service: ControlService, token_verifier: TokenVerifier) -> ControlApp:
+    return ControlApp(service, token_verifier)

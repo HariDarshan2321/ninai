@@ -4,6 +4,14 @@ Ninai has two independent deployment surfaces: the static marketing website and 
 
 ## Hosted MCP beta
 
+For local development, the repository-level `compose.yaml` is the supported
+bootstrap path. `scripts/ninai-cloud-local setup` starts PostgreSQL, waits for
+it, runs all migrations exactly once per version, starts the cloud service, and
+checks readiness. `scripts/ninai-cloud-local doctor` checks containers,
+database connectivity, migration state, and HTTP health. The compose stack uses
+documented development-only credentials and must not be exposed publicly. It
+does not mount or access the local desktop vault.
+
 ### Prerequisites
 
 - Python 3.11+ or the included Python 3.12 container

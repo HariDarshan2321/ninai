@@ -123,6 +123,19 @@ ninai-cloud-mcp
 
 The service exposes `GET /health`, authenticated Streamable HTTP MCP at `/mcp`, and protected-resource metadata. See [hosted client setup and API examples](docs/HOSTED-BETA.md), the [compatibility matrix](docs/COMPATIBILITY.md), and [deployment guide](docs/DEPLOYMENT.md). A running service still needs provisioned users, workspaces, client connections, and grants before a client can access memory.
 
+For the smallest isolated developer stack (PostgreSQL, migrations, and the
+cloud service), use Docker from the repository root:
+
+```bash
+scripts/ninai-cloud-local setup
+scripts/ninai-cloud-local bootstrap --email you@example.com
+scripts/ninai-cloud-local doctor
+```
+
+This explicit hosted stack uses development-only defaults, binds the service to
+localhost, and does not mount, read, or synchronize the local desktop vault.
+See [`cloud/README.md`](cloud/README.md) for overrides and lifecycle commands.
+
 ## 5. Publish and deploy
 
 ```bash

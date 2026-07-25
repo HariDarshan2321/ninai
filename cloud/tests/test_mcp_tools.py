@@ -6,7 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from ninai_cloud.mcp_server import HostedMCPTools, MAX_RECALL_TOKENS
+from ninai_cloud.mcp_server import (HostedMCPTools, MAX_RECALL_TOKENS,
+                                    RateLimitError, SlidingWindowRateLimiter)
 from ninai_cloud.postgres_store import HostedMemory, Principal
 from mcp.server.auth.settings import AuthSettings as MCPAuthSettings
 
@@ -63,6 +64,45 @@ class HostedMCPToolsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "purpose is required"):
             self.tools.recall("query", "   ")
 
+    def test_read_and_write_rates_are_limited_per_client(self) -> None:
+        now = [10.0]
+        read = SlidingWindowRateLimiter(2, clock=lambda: now[0])
+        write = SlidingWindowRateLimiter(1, clock=lambda: now[0])
+        tools = HostedMCPTools(self.store, lambda: Principal("user", "workspace", "client"),
+                               read_limiter=read, write_limiter=write)
+        tools.search("one", "test")
+        tools.fetch("missing", "test")
+        with self.assertRaisesRegex(RateLimitError, "rate limit"):
+            tools.search("three", "test")
+        values = dict(content="bounded", memory_type="fact", scope_kind="project",
+                      scope_id="project", source_uri="test://source", idempotency_key="one")
+        tools.propose_memory(**values)
+        with self.assertRaises(RateLimitError):
+            tools.propose_memory(**{**values, "idempotency_key": "two"})
+        now[0] += 61
+        tools.search("new window", "test")
+        tools.propose_memory(**{**values, "idempotency_key": "three"})
+
+    def test_rate_limits_are_isolated_by_client(self) -> None:
+        current = [Principal("user", "workspace", "client-a")]
+        limiter = SlidingWindowRateLimiter(1)
+        tools = HostedMCPTools(self.store, lambda: current[0], read_limiter=limiter)
+        tools.search("one", "test")
+        current[0] = Principal("user", "workspace", "client-b")
+        tools.search("one", "test")
+
+    def test_write_payload_fields_are_bounded_before_store_call(self) -> None:
+        base = dict(content="bounded", memory_type="fact", scope_kind="project",
+                    scope_id="project", source_uri="test://source", idempotency_key="one")
+        for field, value in (("content", "x" * 4001), ("source_uri", "x" * 1001),
+                             ("idempotency_key", "x" * 201), ("scope_id", "x" * 101)):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, field):
+                self.tools.propose_memory(**{**base, field: value})
+        for field, value in (("importance", float("nan")), ("confidence", 1.01)):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, field):
+                self.tools.propose_memory(**{**base, field: value})
+        self.assertEqual(self.store.creates, [])
+
     def test_server_registers_expected_tools_and_http_routes(self) -> None:
         import asyncio
         from ninai_cloud.mcp_server import create_mcp
@@ -71,7 +111,8 @@ class HostedMCPToolsTest(unittest.TestCase):
         auth = MCPAuthSettings(issuer_url="https://auth.example.test",
                                resource_server_url="https://api.example.test/mcp", required_scopes=[])
         server = create_mcp(self.store, token_verifier=Verifier(), auth=auth,
-                            principal_resolver=lambda: Principal("user", "workspace", "client"))
+                            principal_resolver=lambda: Principal("user", "workspace", "client"),
+                            max_request_body_bytes=128)
         tools = asyncio.run(server.list_tools())
         self.assertEqual({tool.name for tool in tools},
                          {"search", "fetch", "recall", "propose_memory", "remember"})
@@ -88,6 +129,10 @@ class HostedMCPToolsTest(unittest.TestCase):
             unauthorized = client.post("/mcp", json={})
             self.assertEqual(unauthorized.status_code, 401)
             self.assertIn("resource_metadata=", unauthorized.headers["www-authenticate"])
+            oversized = client.post("/mcp", content=b"x" * 129,
+                                    headers={"content-type": "application/json"})
+            self.assertEqual(oversized.status_code, 413)
+            self.assertEqual(oversized.json()["error"]["code"], "payload_too_large")
 
 
 if __name__ == "__main__": unittest.main()
