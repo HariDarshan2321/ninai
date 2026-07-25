@@ -39,24 +39,34 @@ class AuthSettings:
     jwks_uri: str
     authorization_endpoint: str | None = None
     token_endpoint: str | None = None
+    control_client_id: str | None = None
+    control_base_url: str | None = None
     workspace_claim: str = "https://ninai.io/workspace_id"
     oauth_client_claim: str = "client_id"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "AuthSettings":
         values = os.environ if env is None else env
-        return cls(
+        result = cls(
             issuer=_required(values, "NINAI_OAUTH_ISSUER"),
             audience=_required(values, "NINAI_OAUTH_AUDIENCE"),
             resource=_required(values, "NINAI_PUBLIC_RESOURCE_URL"),
             jwks_uri=_required(values, "NINAI_OAUTH_JWKS_URI"),
             authorization_endpoint=values.get("NINAI_OAUTH_AUTHORIZATION_ENDPOINT") or None,
             token_endpoint=values.get("NINAI_OAUTH_TOKEN_ENDPOINT") or None,
+            control_client_id=values.get("NINAI_OAUTH_CONTROL_CLIENT_ID") or None,
+            control_base_url=values.get("NINAI_CONTROL_BASE_URL") or None,
             workspace_claim=values.get(
                 "NINAI_OAUTH_WORKSPACE_CLAIM", "https://ninai.io/workspace_id"
             ),
             oauth_client_claim=values.get("NINAI_OAUTH_CLIENT_ID_CLAIM", "client_id"),
         )
+
+        if bool(result.control_client_id) != bool(result.control_base_url):
+            raise ValueError(
+                "NINAI_OAUTH_CONTROL_CLIENT_ID and NINAI_CONTROL_BASE_URL must be configured together"
+            )
+        return result
 
     def protected_resource_metadata(self) -> dict[str, Any]:
         return {

@@ -38,6 +38,8 @@ NINAI_OAUTH_JWKS_URI=https://<issuer>/.well-known/jwks.json
 NINAI_OAUTH_AUTHORIZATION_ENDPOINT=https://<issuer>/oauth2/authorize
 NINAI_OAUTH_TOKEN_ENDPOINT=https://<issuer>/oauth2/token
 NINAI_PUBLIC_RESOURCE_URL=https://<api-host>/mcp
+NINAI_OAUTH_CONTROL_CLIENT_ID=<public-auth0-spa-client-id>
+NINAI_CONTROL_BASE_URL=https://<api-host>
 NINAI_OAUTH_WORKSPACE_CLAIM=https://ninai.io/workspace_id
 NINAI_OAUTH_CLIENT_ID_CLAIM=client_id
 ```

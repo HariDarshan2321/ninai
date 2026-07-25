@@ -8,20 +8,22 @@ from __future__ import annotations
 
 import json
 import hashlib
+import base64
 import re
 import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, ContextManager, Mapping
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 
 from mcp.server.auth.provider import TokenVerifier
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from .postgres_store import AuthorizationError
-from .control_ui import CONTROL_CENTER_HTML
+from .auth import AuthSettings
+from .control_ui import render_control_center
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,8 +296,10 @@ class ControlService:
 class ControlApp:
     """ASGI endpoint used both standalone and as FastMCP custom routes."""
 
-    def __init__(self, service: ControlService, token_verifier: TokenVerifier) -> None:
+    def __init__(self, service: ControlService, token_verifier: TokenVerifier,
+                 oauth_settings: AuthSettings | None = None) -> None:
         self.service, self.token_verifier = service, token_verifier
+        self.oauth_settings = oauth_settings
 
     @staticmethod
     def _security_headers() -> dict[str, str]:
@@ -313,6 +317,9 @@ class ControlApp:
         }
 
     async def handle(self, request: Request) -> Response:
+        oauth_response = await self._oauth_route(request)
+        if oauth_response is not None:
+            return oauth_response
         try:
             status, content_type, body = await self._dispatch(request)
         except AuthenticationError as exc:
@@ -333,8 +340,101 @@ class ControlApp:
         return Response(json.dumps(body, default=_jsonable), status_code=status,
                         media_type=content_type, headers=headers)
 
+    def _oauth_ready(self) -> bool:
+        settings = self.oauth_settings
+        return bool(settings and settings.control_client_id and settings.control_base_url
+                    and settings.authorization_endpoint and settings.token_endpoint)
+
+    def _control_callback_url(self) -> str:
+        assert self.oauth_settings and self.oauth_settings.control_base_url
+        return self.oauth_settings.control_base_url.rstrip("/") + "/control"
+
+    async def _oauth_route(self, request: Request) -> Response | None:
+        path = request.url.path
+        if path == "/control/login" and request.method == "GET":
+            if not self._oauth_ready():
+                return JSONResponse({"error": "Dashboard OAuth is not configured"}, status_code=503,
+                                    headers=self._security_headers())
+            assert self.oauth_settings and self.oauth_settings.authorization_endpoint
+            verifier = secrets.token_urlsafe(64)
+            challenge = base64.urlsafe_b64encode(
+                hashlib.sha256(verifier.encode()).digest()
+            ).rstrip(b"=").decode()
+            state = secrets.token_urlsafe(32)
+            params = {
+                "response_type": "code", "client_id": self.oauth_settings.control_client_id,
+                "redirect_uri": self._control_callback_url(),
+                "scope": "openid profile email",
+                "audience": self.oauth_settings.audience, "resource": self.oauth_settings.resource,
+                "code_challenge": challenge, "code_challenge_method": "S256", "state": state,
+            }
+            if request.query_params.get("screen_hint") == "signup":
+                params["screen_hint"] = "signup"
+            response = RedirectResponse(
+                self.oauth_settings.authorization_endpoint + "?" + urlencode(params), status_code=302,
+                headers=self._security_headers(),
+            )
+            response.set_cookie("ninai_oauth_state", state, max_age=600, httponly=True,
+                                secure=True, samesite="lax", path="/control")
+            response.set_cookie("ninai_pkce_verifier", verifier, max_age=600, httponly=True,
+                                secure=True, samesite="lax", path="/control")
+            return response
+        if path == "/control/logout" and request.method == "GET":
+            response = RedirectResponse("/control", status_code=302, headers=self._security_headers())
+            response.delete_cookie("ninai_access_token", path="/")
+            return response
+        if path == "/control" and request.method == "GET" and request.query_params.get("code"):
+            return await self._oauth_callback(request)
+        return None
+
+    async def _oauth_callback(self, request: Request) -> Response:
+        if not self._oauth_ready():
+            return JSONResponse({"error": "Dashboard OAuth is not configured"}, status_code=503,
+                                headers=self._security_headers())
+        settings = self.oauth_settings
+        assert settings and settings.token_endpoint and settings.control_client_id and settings.control_base_url
+        state = request.query_params.get("state")
+        if not state or not secrets.compare_digest(state, request.cookies.get("ninai_oauth_state", "")):
+            return JSONResponse({"error": "OAuth state validation failed"}, status_code=400,
+                                headers=self._security_headers())
+        verifier = request.cookies.get("ninai_pkce_verifier", "")
+        if not verifier:
+            return JSONResponse({"error": "OAuth PKCE verifier is missing"}, status_code=400,
+                                headers=self._security_headers())
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                token_response = await client.post(settings.token_endpoint, data={
+                    "grant_type": "authorization_code", "client_id": settings.control_client_id,
+                    "code": request.query_params["code"], "code_verifier": verifier,
+                    "redirect_uri": self._control_callback_url(),
+                })
+            token_response.raise_for_status()
+            token_data = token_response.json()
+            access_token = token_data.get("access_token")
+            if not isinstance(access_token, str) or not access_token:
+                raise ValueError("token response omitted access_token")
+        except Exception:
+            return JSONResponse({"error": "OAuth code exchange failed"}, status_code=502,
+                                headers=self._security_headers())
+        response = RedirectResponse("/control", status_code=302, headers=self._security_headers())
+        response.set_cookie("ninai_access_token", access_token,
+                            max_age=max(60, min(int(token_data.get("expires_in", 3600)), 86_400)),
+                            httponly=True, secure=True, samesite="lax", path="/")
+        response.delete_cookie("ninai_oauth_state", path="/control")
+        response.delete_cookie("ninai_pkce_verifier", path="/control")
+        return response
+
     async def _identity(self, request: Request) -> ControlIdentity:
-        scheme, separator, credential = request.headers.get("authorization", "").partition(" ")
+        authorization = request.headers.get("authorization", "")
+        using_cookie = not authorization and bool(request.cookies.get("ninai_access_token"))
+        if using_cookie and request.method.upper() != "GET":
+            expected = f"{request.url.scheme}://{request.url.netloc}"
+            if request.headers.get("origin") != expected:
+                raise AuthenticationError("OAuth browser request failed origin validation")
+        scheme, separator, credential = (
+            authorization or f"Bearer {request.cookies.get('ninai_access_token', '')}"
+        ).partition(" ")
         if not separator or scheme.lower() != "bearer" or not credential.strip():
             raise AuthenticationError("A Bearer authorization header is required")
         token = await self.token_verifier.verify_token(credential.strip())
@@ -354,7 +454,10 @@ class ControlApp:
     async def _dispatch(self, request: Request):
         path, method = request.url.path, request.method.upper()
         if path in {"/", "/control"} and method == "GET":
-            return 200, "text/html; charset=utf-8", CONTROL_CENTER_HTML
+            return 200, "text/html; charset=utf-8", render_control_center(
+                oauth_enabled=self._oauth_ready(),
+                signed_in=bool(request.cookies.get("ninai_access_token")),
+            )
         if not path.startswith("/api/control/"):
             raise KeyError("Route not found")
         identity = await self._identity(request)
@@ -388,5 +491,6 @@ class AuthenticationError(AuthorizationError):
     """The request did not carry a valid bearer credential."""
 
 
-def create_control_app(service: ControlService, token_verifier: TokenVerifier) -> ControlApp:
-    return ControlApp(service, token_verifier)
+def create_control_app(service: ControlService, token_verifier: TokenVerifier,
+                       oauth_settings: AuthSettings | None = None) -> ControlApp:
+    return ControlApp(service, token_verifier, oauth_settings)

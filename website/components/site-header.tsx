@@ -33,6 +33,7 @@ export function SiteHeader() {
           <Link href="/compatibility/">Compatibility</Link>
           <Link href="/privacy/">Trust</Link>
           <Link href="/research/">Research</Link>
+          <a href="https://ninai-cloud.onrender.com/control">Dashboard ↗</a>
         </nav>
         <Link className="button button--compact button--ink" href="/install/">
           Choose a mode
@@ -51,6 +52,7 @@ export function SiteHeader() {
             <Link href="/compatibility/" onClick={closeMobileMenu}>Compatibility</Link>
             <Link href="/privacy/" onClick={closeMobileMenu}>Trust</Link>
             <Link href="/research/" onClick={closeMobileMenu}>Research</Link>
+            <a href="https://ninai-cloud.onrender.com/control" onClick={closeMobileMenu}>Dashboard ↗</a>
             <Link className="mobile-nav__install" href="/install/" onClick={closeMobileMenu}>
               Choose a mode ↗
             </Link>

@@ -78,18 +78,18 @@ export default function HomePage() {
             </p>
             <div className={styles.heroActions}>
               <Link className={styles.primaryAction} href="/install/">
-                Install Ninai <span aria-hidden="true">↗</span>
+                Choose a mode <span aria-hidden="true">↗</span>
               </Link>
               <a
                 className={styles.secondaryAction}
-                href="https://github.com/HariDarshan2321/ninai"
+                href="https://ninai-cloud.onrender.com/control"
               >
-                View the source
+                Hosted beta sign in
               </a>
             </div>
             <ul className={styles.proofList} aria-label="MVP properties">
               <li>Local engine available</li>
-              <li>Hosted beta in development</li>
+              <li>Hosted invitation beta live</li>
               <li>Tested before claimed</li>
             </ul>
           </div>

@@ -1,5 +1,7 @@
 """Dependency-free control-center page served by the hosted API."""
 
+import json
+
 CONTROL_CENTER_HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ninai Control Center</title><style>
@@ -9,14 +11,17 @@ h1{margin-bottom:4px}.muted{color:#61706a}.grid{display:grid;grid-template-colum
 table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:8px;border-bottom:1px solid #e5ebe7}
 .danger{color:#9c2d25}.actions{display:flex;gap:6px;flex-wrap:wrap}.memory-content{max-width:440px}.details{font-size:13px;color:#52615b}code{font-size:12px}</style></head><body>
 <h1>Ninai</h1><p class="muted">Hosted memory control center</p>
-<div class="card"><label>Access token <input id="token" type="password" autocomplete="off" placeholder="Bearer token"></label>
-<button onclick="connect()">Connect</button> <button onclick="disconnect()">Disconnect</button></div><div id="app">Enter an access token to continue.</div>
+<div class="card" id="oauth-login" hidden><p>Sign in securely to manage your Ninai workspace.</p><a href="/control/login?screen_hint=signup"><button>Create account</button></a> <a href="/control/login"><button>Sign in</button></a></div>
+<div class="card" id="oauth-session" hidden><p>Authenticated dashboard session</p><a href="/control/logout"><button>Sign out</button></a></div>
+<div class="card" id="token-session"><label>Self-hosted access token <input id="token" type="password" autocomplete="off" placeholder="Bearer token"></label>
+<button onclick="connect()">Connect</button> <button onclick="disconnect()">Disconnect</button></div><div id="app">Connect to continue.</div>
 <script>
+const oauthEnabled=__NINAI_OAUTH_ENABLED__,oauthSignedIn=__NINAI_OAUTH_SIGNED_IN__;if(oauthEnabled){document.querySelector(oauthSignedIn?'#oauth-session':'#oauth-login').hidden=false;document.querySelector('#token-session').hidden=true}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let accessToken=sessionStorage.getItem('ninai_access_token')||'';document.querySelector('#token').value=accessToken;
+let accessToken=oauthEnabled?'':(sessionStorage.getItem('ninai_access_token')||'');document.querySelector('#token').value=accessToken;
 function connect(){accessToken=document.querySelector('#token').value.trim();sessionStorage.setItem('ninai_access_token',accessToken);load()}
 function disconnect(){accessToken='';sessionStorage.removeItem('ninai_access_token');document.querySelector('#token').value='';document.querySelector('#app').textContent='Disconnected.'}
-async function api(path,options){if(!accessToken)throw Error('Enter an access token');let r=await fetch('/api/control'+path,{...options,headers:{'content-type':'application/json','authorization':'Bearer '+accessToken,...(options?.headers||{})}});if(!r.ok)throw Error((await r.json()).error||r.statusText);return r.status===204?null:r.json()}
+async function api(path,options){if(!oauthEnabled&&!accessToken)throw Error('Enter an access token');let headers={'content-type':'application/json',...(options?.headers||{})};if(accessToken)headers.authorization='Bearer '+accessToken;let r=await fetch('/api/control'+path,{...options,headers});if(!r.ok){let e=Error(r.status===401&&oauthEnabled?'Your session has expired. Sign in again.':((await r.json()).error||r.statusText));e.status=r.status;throw e}return r.status===204?null:r.json()}
 async function act(path,body){await api(path,{method:'POST',body:JSON.stringify(body||{})});load()}
 async function createProject(){let name=prompt('Project name');if(name)await act('/projects',{name})}
 async function createConnection(){let provider=prompt('Provider: anthropic or openai','anthropic');if(!provider)return;let client_type=provider==='openai'?'codex':'claude-code';let display_name=prompt('Connection name',client_type);if(!display_name)return;let oauth_client_id=prompt('OAuth client ID (the tpc_… ID returned by dynamic registration). Leave blank only in self-hosted PAT mode.','');let created=await api('/connections',{method:'POST',body:JSON.stringify({provider,client_type,display_name,oauth_client_id})});if(created.personal_access_token)alert('Copy this token now. It will not be shown again:\n\n'+created.personal_access_token);await load()}
@@ -36,5 +41,11 @@ document.querySelector('#app').innerHTML=`<div class="grid"><div class="card"><b
 <section class="card"><h2>Connections</h2><button onclick="createConnection()">New provider connection</button>${c.items.map(x=>`<p><b>${esc(x.display_name)}</b> · ${esc(x.provider)} · ${esc(x.status)} ${x.status==='active'?`<span class="actions"><button onclick="grantProject('${x.id}')">Grant project</button><button onclick="testConnection('${x.id}')">Test setup</button><button class="danger" onclick="act('/connections/${x.id}/revoke')">Revoke connection</button></span>`:''}</p>`).join('')||'<p class="muted">No connections.</p>'}</section>
 <section class="card"><h2>Permissions</h2>${grants.length?`<table><tr><th>Connection</th><th>Scope</th><th>Access</th><th></th></tr>${grants.map(g=>`<tr><td><code>${esc(g.client_connection_id)}</code></td><td>${esc(g.scope_kind)} · <code>${esc(g.scope_id)}</code></td><td>${g.can_read?'read ':''}${g.can_propose?'propose ':''}${g.can_auto_activate?'auto-activate':''}${g.revoked_at?'revoked':''}</td><td>${g.revoked_at?'':`<button class="danger" onclick="revokeGrant('${g.id}')">Revoke grant</button>`}</td></tr>`).join('')}</table>`:'<p class="muted">No scope grants.</p>'}</section>
 <section class="card"><h2>Recent disclosures</h2>${a.items.map(x=>`<p><b>${esc(x.tool_name)}</b> · ${esc(x.decision)} · ${esc(x.created_at)}${x.denial_reason?` · ${esc(x.denial_reason)}`:''}</p>`).join('')||'<p class="muted">No activity.</p>'}</section>
-<section class="card"><h2>Data and settings</h2><p>Export the workspace, including memories, sources, permissions, and disclosure history.</p><button onclick="downloadExport()">Download workspace export</button><h3 class="danger">Delete workspace</h3><p>Deletion immediately revokes connected clients and excludes workspace memories from retrieval. Backup retention and hard deletion remain governed by the deployment policy.</p><button class="danger" onclick="deleteWorkspace('${esc(o.workspace.slug)}')">Delete workspace…</button></section>`}catch(e){document.querySelector('#app').innerHTML=`<div class="card danger">${esc(e.message)}</div><div class="card"><h2>First-time setup</h2><p>Create a workspace when your authenticated account has not joined one yet.</p><button onclick="createWorkspace()">Create workspace</button></div>`}}load();
+<section class="card"><h2>Data and settings</h2><p>Export the workspace, including memories, sources, permissions, and disclosure history.</p><button onclick="downloadExport()">Download workspace export</button><h3 class="danger">Delete workspace</h3><p>Deletion immediately revokes connected clients and excludes workspace memories from retrieval. Backup retention and hard deletion remain governed by the deployment policy.</p><button class="danger" onclick="deleteWorkspace('${esc(o.workspace.slug)}')">Delete workspace…</button></section>`}catch(e){document.querySelector('#app').innerHTML=e.status===401&&oauthEnabled?'<div class="card">Choose Create account or Sign in above to continue.</div>':`<div class="card danger">${esc(e.message)}</div><div class="card"><h2>First-time setup</h2><p>Create a workspace when your authenticated account has not joined one yet.</p><button onclick="createWorkspace()">Create workspace</button></div>`}}load();
 </script></body></html>"""
+
+
+def render_control_center(*, oauth_enabled: bool, signed_in: bool = False) -> str:
+    return (CONTROL_CENTER_HTML
+            .replace("__NINAI_OAUTH_ENABLED__", json.dumps(oauth_enabled))
+            .replace("__NINAI_OAUTH_SIGNED_IN__", json.dumps(signed_in)))

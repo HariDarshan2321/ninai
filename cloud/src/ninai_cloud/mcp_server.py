@@ -16,6 +16,7 @@ from starlette.responses import JSONResponse
 from .postgres_store import AuthorizationError, HostedMemory, IdempotencyConflict, PostgresStore, Principal
 from .policy import validate_memory_type
 from .control_api import ControlService, create_control_app
+from .auth import AuthSettings as HostedAuthSettings
 from .rate_limit import (MAX_REQUEST_BODY_BYTES, RateLimitError, RequestBodyLimitMiddleware,
                          SlidingWindowRateLimiter)
 
@@ -192,7 +193,8 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
                read_calls_per_minute: int = DEFAULT_READ_CALLS_PER_MINUTE,
                write_calls_per_minute: int = DEFAULT_WRITE_CALLS_PER_MINUTE,
                max_request_body_bytes: int = MAX_REQUEST_BODY_BYTES,
-               control_service: ControlService | None = None) -> FastMCP:
+               control_service: ControlService | None = None,
+               control_oauth_settings: HostedAuthSettings | None = None) -> FastMCP:
     """Build the authenticated, stateless hosted MCP application."""
     mcp = FastMCP(
         "Ninai Hosted",
@@ -263,10 +265,19 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
         def connect():
             raise RuntimeError("The control center requires a PostgreSQL-backed store")
     control = create_control_app(control_service or ControlService(connect),
-                                 control_token_verifier or token_verifier)
+                                 control_token_verifier or token_verifier,
+                                 control_oauth_settings)
 
     @mcp.custom_route("/control", methods=["GET"])
     async def control_page(request: Request):
+        return await control.handle(request)
+
+    @mcp.custom_route("/control/login", methods=["GET"])
+    async def control_login(request: Request):
+        return await control.handle(request)
+
+    @mcp.custom_route("/control/logout", methods=["GET"])
+    async def control_logout(request: Request):
         return await control.handle(request)
 
     @mcp.custom_route("/api/control/{path:path}", methods=["GET", "POST"])
@@ -312,6 +323,7 @@ def main() -> None:
     )
     create_mcp(store, token_verifier=verifier, control_token_verifier=control_verifier,
                auth=sdk_auth, control_service=control_service,
+               control_oauth_settings=settings if mode == "oauth" else None,
                host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")),
                read_calls_per_minute=int(os.environ.get("NINAI_READ_CALLS_PER_MINUTE", DEFAULT_READ_CALLS_PER_MINUTE)),
                write_calls_per_minute=int(os.environ.get("NINAI_WRITE_CALLS_PER_MINUTE", DEFAULT_WRITE_CALLS_PER_MINUTE)),

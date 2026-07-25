@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import hashlib
 import unittest
+from unittest.mock import patch
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -90,6 +91,8 @@ class ControlAppTest(unittest.TestCase):
         endpoint = ControlApp(self.service, Verifier()).handle
         self.client = TestClient(Starlette(routes=[
             Route("/control", endpoint, methods=["GET"]),
+            Route("/control/login", endpoint, methods=["GET"]),
+            Route("/control/logout", endpoint, methods=["GET"]),
             Route("/api/control/{path:path}", endpoint, methods=["GET", "POST"]),
         ]))
         self.auth = {"Authorization": "Bearer valid-token"}
@@ -122,6 +125,92 @@ class ControlAppTest(unittest.TestCase):
                 response = self.client.get("/api/control/overview", headers=headers)
                 self.assertEqual(response.status_code, 401)
                 self.assertTrue(response.headers["www-authenticate"].startswith("Bearer"))
+
+    def test_dashboard_oauth_login_uses_authorization_code_pkce(self):
+        from ninai_cloud.auth import AuthSettings
+        settings = AuthSettings(
+            issuer="https://tenant.auth0.com/", audience="https://api.example/mcp",
+            resource="https://api.example/mcp", jwks_uri="https://tenant.auth0.com/jwks",
+            authorization_endpoint="https://tenant.auth0.com/authorize",
+            token_endpoint="https://tenant.auth0.com/oauth/token",
+            control_client_id="dashboard-client", control_base_url="https://api.example",
+        )
+        endpoint = ControlApp(self.service, Verifier(), settings).handle
+        client = TestClient(Starlette(routes=[
+            Route("/control", endpoint, methods=["GET"]),
+            Route("/control/login", endpoint, methods=["GET"]),
+        ]))
+        self.assertIn("const oauthEnabled=true", client.get("/control").text)
+        response = client.get("/control/login?screen_hint=signup", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        location = response.headers["location"]
+        for expected in ("response_type=code", "code_challenge=", "code_challenge_method=S256",
+                         "client_id=dashboard-client", "screen_hint=signup",
+                         "redirect_uri=https%3A%2F%2Fapi.example%2Fcontrol"):
+            self.assertIn(expected, location)
+        self.assertIn("ninai_oauth_state=", response.headers["set-cookie"])
+        self.assertIn("HttpOnly", response.headers["set-cookie"])
+        self.assertIn("Secure", response.headers["set-cookie"])
+
+    def test_dashboard_oauth_callback_rejects_bad_state(self):
+        from ninai_cloud.auth import AuthSettings
+        settings = AuthSettings(
+            issuer="https://tenant.auth0.com/", audience="https://api.example/mcp",
+            resource="https://api.example/mcp", jwks_uri="https://tenant.auth0.com/jwks",
+            authorization_endpoint="https://tenant.auth0.com/authorize",
+            token_endpoint="https://tenant.auth0.com/oauth/token",
+            control_client_id="dashboard-client", control_base_url="https://api.example",
+        )
+        endpoint = ControlApp(self.service, Verifier(), settings).handle
+        client = TestClient(Starlette(routes=[Route("/control", endpoint, methods=["GET"])]))
+        client.cookies.set("ninai_oauth_state", "expected")
+        response = client.get("/control?code=authorization-code&state=wrong")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("state validation", response.json()["error"])
+
+    def test_dashboard_oauth_callback_sets_httponly_session_cookie(self):
+        from ninai_cloud.auth import AuthSettings
+        settings = AuthSettings(
+            issuer="https://tenant.auth0.com/", audience="https://api.example/mcp",
+            resource="https://api.example/mcp", jwks_uri="https://tenant.auth0.com/jwks",
+            authorization_endpoint="https://tenant.auth0.com/authorize",
+            token_endpoint="https://tenant.auth0.com/oauth/token",
+            control_client_id="dashboard-client", control_base_url="https://api.example",
+        )
+        endpoint = ControlApp(self.service, Verifier(), settings).handle
+        client = TestClient(Starlette(routes=[Route("/control", endpoint, methods=["GET"])]))
+
+        class TokenResponse:
+            def raise_for_status(self): pass
+            def json(self): return {"access_token": "valid-token", "expires_in": 900}
+        class AsyncClient:
+            def __init__(self, **_kwargs): self.data = None
+            async def __aenter__(self): return self
+            async def __aexit__(self, *_args): pass
+            async def post(self, _url, data): self.data = data; return TokenResponse()
+
+        client.cookies.set("ninai_oauth_state", "expected")
+        client.cookies.set("ninai_pkce_verifier", "verifier")
+        with patch("httpx.AsyncClient", AsyncClient):
+            response = client.get("/control?code=authorization-code&state=expected",
+                                  follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "/control")
+        cookies = response.headers.get_list("set-cookie")
+        session = next(value for value in cookies if value.startswith("ninai_access_token="))
+        self.assertIn("HttpOnly", session)
+        self.assertIn("Secure", session)
+        self.assertIn("SameSite=lax", session)
+
+    def test_dashboard_cookie_auth_requires_origin_for_mutations(self):
+        client = self.client
+        client.cookies.set("ninai_access_token", "valid-token")
+        self.assertEqual(client.get("/api/control/overview").status_code, 200)
+        denied = client.post("/api/control/memories/m1/approve", json={})
+        self.assertEqual(denied.status_code, 401)
+        allowed = client.post("/api/control/memories/m1/approve", json={},
+                              headers={"Origin": "http://testserver"})
+        self.assertEqual(allowed.status_code, 200)
 
     def test_overview_uses_only_token_identity(self):
         response = self.client.get(
@@ -221,7 +310,8 @@ class ControlAppTest(unittest.TestCase):
             principal_resolver=lambda: None,
         )
         paths = {route.path for route in server.streamable_http_app().routes}
-        self.assertTrue({"/health", "/control", "/api/control/{path:path}"}.issubset(paths))
+        self.assertTrue({"/health", "/control", "/control/login", "/control/logout",
+                         "/api/control/{path:path}"}.issubset(paths))
         with TestClient(server.streamable_http_app()) as client:
             self.assertEqual(client.get("/health").json()["status"], "ok")
             self.assertIn("Ninai Control Center", client.get("/control").text)

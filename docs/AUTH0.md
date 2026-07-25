@@ -23,6 +23,11 @@ scope; read/propose/auto-activate grants remain explicit Ninai actions.
 5. Configure Universal Login, consent, MFA, refresh-token rotation, attack
    protection, signing-key rotation, and callback/logout URLs for the tested
    Claude and Codex hosts.
+   Create a separate public SPA application for the Ninai dashboard, allow the
+   exact `${NINAI_CONTROL_BASE_URL}/control` as its callback, the base URL as
+   its web origin, and place its
+   non-secret client ID in `NINAI_OAUTH_CONTROL_CLIENT_ID`. The dashboard uses
+   Authorization Code with PKCE; it never requires a client secret.
 6. Set `cloud/.env.example` values. Preserve Auth0's canonical issuer trailing
    slash. OAuth audience and `NINAI_PUBLIC_RESOURCE_URL` must be identical.
 7. For a user in multiple workspaces, add a Post-Login Action that emits the
@@ -30,6 +35,18 @@ scope; read/propose/auto-activate grants remain explicit Ninai actions.
    not require this custom claim.
 8. Apply `0004_oauth_identity_mapping.sql`, sign into `/control`, create a
    connection with the DCR `tpc_…` client ID, then explicitly grant scopes.
+
+## Dashboard customer journey
+
+The customer opens `/control` and chooses **Create account** or **Sign in**.
+Ninai creates a one-time PKCE verifier and state in Secure, HttpOnly, SameSite
+cookies, then redirects to Auth0 Universal Login. Auth0 returns the authorization
+code to `/control`; Ninai validates state, exchanges the code with the PKCE
+verifier, and stores only the short-lived access token in a Secure, HttpOnly
+cookie. Dashboard API requests use that cookie and require a same-origin check
+for mutations. **Sign out** clears the Ninai browser session. Auth0 SSO logout
+can be added later if product policy requires terminating the tenant-wide SSO
+session as well.
 
 Auth0 DCR clients require PKCE and support authorization-code and refresh-token
 grants. The host must store and reuse a registration rather than creating a new
