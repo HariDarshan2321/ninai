@@ -299,8 +299,12 @@ def main() -> None:
         control_verifier = OAuthControlTokenVerifier(
             validator, settings, OAuthIdentityResolver(store._connection, settings)
         )
-        sdk_auth = MCPAuthSettings(issuer_url=settings.issuer, resource_server_url=settings.resource,
-                                   service_documentation_url=settings.resource, required_scopes=[])
+        sdk_auth = MCPAuthSettings(
+            issuer_url=settings.issuer,
+            resource_server_url=settings.resource,
+            service_documentation_url=settings.resource,
+            required_scopes=["ninai:read", "ninai:propose", "ninai:remember"],
+        )
     control_service = ControlService(
         store._connection, self_hosted=mode == "pat",
         public_mcp_url=str(sdk_auth.resource_server_url),
