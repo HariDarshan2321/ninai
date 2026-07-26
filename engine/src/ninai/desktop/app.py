@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import sys
+from importlib.resources import files
 from pathlib import Path
 
-from .api import DesktopApi
+from ninai.desktop.api import DesktopApi
 
-WEB_DIR = Path(__file__).resolve().parent / "web"
 WINDOW_TITLE = "Ninai"
 
 
 def _index_path() -> Path:
-    index = WEB_DIR / "index.html"
+    index = Path(str(files("ninai.desktop").joinpath("web", "index.html")))
     if not index.exists():
         raise FileNotFoundError(f"Ninai web assets not found at {index}")
     return index

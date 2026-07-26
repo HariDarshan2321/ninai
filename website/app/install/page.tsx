@@ -6,7 +6,7 @@ import { CopyCommand } from "@/components/copy-command";
 export const metadata: Metadata = {
   title: "Install Ninai AI memory locally or use the hosted beta",
   description:
-    "Join Ninai's operator-assisted hosted beta or install the available open-source local MCP memory engine.",
+    "Connect a supported cloud AI client to Ninai's hosted dashboard or install the open-source local memory engine on macOS.",
   alternates: { canonical: "/install/" },
   openGraph: {
     title: "Choose how to run Ninai",
@@ -80,7 +80,7 @@ export default function InstallPage() {
               live, while workspace and client grants remain operator-assisted during beta.
             </p>
             <div className="requirement-row">
-              <span>Local</span><strong>Available</strong>
+              <span>Local</span><strong>macOS</strong>
               <span>Hosted</span><strong>Invitation beta</strong>
               <span>Cloud sync</span><strong>Never automatic</strong>
             </div>
@@ -89,8 +89,8 @@ export default function InstallPage() {
       </section>
 
       <section className="install-choice shell" aria-label="Deployment choices">
-        <article><span className="status-pill status-pill--ready">Available now</span><h2>Local engine</h2><p>Keep the complete vault in SQLite on this machine. No account is required.</p><a href="#local-install">Continue to local install ↓</a></article>
-        <article><span className="status-pill">Invitation beta</span><h2>Hosted Beta</h2><p>OAuth login is live for Claude Code and Codex. An operator still provisions each workspace, connection, and least-privilege grant.</p><a href="#hosted-beta">Configure a beta client ↓</a></article>
+        <article><span className="status-pill status-pill--ready">Available now</span><h2>Local macOS app</h2><p>Install the owner UI and keep the complete vault in SQLite on your Mac. No account is required.</p><a href="#local-install">Continue to local install ↓</a></article>
+        <article><span className="status-pill">Invitation beta</span><h2>Hosted cloud</h2><p>Sign in from the website dashboard and connect a supported remote MCP client to the separate PostgreSQL vault.</p><a href="#hosted-beta">Configure a cloud client ↓</a></article>
       </section>
 
       <section className="install-layout shell" id="hosted-beta">
@@ -99,6 +99,7 @@ export default function InstallPage() {
           <a href="#hosted-account">Ninai account</a>
           <a href="#hosted-claude">Claude Code</a>
           <a href="#hosted-codex">Codex</a>
+          <a href="#hosted-chat">ChatGPT / Claude.ai</a>
           <a href="#hosted-verify">First memory</a>
           <a href="https://ninai-cloud.onrender.com/control">Control center ↗</a>
         </aside>
@@ -130,8 +131,17 @@ export default function InstallPage() {
               <CopyCommand>{hostedCodexCommand}</CopyCommand>
             </div>
           </section>
-          <section className="install-step" id="hosted-verify">
+          <section className="install-step" id="hosted-chat">
             <div className="install-step__number">04</div>
+            <div>
+              <p className="install-step__label">ChatGPT and Claude.ai</p>
+              <h2>Add Ninai as a remote MCP app when your plan supports custom connectors.</h2>
+              <p>Use <code>https://ninai-cloud.onrender.com/mcp</code> as the server URL and complete Ninai OAuth. ChatGPT currently limits custom MCP apps to supported managed workspaces, and Claude availability depends on the selected Claude surface and plan. These hosts use the cloud vault—not the private database on your Mac.</p>
+              <p>After the host scans Ninai&apos;s tools, sign in to the dashboard and bind that connection before granting a project. This connector path remains beta until a real-host acceptance run is recorded.</p>
+            </div>
+          </section>
+          <section className="install-step" id="hosted-verify">
+            <div className="install-step__number">05</div>
             <div>
               <p className="install-step__label">First memory</p>
               <h2>Propose, approve, then recall one safe test.</h2>
@@ -164,7 +174,7 @@ export default function InstallPage() {
             <div className="install-step__number">01</div>
             <div>
               <p className="install-step__label">Install engine</p>
-              <h2>Clone and install the local package.</h2>
+              <h2>Install the local macOS package.</h2>
               <p>
                 Ninai requires Python 3.11 or newer. The installer automatically chooses
                 Python 3.13, 3.12, or 3.11 and installs the engine and desktop app in
@@ -172,6 +182,7 @@ export default function InstallPage() {
                 first if no compatible version is installed.
               </p>
               <CopyCommand>{installCommand}</CopyCommand>
+              <p>A one-click customer download is being prepared as a signed and notarized <code>Ninai.app</code>. Until that release is published, the command above is the verified installation path; do not bypass Gatekeeper for an unsigned build.</p>
             </div>
           </section>
 

@@ -15,6 +15,10 @@ dependencies = [
 desktop = [
   "pywebview>=5.0",
 ]
+macos-build = [
+  "pywebview>=5.0",
+  "pyinstaller>=6.0",
+]
 
 [project.scripts]
 ninai = "ninai.cli:main"

@@ -1,0 +1,61 @@
+#!/bin/sh
+set -eu
+
+REPO_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ENGINE_DIR="$REPO_DIR/engine"
+BUILD_DIR="$REPO_DIR/build/macos"
+DIST_DIR="$REPO_DIR/dist/macos"
+
+case "$(uname -s)" in
+  Darwin) ;;
+  *) echo "The Ninai macOS bundle must be built on macOS." >&2; exit 1 ;;
+esac
+
+PYTHON_BIN=${NINAI_BUILD_PYTHON:-}
+if [ -z "$PYTHON_BIN" ]; then
+  for candidate in python3.13 python3.12 python3.11; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      PYTHON_BIN=$candidate
+      break
+    fi
+  done
+fi
+
+if [ -z "$PYTHON_BIN" ]; then
+  echo "Python 3.11 or newer is required." >&2
+  exit 1
+fi
+
+mkdir -p "$BUILD_DIR" "$DIST_DIR"
+VENV_DIR="$BUILD_DIR/venv"
+"$PYTHON_BIN" -m venv "$VENV_DIR"
+"$VENV_DIR/bin/python" -m pip install --upgrade pip
+"$VENV_DIR/bin/python" -m pip install "$ENGINE_DIR[macos-build]"
+
+rm -rf "$BUILD_DIR/work" "$BUILD_DIR/spec" "$DIST_DIR/Ninai.app"
+mkdir -p "$BUILD_DIR/work" "$BUILD_DIR/spec"
+
+"$VENV_DIR/bin/pyinstaller" \
+  --noconfirm \
+  --clean \
+  --windowed \
+  --name Ninai \
+  --osx-bundle-identifier io.ninai.app \
+  --collect-data ninai \
+  --distpath "$DIST_DIR" \
+  --workpath "$BUILD_DIR/work" \
+  --specpath "$BUILD_DIR/spec" \
+  "$ENGINE_DIR/src/ninai/desktop/app.py"
+
+ARCHIVE="$DIST_DIR/Ninai-macOS.zip"
+rm -f "$ARCHIVE"
+ditto -c -k --sequesterRsrc --keepParent "$DIST_DIR/Ninai.app" "$ARCHIVE"
+
+echo "Built $DIST_DIR/Ninai.app"
+echo "Built $ARCHIVE"
+SIGNATURE_INFO=$(codesign -dv --verbose=4 "$DIST_DIR/Ninai.app" 2>&1 || true)
+if printf '%s\n' "$SIGNATURE_INFO" | grep -q '^Authority=Developer ID Application:'; then
+  echo "The app has a Developer ID signature. Verify notarization before release."
+else
+  echo "The app is unsigned or ad-hoc signed. Do not publish it as a customer release until it is signed and notarized." >&2
+fi
