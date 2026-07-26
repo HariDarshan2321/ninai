@@ -29,14 +29,12 @@ export function SiteHeader() {
       <div className="site-header__inner shell">
         <Brand />
         <nav className="main-nav" aria-label="Primary navigation">
-          <Link href="/local/">Local</Link>
-          <Link href="/compatibility/">Compatibility</Link>
-          <Link href="/privacy/">Trust</Link>
-          <Link href="/research/">Research</Link>
+          <Link href="/#how-it-works">How it works</Link>
+          <Link href="/install/">Install</Link>
           <a href="https://ninai-cloud.onrender.com/control">Dashboard ↗</a>
         </nav>
         <Link className="button button--compact button--ink" href="/install/">
-          Choose a mode
+          Set up Ninai
           <span aria-hidden="true">↗</span>
         </Link>
         <details
@@ -48,13 +46,11 @@ export function SiteHeader() {
             Menu
           </summary>
           <nav className="mobile-nav__panel" aria-label="Mobile navigation">
-            <Link href="/local/" onClick={closeMobileMenu}>Local engine</Link>
-            <Link href="/compatibility/" onClick={closeMobileMenu}>Compatibility</Link>
-            <Link href="/privacy/" onClick={closeMobileMenu}>Trust</Link>
-            <Link href="/research/" onClick={closeMobileMenu}>Research</Link>
+            <Link href="/#how-it-works" onClick={closeMobileMenu}>How it works</Link>
+            <Link href="/install/" onClick={closeMobileMenu}>Install</Link>
             <a href="https://ninai-cloud.onrender.com/control" onClick={closeMobileMenu}>Dashboard ↗</a>
             <Link className="mobile-nav__install" href="/install/" onClick={closeMobileMenu}>
-              Choose a mode ↗
+              Set up Ninai ↗
             </Link>
           </nav>
         </details>

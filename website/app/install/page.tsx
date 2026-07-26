@@ -49,6 +49,19 @@ const hostedCodexCommand = `codex mcp add ninai --url https://ninai-cloud.onrend
 codex mcp login ninai --scopes ninai:read,ninai:propose,ninai:remember
 codex mcp list`;
 
+const hostedRecallPrompt = `Use the Ninai recall tool to answer: What project decisions should I carry into this session?
+Purpose: resume the current project without repeating prior decisions.
+Include the source URI for every fact. If Ninai returns nothing, say that clearly.`;
+
+const localRememberPrompt = `Use Ninai to remember exactly this durable project decision:
+"All database migrations must remain reversible."
+Store it as a decision in project scope with source_uri "user://onboarding/decision-1".
+Then report the stored memory ID and source URI.`;
+
+const localRecallPrompt = `Use Ninai recall to answer: What did we decide about database migrations?
+Purpose: verify memory in a fresh session.
+Include the source URI.`;
+
 export default function InstallPage() {
   return (
     <main id="main-content">
@@ -82,6 +95,7 @@ export default function InstallPage() {
           <p className="section-label">Hosted beta</p>
           <a href="#hosted-claude">Claude Code</a>
           <a href="#hosted-codex">Codex</a>
+          <a href="#hosted-verify">First recall</a>
           <a href="https://ninai-cloud.onrender.com/control">Control center ↗</a>
         </aside>
         <div className="install-content">
@@ -101,6 +115,15 @@ export default function InstallPage() {
               <h2>Add the same endpoint as a separate connection.</h2>
               <p>Complete browser login, then wait for the operator to bind the Codex client and grant the requested project. Restart Codex and confirm the server reports OAuth.</p>
               <CopyCommand>{hostedCodexCommand}</CopyCommand>
+            </div>
+          </section>
+          <section className="install-step" id="hosted-verify">
+            <div className="install-step__number">03</div>
+            <div>
+              <p className="install-step__label">First recall</p>
+              <h2>Give the agent a precise, testable request.</h2>
+              <p>After the operator confirms your project grant, paste this into either client. A useful result includes at least one source URI.</p>
+              <CopyCommand>{hostedRecallPrompt}</CopyCommand>
             </div>
           </section>
           <div className="notice notice--good">
@@ -190,6 +213,9 @@ export default function InstallPage() {
                   <p><code>ninai permission revoke claude-code project</code>, then repeat the request.</p>
                 </div>
               </div>
+              <p>Paste the first prompt now, then open a fresh session and paste the second.</p>
+              <CopyCommand>{localRememberPrompt}</CopyCommand>
+              <CopyCommand>{localRecallPrompt}</CopyCommand>
               <div className="notice notice--good">
                 <strong>Expected result</strong>
                 <p>The first recall includes a source URI. The second returns no project facts.</p>

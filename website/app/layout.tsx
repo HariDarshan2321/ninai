@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     template: "%s — Ninai",
   },
   description:
-    "Permissioned, source-backed memory for AI tools, with an open-source local engine and hosted cross-provider beta in development.",
+    "Carry source-backed project decisions across Claude and Codex with explicit permissions and immediate revocation.",
   applicationName: "Ninai",
   alternates: { canonical: "/" },
   manifest: "/site.webmanifest",
@@ -27,9 +27,9 @@ export const metadata: Metadata = {
     type: "website",
     url: siteUrl,
     siteName: "Ninai",
-    title: "One memory for OpenAI and Claude — in development",
+    title: "Shared memory for Claude and Codex",
     description:
-      "Explore Ninai's available local engine and hosted cross-provider beta in development.",
+      "Remember project decisions once, recall them with sources, and revoke access at any time.",
     images: [
       {
         url: "/assets/og-image.png",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Ninai — AI memory with boundaries",
     description:
-      "Permissioned AI memory: local today, hosted cross-provider beta in development.",
+      "Shared, source-backed project memory for Claude and Codex.",
     images: ["/assets/og-image.png"],
   },
   robots: {
@@ -92,7 +92,7 @@ const organizationSchema = {
       operatingSystem: "macOS, Linux, Windows",
       url: `${siteUrl}/`,
       description:
-        "A permissioned memory layer for AI tools, with an available local engine and hosted mode in development.",
+        "A permissioned, source-backed project memory layer for Claude and Codex.",
       softwareVersion: "0.1",
       offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
       publisher: { "@id": `${siteUrl}/#organization` },

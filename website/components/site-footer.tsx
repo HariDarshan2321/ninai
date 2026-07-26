@@ -18,9 +18,6 @@ export function SiteFooter() {
           <div>
             <p className="footer-label">Product</p>
             <Link href="/install/">Install</Link>
-            <Link href="/local/">Local engine</Link>
-            <Link href="/compatibility/">Compatibility</Link>
-            <Link href="/research/">Research</Link>
             <Link href="/privacy/">Privacy</Link>
           </div>
           <div>
@@ -33,7 +30,7 @@ export function SiteFooter() {
       </div>
       <div className="shell site-footer__bottom">
         <span>© 2026 Ninai</span>
-        <span>Hosted beta in development · Open-source local engine available</span>
+        <span>Hosted invitation beta · Open-source local engine</span>
       </div>
     </footer>
   );
