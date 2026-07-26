@@ -222,12 +222,72 @@ class PrincipalResolver:
                 (user_id, self.settings.issuer, oauth_client_id, user_id,
                  requested_workspace, requested_workspace),
             ).fetchone()
+            if not row:
+                row = self._provision_unprivileged_connection(
+                    db, claims=claims, user_id=user_id,
+                    oauth_client_id=oauth_client_id,
+                    requested_workspace=requested_workspace,
+                )
         if not row:
             raise AuthenticationError(
                 "OAuth client is not connected, is ambiguous, or has been revoked"
             )
         return Principal(str(row["user_id"]), str(row["workspace_id"]),
                          str(row["client_connection_id"]))
+
+    def _provision_unprivileged_connection(
+        self, db: Any, *, claims: Mapping[str, Any], user_id: str,
+        oauth_client_id: str, requested_workspace: str | None,
+    ) -> Mapping[str, Any] | None:
+        """Bind a newly authenticated MCP client without granting memory access.
+
+        This makes standards-compliant DCR clients usable without operator lookup
+        of their generated client ID. It deliberately creates no scope grants.
+        Revoked bindings are never recreated, and ambiguous multi-workspace users
+        must choose a workspace through an issuer claim or the dashboard.
+        """
+        existing = db.execute(
+            """SELECT revoked_at FROM oauth_client_bindings
+               WHERE issuer=%s AND oauth_client_id=%s AND user_id=%s
+                 AND (%s::uuid IS NULL OR workspace_id=%s::uuid)
+               ORDER BY created_at DESC LIMIT 1""",
+            (self.settings.issuer, oauth_client_id, user_id,
+             requested_workspace, requested_workspace),
+        ).fetchone()
+        if existing:
+            return None
+        workspace = db.execute(
+            """SELECT min(m.workspace_id::text) AS workspace_id, count(*) AS workspace_count
+               FROM workspace_members m JOIN workspaces w ON w.id=m.workspace_id
+               JOIN users u ON u.id=m.user_id
+               WHERE m.user_id=%s AND m.revoked_at IS NULL AND w.deleted_at IS NULL
+                 AND u.deleted_at IS NULL
+                 AND (%s::uuid IS NULL OR m.workspace_id=%s::uuid)""",
+            (user_id, requested_workspace, requested_workspace),
+        ).fetchone()
+        if not workspace or int(workspace.get("workspace_count", 0)) != 1:
+            return None
+        workspace_id = str(workspace["workspace_id"])
+        connection_id = str(uuid.uuid4())
+        client_name = claims.get("client_name")
+        display_name = (str(client_name).strip() if isinstance(client_name, str) else "") or "OAuth MCP client"
+        db.execute(
+            """INSERT INTO client_connections
+               (id,workspace_id,user_id,provider,client_type,external_client_id,
+                display_name,metadata_json)
+               VALUES(%s,%s,%s,'external','remote-mcp',%s,%s,%s::jsonb)""",
+            (connection_id, workspace_id, user_id, oauth_client_id, display_name,
+             '{"setup_status":"connected","auto_provisioned":true}'),
+        )
+        db.execute(
+            """INSERT INTO oauth_client_bindings
+               (id,issuer,oauth_client_id,user_id,workspace_id,client_connection_id)
+               VALUES(%s,%s,%s,%s,%s,%s)""",
+            (str(uuid.uuid4()), self.settings.issuer, oauth_client_id, user_id,
+             workspace_id, connection_id),
+        )
+        return {"user_id": user_id, "workspace_id": workspace_id,
+                "client_connection_id": connection_id}
 
 
 class BearerAuthenticator:

@@ -37,6 +37,14 @@ class PATFakeDb:
         return FakeResult(self.row if sql.lstrip().startswith("SELECT") else None)
 
 
+class SequenceDb:
+    def __init__(self, rows): self.rows, self.calls = list(rows), []
+    def execute(self, sql, params):
+        self.calls.append((sql, params))
+        row = self.rows.pop(0) if sql.lstrip().startswith("SELECT") else None
+        return FakeResult(row)
+
+
 class FakeValidator:
     def __init__(self, claims): self.claims, self.token = claims, None
     def validate(self, token): self.token = token; return self.claims
@@ -91,6 +99,32 @@ class AuthTest(unittest.TestCase):
         resolver, _ = self.resolver(None)
         with self.assertRaisesRegex(AuthenticationError, "not connected.*revoked"):
             resolver.resolve(self.claims)
+
+    def test_new_oauth_client_is_bound_without_silent_scope_grants(self):
+        db = SequenceDb([
+            None,
+            None,
+            {"workspace_id": self.workspace_id, "workspace_count": 1},
+        ])
+        @contextmanager
+        def connect(): yield db
+        resolver = PrincipalResolver(connect, self.settings)
+        resolver.identities = FakeIdentities()
+        principal = resolver.resolve({**self.claims, "client_name": "Claude"})
+        self.assertEqual(principal.workspace_id, self.workspace_id)
+        self.assertEqual(len([sql for sql, _ in db.calls if "INSERT INTO client_connections" in sql]), 1)
+        self.assertEqual(len([sql for sql, _ in db.calls if "INSERT INTO oauth_client_bindings" in sql]), 1)
+        self.assertFalse(any("client_scope_grants" in sql for sql, _ in db.calls))
+
+    def test_revoked_oauth_binding_is_not_auto_recreated(self):
+        db = SequenceDb([None, {"revoked_at": "2026-07-26"}])
+        @contextmanager
+        def connect(): yield db
+        resolver = PrincipalResolver(connect, self.settings)
+        resolver.identities = FakeIdentities()
+        with self.assertRaisesRegex(AuthenticationError, "not connected.*revoked"):
+            resolver.resolve(self.claims)
+        self.assertFalse(any(sql.lstrip().startswith("INSERT") for sql, _ in db.calls))
 
     def test_missing_identity_claim_is_rejected(self):
         resolver, _ = self.resolver()
