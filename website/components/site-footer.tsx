@@ -18,6 +18,7 @@ export function SiteFooter() {
           <div>
             <p className="footer-label">Product</p>
             <Link href="/install/">Install</Link>
+            <Link href="/local/">Local Claude Code memory</Link>
             <Link href="/privacy/">Privacy</Link>
           </div>
           <div>

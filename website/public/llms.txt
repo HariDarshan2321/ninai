@@ -5,6 +5,7 @@ Ninai is permissioned, source-backed AI memory for Claude Code and Codex. Its op
 ## Canonical pages
 - Home: https://ninai.io/
 - Install: https://ninai.io/install/
+- Local engine: https://ninai.io/local/
 - Privacy: https://ninai.io/privacy/
 
 ## Core product facts

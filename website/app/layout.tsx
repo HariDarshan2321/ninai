@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     type: "website",
     url: siteUrl,
     siteName: "Ninai",
-    title: "Shared memory for Claude and Codex",
+    title: "Ninai AI memory for Claude Code and Codex",
     description:
       "Remember project decisions once, recall them with sources, and revoke access at any time.",
     images: [
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Ninai — AI memory with boundaries",
+    title: "Ninai AI memory for Claude Code and Codex",
     description:
       "Shared, source-backed project memory for Claude and Codex.",
     images: ["/assets/og-image.png"],
@@ -89,6 +89,7 @@ const organizationSchema = {
     },
     {
       "@type": "SoftwareApplication",
+      "@id": `${siteUrl}/#software`,
       name: "Ninai",
       applicationCategory: "DeveloperApplication",
       operatingSystem: "macOS, Linux, Windows",
@@ -96,6 +97,10 @@ const organizationSchema = {
       description:
         "Permissioned, source-backed AI memory for Claude Code and Codex.",
       softwareVersion: "0.1",
+      downloadUrl: "https://github.com/HariDarshan2321/ninai",
+      softwareHelp: `${siteUrl}/install/`,
+      codeRepository: "https://github.com/HariDarshan2321/ninai",
+      isPartOf: { "@id": `${siteUrl}/#website` },
       offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
       publisher: { "@id": `${siteUrl}/#organization` },
     },

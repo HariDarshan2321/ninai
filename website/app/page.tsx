@@ -45,8 +45,8 @@ export default function HomePage() {
             <p className={styles.kicker}><span /> Permissioned shared memory for Claude and Codex</p>
             <h1 className={styles.heroTitle}>Your agents should remember the project.<em>Not your whole life.</em></h1>
             <p className={styles.heroLead}>
-              Remember project decisions once, recall them in the next permitted agent,
-              and keep the source attached. Run locally today or request the separate hosted beta.
+              Ninai is permissioned shared memory for Claude Code and Codex. Remember project
+              decisions once, recall them with sources, and revoke access at any time.
             </p>
             <div className={styles.heroActions}>
               <Link className={styles.primaryAction} href="/install/#local-install">Install locally <span aria-hidden="true">↗</span></Link>
