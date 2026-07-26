@@ -6,7 +6,7 @@ Ninai stores durable memory locally, controls which scopes each AI client may ac
 
 ## Deployment modes
 
-Local mode is local-first: SQLite remains on the user's machine and nothing is uploaded or synced automatically. The repository also contains a separate, explicit opt-in hosted beta for clients that cannot reliably reach a local MCP server. Hosted mode uses PostgreSQL and authenticated Streamable HTTP MCP; it does not read or synchronize the local vault. It is implemented and automated-testable, and its local real-host Claude Code/Codex gate passed on 25 July 2026. Production HTTPS/OAuth deployment remains pending.
+Local mode is local-first: SQLite remains on the user's machine and nothing is uploaded or synced automatically. The repository also contains a separate, explicit opt-in hosted beta for clients that cannot reliably reach a local MCP server. Hosted mode uses PostgreSQL and authenticated Streamable HTTP MCP; it does not read or synchronize the local vault. It is implemented and automated-testable, its local real-host Claude Code/Codex gate passed on 25 July 2026, and the public HTTPS/OAuth beta is deployed. External-tester acceptance and the remaining operational release gates are pending.
 
 Both modes share the same core invariants: permission checks happen before retrieval, every memory retains provenance, and disclosures are audited. Hosted storage must not bypass those controls.
 

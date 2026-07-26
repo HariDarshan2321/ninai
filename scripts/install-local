@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+install_dir="${NINAI_INSTALL_DIR:-${HOME}/.ninai-app}"
+
+python_cmd="${NINAI_PYTHON:-}"
+if [[ -z "${python_cmd}" ]]; then
+  for candidate in python3.13 python3.12 python3.11 python3; do
+    if command -v "${candidate}" >/dev/null 2>&1 && "${candidate}" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
+      python_cmd="${candidate}"
+      break
+    fi
+  done
+fi
+
+if [[ -z "${python_cmd}" ]] || ! command -v "${python_cmd}" >/dev/null 2>&1 || ! "${python_cmd}" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
+  printf '%s\n' \
+    'Ninai requires Python 3.11 or newer.' \
+    'macOS: brew install python@3.13' \
+    'Then rerun this installer. You can also set NINAI_PYTHON to a compatible interpreter.' >&2
+  exit 1
+fi
+
+mkdir -p "${install_dir}"
+"${python_cmd}" -m venv "${install_dir}/venv"
+"${install_dir}/venv/bin/python" -m pip install --upgrade pip
+"${install_dir}/venv/bin/python" -m pip install "${repo_root}/engine[desktop]"
+"${install_dir}/venv/bin/ninai" doctor
+
+printf '\nNinai is installed.\n\n'
+printf 'Open the local app:\n  %s\n\n' "${install_dir}/venv/bin/ninai-app"
+printf 'Claude Code:\n  claude mcp add --transport stdio --scope user ninai-local -- %q\n' "${install_dir}/venv/bin/ninai-mcp"
+printf '  %s permission grant claude-code project\n\n' "${install_dir}/venv/bin/ninai"
+printf 'Codex:\n  codex mcp add ninai-local --env NINAI_CLIENT_ID=codex -- %q\n' "${install_dir}/venv/bin/ninai-mcp"
+printf '  %s permission grant codex project\n' "${install_dir}/venv/bin/ninai"

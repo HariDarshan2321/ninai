@@ -48,11 +48,12 @@ for mutations. **Sign out** clears the Ninai browser session. Auth0 SSO logout
 can be added later if product policy requires terminating the tenant-wide SSO
 session as well.
 
-## Universal Login branding still required in Auth0
+## Universal Login branding
 
 The repository controls the Ninai dashboard after Auth0 redirects back. Auth0
-Universal Login is tenant-hosted, so align it separately in **Branding →
-Universal Login** and the `Ninai Dashboard` application:
+Universal Login is tenant-hosted. The live tenant was aligned on 26 July 2026
+in **Branding → Universal Login**, and the dashboard application was renamed
+to `Ninai`:
 
 - application name: `Ninai`;
 - logo URL: `https://ninai.io/assets/ninai-app-icon.svg`;

@@ -30,11 +30,11 @@ export function SiteHeader() {
         <Brand />
         <nav className="main-nav" aria-label="Primary navigation">
           <Link href="/#how-it-works">How it works</Link>
-          <Link href="/install/">Install</Link>
-          <a href="https://ninai-cloud.onrender.com/control">Dashboard ↗</a>
+          <Link href="/local/">Local</Link>
+          <Link href="/install/#hosted-beta">Hosted beta</Link>
         </nav>
         <Link className="button button--compact button--ink" href="/install/">
-          Set up Ninai
+          Install local
           <span aria-hidden="true">↗</span>
         </Link>
         <details
@@ -47,10 +47,10 @@ export function SiteHeader() {
           </summary>
           <nav className="mobile-nav__panel" aria-label="Mobile navigation">
             <Link href="/#how-it-works" onClick={closeMobileMenu}>How it works</Link>
-            <Link href="/install/" onClick={closeMobileMenu}>Install</Link>
-            <a href="https://ninai-cloud.onrender.com/control" onClick={closeMobileMenu}>Dashboard ↗</a>
+            <Link href="/local/" onClick={closeMobileMenu}>Local</Link>
+            <Link href="/install/#hosted-beta" onClick={closeMobileMenu}>Hosted beta</Link>
             <Link className="mobile-nav__install" href="/install/" onClick={closeMobileMenu}>
-              Set up Ninai ↗
+              Install local ↗
             </Link>
           </nav>
         </details>

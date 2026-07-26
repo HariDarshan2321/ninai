@@ -31,6 +31,8 @@ def main() -> None:
         raise SystemExit(1)
 
     api = DesktopApi()
+    sys.stdout.write("Opening Ninai…\n")
+    sys.stdout.flush()
     webview.create_window(
         WINDOW_TITLE,
         url=str(_index_path()),

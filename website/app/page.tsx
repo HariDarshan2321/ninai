@@ -42,18 +42,18 @@ export default function HomePage() {
       <section className={styles.hero} id="product">
         <div className={`shell ${styles.heroInner}`}>
           <div className={styles.heroCopy}>
-            <p className={styles.kicker}><span /> Shared memory for Claude and Codex</p>
+            <p className={styles.kicker}><span /> Permissioned shared memory for Claude and Codex</p>
             <h1 className={styles.heroTitle}>Your agents should remember the project.<em>Not your whole life.</em></h1>
             <p className={styles.heroLead}>
-              Carry decisions, constraints, and project state into the next AI session.
-              Every recalled fact includes its source and respects an explicit permission.
+              Remember project decisions once, recall them in the next permitted agent,
+              and keep the source attached. Run locally today or request the separate hosted beta.
             </p>
             <div className={styles.heroActions}>
-              <Link className={styles.primaryAction} href="/install/#hosted-beta">Start the hosted beta <span aria-hidden="true">↗</span></Link>
-              <Link className={styles.secondaryAction} href="/install/#local-install">Install locally</Link>
+              <Link className={styles.primaryAction} href="/install/#local-install">Install locally <span aria-hidden="true">↗</span></Link>
+              <a className={styles.secondaryAction} href="mailto:hello@ninai.io?subject=Ninai%20hosted%20beta">Request hosted access</a>
             </div>
             <ul className={styles.proofList} aria-label="MVP properties">
-              <li>Claude ↔ Codex tested</li><li>Source-backed recall</li><li>Immediate revocation</li>
+              <li>Local cross-agent gate passed</li><li>Source-backed recall</li><li>Immediate revocation</li>
             </ul>
           </div>
           <div className={styles.heroProduct}>
@@ -105,7 +105,7 @@ export default function HomePage() {
           <div className={styles.setupCopy}>
             <p className={styles.eyebrow}>Choose your vault</p><h2>Hosted beta or local.</h2>
             <p>Use the invitation beta across Claude and Codex, or keep an open-source SQLite vault entirely on your machine. Local memory is never uploaded automatically.</p>
-            <Link href="/install/">Open the two-minute setup guide →</Link>
+            <Link href="/install/">Open the setup guide →</Link>
           </div>
           <div className={styles.setupDiagram} aria-label="Ninai product flow">
             <div className={styles.toolColumn}><span className={styles.diagramLabel}>Agents</span><div><b>CL</b> Claude Code</div><div><b>OX</b> Codex</div></div>

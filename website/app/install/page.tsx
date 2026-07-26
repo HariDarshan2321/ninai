@@ -24,34 +24,37 @@ export const metadata: Metadata = {
 };
 
 const installCommand = `git clone https://github.com/HariDarshan2321/ninai.git
-cd ninai/engine
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install .`;
+cd ninai
+./scripts/install-local`;
 
-const grantCommand = `ninai permission grant claude-code project
-ninai permission grant claude-code work
-ninai permission list claude-code`;
+const appCommand = `~/.ninai-app/venv/bin/ninai-app`;
 
-const registerCommand = `claude mcp add ninai -- ninai-mcp`;
+const grantCommand = `~/.ninai-app/venv/bin/ninai permission grant claude-code project
+~/.ninai-app/venv/bin/ninai permission list claude-code`;
 
-const hookCommand = `mkdir -p .claude/hooks
-cp /path/to/ninai/.claude/hooks/ninai_post_tool_use.py .claude/hooks/
-cp /path/to/ninai/.claude/settings.example.json .claude/settings.json
-chmod +x .claude/hooks/ninai_post_tool_use.py`;
+const registerCommand = `claude mcp add --transport stdio --scope user ninai-local -- \
+  "$HOME/.ninai-app/venv/bin/ninai-mcp"`;
 
-const hostedClaudeCommand = `claude mcp add --transport http --scope user ninai \\
+const registerCodexCommand = `codex mcp add ninai-local --env NINAI_CLIENT_ID=codex -- \
+  "$HOME/.ninai-app/venv/bin/ninai-mcp"
+~/.ninai-app/venv/bin/ninai permission grant codex project`;
+
+const hostedClaudeCommand = `claude mcp add --transport http --scope user ninai-cloud \\
   https://ninai-cloud.onrender.com/mcp
 claude`;
 
-const hostedCodexCommand = `codex mcp add ninai --url https://ninai-cloud.onrender.com/mcp
-codex mcp login ninai --scopes ninai:read,ninai:propose,ninai:remember
+const hostedCodexCommand = `codex mcp add ninai-cloud --url https://ninai-cloud.onrender.com/mcp
+codex mcp login ninai-cloud --scopes ninai:read,ninai:propose,ninai:remember
 codex mcp list`;
 
-const hostedRecallPrompt = `Use the Ninai recall tool to answer: What project decisions should I carry into this session?
-Purpose: resume the current project without repeating prior decisions.
-Include the source URI for every fact. If Ninai returns nothing, say that clearly.`;
+const hostedProposalPrompt = `Use Ninai propose_memory to propose this project decision:
+"All database migrations must remain reversible."
+Use the project ID from my Ninai dashboard, source_uri "user://onboarding/decision-1",
+and a new idempotency key. Return the proposal ID and source URI.`;
+
+const hostedRecallPrompt = `Use Ninai recall to answer: What did we decide about database migrations?
+Purpose: verify the approved onboarding memory in a fresh session.
+Include the source URI. Expected source: user://onboarding/decision-1.`;
 
 const localRememberPrompt = `Use Ninai to remember exactly this durable project decision:
 "All database migrations must remain reversible."
@@ -93,36 +96,47 @@ export default function InstallPage() {
       <section className="install-layout shell" id="hosted-beta">
         <aside className="install-toc">
           <p className="section-label">Hosted beta</p>
+          <a href="#hosted-account">Ninai account</a>
           <a href="#hosted-claude">Claude Code</a>
           <a href="#hosted-codex">Codex</a>
-          <a href="#hosted-verify">First recall</a>
+          <a href="#hosted-verify">First memory</a>
           <a href="https://ninai-cloud.onrender.com/control">Control center ↗</a>
         </aside>
         <div className="install-content">
-          <section className="install-step" id="hosted-claude">
+          <section className="install-step" id="hosted-account">
             <div className="install-step__number">01</div>
+            <div>
+              <p className="install-step__label">Ninai account</p>
+              <h2>Sign in and create one workspace and project.</h2>
+              <p>The hosted vault is separate from local mode. Open the control center, sign in with Auth0, create a workspace, then create the project boundary you want to share.</p>
+              <p><a href="https://ninai-cloud.onrender.com/control">Open the hosted control center ↗</a></p>
+            </div>
+          </section>
+          <section className="install-step" id="hosted-claude">
+            <div className="install-step__number">02</div>
             <div>
               <p className="install-step__label">Claude Code</p>
               <h2>Add Ninai, then authenticate in the browser.</h2>
-              <p>Open <code>/mcp</code>, approve Ninai, and choose Authenticate. Tell the beta operator when login finishes so they can bind the public OAuth client ID and grant your project. Never send them a token or secret.</p>
+              <p>Open <code>/mcp</code>, approve Ninai, and choose Authenticate. Then email <a href="mailto:hello@ninai.io?subject=Ninai%20Claude%20beta%20connection">hello@ninai.io</a> from your sign-in address and say “Claude connected.” The beta operator binds the public client ID and grants your project. Never send a token, authorization code, or secret.</p>
               <CopyCommand>{hostedClaudeCommand}</CopyCommand>
             </div>
           </section>
           <section className="install-step" id="hosted-codex">
-            <div className="install-step__number">02</div>
+            <div className="install-step__number">03</div>
             <div>
               <p className="install-step__label">Codex</p>
               <h2>Add the same endpoint as a separate connection.</h2>
-              <p>Complete browser login, then wait for the operator to bind the Codex client and grant the requested project. Restart Codex and confirm the server reports OAuth.</p>
+              <p>Complete browser login, then email <a href="mailto:hello@ninai.io?subject=Ninai%20Codex%20beta%20connection">hello@ninai.io</a> from the same address and say “Codex connected.” Restart Codex after the operator confirms the project grant.</p>
               <CopyCommand>{hostedCodexCommand}</CopyCommand>
             </div>
           </section>
           <section className="install-step" id="hosted-verify">
-            <div className="install-step__number">03</div>
+            <div className="install-step__number">04</div>
             <div>
-              <p className="install-step__label">First recall</p>
-              <h2>Give the agent a precise, testable request.</h2>
-              <p>After the operator confirms your project grant, paste this into either client. A useful result includes at least one source URI.</p>
+              <p className="install-step__label">First memory</p>
+              <h2>Propose, approve, then recall one safe test.</h2>
+              <p>After the operator confirms your project grant, paste this into the connected client. Open the dashboard Review queue and approve the proposal, then start a fresh session and run the recall prompt.</p>
+              <CopyCommand>{hostedProposalPrompt}</CopyCommand>
               <CopyCommand>{hostedRecallPrompt}</CopyCommand>
             </div>
           </section>
@@ -137,11 +151,12 @@ export default function InstallPage() {
         <aside className="install-toc">
           <p className="section-label">On this page</p>
           <a href="#engine">01 · Install engine</a>
-          <a href="#permissions">02 · Grant scopes</a>
-          <a href="#register">03 · Register MCP</a>
-          <a href="#capture">04 · Enable capture</a>
+          <a href="#desktop">02 · Open the app</a>
+          <a href="#permissions">03 · Grant a scope</a>
+          <a href="#register">04 · Connect an agent</a>
           <a href="#verify">05 · Verify</a>
-          <a href="#limits">06 · MVP boundaries</a>
+          <a href="#capture">06 · Enable capture</a>
+          <a href="#limits">07 · MVP boundaries</a>
         </aside>
 
         <div className="install-content">
@@ -151,15 +166,27 @@ export default function InstallPage() {
               <p className="install-step__label">Install engine</p>
               <h2>Clone and install the local package.</h2>
               <p>
-                Ninai uses the Python standard library for its engine and the official MCP
-                SDK for transport. The normal installation builds a local wheel.
+                Ninai requires Python 3.11 or newer. The installer automatically chooses
+                Python 3.13, 3.12, or 3.11 and installs the engine and desktop app in
+                <code> ~/.ninai-app</code>. On macOS, run <code>brew install python@3.13</code>
+                first if no compatible version is installed.
               </p>
               <CopyCommand>{installCommand}</CopyCommand>
             </div>
           </section>
 
-          <section className="install-step" id="permissions">
+          <section className="install-step" id="desktop">
             <div className="install-step__number">02</div>
+            <div>
+              <p className="install-step__label">Open the local app</p>
+              <h2>See the vault before connecting an agent.</h2>
+              <p>The desktop app shows memories, sources, permissions, and every disclosure. It uses the same local SQLite vault as the MCP server and requires no account.</p>
+              <CopyCommand>{appCommand}</CopyCommand>
+            </div>
+          </section>
+
+          <section className="install-step" id="permissions">
+            <div className="install-step__number">03</div>
             <div>
               <p className="install-step__label">Grant scopes</p>
               <h2>Start with the smallest useful boundary.</h2>
@@ -172,25 +199,14 @@ export default function InstallPage() {
           </section>
 
           <section className="install-step" id="register">
-            <div className="install-step__number">03</div>
-            <div>
-              <p className="install-step__label">Register MCP</p>
-              <h2>Add one local server to Claude Code.</h2>
-              <p>Restart Claude Code afterward, open <code>/mcp</code>, and confirm Ninai is available.</p>
-              <CopyCommand>{registerCommand}</CopyCommand>
-            </div>
-          </section>
-
-          <section className="install-step" id="capture">
             <div className="install-step__number">04</div>
             <div>
-              <p className="install-step__label">Optional automatic capture</p>
-              <h2>Observe existing MCP activity through the host.</h2>
-              <p>
-                Copy the PostToolUse hook into a project where Claude already uses Linear,
-                GitHub, or another MCP server. You do not reconnect those services to Ninai.
-              </p>
-              <CopyCommand>{hookCommand}</CopyCommand>
+              <p className="install-step__label">Register MCP</p>
+              <h2>Add the local server to Claude Code or Codex.</h2>
+              <p>Use the stable executable path below, then restart the client. In Claude Code, open <code>/mcp</code>; in Codex, run <code>codex mcp list</code>.</p>
+              <CopyCommand>{registerCommand}</CopyCommand>
+              <p>For Codex, use its own client identity and permission:</p>
+              <CopyCommand>{registerCodexCommand}</CopyCommand>
             </div>
           </section>
 
@@ -223,8 +239,23 @@ export default function InstallPage() {
             </div>
           </section>
 
-          <section className="install-step" id="limits">
+          <section className="install-step" id="capture">
             <div className="install-step__number">06</div>
+            <div>
+              <p className="install-step__label">Optional automatic capture</p>
+              <h2>Add capture only after explicit recall works.</h2>
+              <p>
+                Claude Code can capture compact durable outcomes from existing MCP tools through
+                the included PostToolUse hook. Follow the repository instructions and merge the
+                hook entry into an existing <code>.claude/settings.json</code>; do not overwrite
+                your project settings.
+              </p>
+              <p><a href="https://github.com/HariDarshan2321/ninai#2-optional-capture-results-from-existing-mcp-tools">Open the optional hook guide ↗</a></p>
+            </div>
+          </section>
+
+          <section className="install-step" id="limits">
+            <div className="install-step__number">07</div>
             <div>
               <p className="install-step__label">MVP boundaries</p>
               <h2>Know what this build is—and is not.</h2>
@@ -232,7 +263,7 @@ export default function InstallPage() {
                 <li><span>Included</span> Local SQLite, FTS5, explicit scopes, provenance, access logs, soft deletion.</li>
                 <li><span>Included</span> Claude Code PostToolUse capture and explicit MCP remember/recall.</li>
                 <li><span>Not yet</span> SQLCipher, signed desktop releases, universal capture, or an independent audit.</li>
-                <li><span>Not included</span> Cloud sync, accounts, billing, Gmail OAuth, or mobile applications.</li>
+                <li><span>Not included</span> Automatic local-to-cloud sync, billing, Gmail OAuth, or mobile applications.</li>
               </ul>
               <p className="install-next">
                 Questions? <a href="mailto:hello@ninai.io">hello@ninai.io</a> · Read the{" "}

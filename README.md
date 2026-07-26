@@ -12,7 +12,7 @@ Ninai is a local-first, permissioned memory layer for AI tools. This repository 
 
 The MVP intentionally keeps the trust boundary small: memory is stored on the user's machine and only permission-filtered context packets are returned to an AI client.
 
-Local mode is local-first and never uploads or syncs the vault automatically. A separate hosted beta is now implemented in `cloud/` for clients that cannot reach a local MCP server. It is not automatically enabled and does not inspect the local vault. Its local real-host Claude Code → Codex → Claude Code gate passed on 25 July 2026; production OAuth/HTTPS deployment remains pending. Both modes share the same required permission, provenance, and disclosure-audit invariants.
+Local mode is local-first and never uploads or syncs the vault automatically. A separate hosted beta is now implemented in `cloud/` for clients that cannot reach a local MCP server. It is not automatically enabled and does not inspect the local vault. Its local real-host Claude Code → Codex → Claude Code gate passed on 25 July 2026, and its public OAuth/HTTPS beta endpoint is live; external-tester acceptance and remaining operational hardening are still pending. Both modes share the same required permission, provenance, and disclosure-audit invariants.
 
 ## 1. Run the engine locally
 
@@ -21,27 +21,25 @@ is too old and will fail the install with a `requires-python` / build error.
 Check with `python3 --version`; if it is below 3.11, use an explicit interpreter
 (`python3.11`, `python3.12`, or `python3.13`) in the `venv` command below.
 
+For the stable desktop-and-engine installation used by the public setup guide:
+
 ```bash
-cd engine
-python3.13 -m venv .venv   # or python3.11 / python3.12 — must be >= 3.11
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install .
+./scripts/install-local
+
+# Open the local control panel.
+~/.ninai-app/venv/bin/ninai-app
 
 # Grant Claude Code access to selected scopes.
-ninai permission grant claude-code work
-ninai permission grant claude-code project
-ninai permission grant claude-code preference
+~/.ninai-app/venv/bin/ninai permission grant claude-code project
 
-# Register the MCP server (use the absolute path to ninai-mcp from this venv
-# so the command resolves after you deactivate, e.g. .venv/bin/ninai-mcp).
-claude mcp add ninai --scope user -- "$(pwd)/.venv/bin/ninai-mcp"
+# Register the stable MCP executable.
+claude mcp add --transport stdio --scope user ninai-local -- \
+  "$HOME/.ninai-app/venv/bin/ninai-mcp"
 ```
 
-For a durable install that survives moving this repository, create the virtual
-environment in a stable location outside the source tree (for example
-`~/.ninai-app/venv`) and point the `claude mcp add` command at
-`~/.ninai-app/venv/bin/ninai-mcp`.
+The installer requires Python 3.11+ and selects `python3.13`, `python3.12`, or
+`python3.11` automatically. Set `NINAI_PYTHON` to choose another compatible
+interpreter or `NINAI_INSTALL_DIR` to change the stable installation directory.
 
 In Claude Code, try:
 
