@@ -63,6 +63,23 @@ The verifier sets its transaction read-only, reports schema/migration gaps and
 aggregate row totals, never prints its database URL, and performs no restore or
 deletion itself.
 
+### Production evidence — 26 July 2026
+
+- Database: `ninai-cloud-db`, Render Basic-256mb, PostgreSQL 18, Frankfurt.
+- Point-in-time recovery: enabled with a three-day recovery window.
+- Logical export: completed successfully at 08:36 Europe/Berlin. The prior
+  25 July export remains visible in Render; export download links are not
+  recorded because they are signed credentials.
+- Network boundary: the database-specific public allow rule was removed and
+  **Block All Inbound IPs** was confirmed. Render reports that all internet
+  traffic is blocked by the database inbound-IP policy.
+- Private-path validation: after the block was applied, the deployed service
+  continued to return HTTP 200 from `https://ninai-cloud.onrender.com/health`.
+- Notifications: workspace email notifications are enabled for failure events.
+- Restore drill: not claimed as complete. Render recovery creates a separate,
+  billable database. Create that isolated database only with release-owner cost
+  approval, then run the verifier above and retain its non-sensitive output.
+
 ## Health, monitoring, and alerts
 
 In the web service's **Settings**, set the HTTP health-check path to `/health`.
@@ -96,11 +113,11 @@ These cannot be proven or performed by the repository:
 
 - select and pay for the database/service plans and confirm the recovery window;
 - ensure service and database use the same selected region and internal URL;
-- clear the database external IP allow list;
 - populate OAuth and service secrets in Render's secret manager;
 - set `/health`, auto-deploy **After CI Checks Pass**, and notification owners;
 - configure external uptime/log/metrics destinations and alert thresholds;
-- create/download a logical export and complete the isolated restore drill;
+- retain a downloaded logical export in the approved encrypted location and
+  complete the isolated, billable restore drill after cost approval;
 - record operators, recovery objectives, retention, escalation, and destructive
   database-deletion authority.
 

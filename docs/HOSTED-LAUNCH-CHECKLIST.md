@@ -8,7 +8,7 @@ Unchecked items block a truthful public hosted-beta launch.
 - [ ] Run the complete engine, cloud unit, PostgreSQL integration, website, and validator suites with no skipped required tests.
 - [ ] Apply migrations to staging, verify schema, then rehearse production migration and rollback/restore.
 - [ ] Provision private PostgreSQL, a least-privilege runtime role, encrypted backups, retention, and a successful restore test.
-- [ ] For Render, use the internal database URL and clear the external IP allow list; record evidence using [RENDER-OPERATIONS.md](RENDER-OPERATIONS.md).
+- [x] For Render, use the internal database URL and clear the external IP allow list; evidence recorded in [RENDER-OPERATIONS.md](RENDER-OPERATIONS.md) on 26 July 2026.
 - [ ] Verify paid-plan PITR, create and retain a logical export, and pass the read-only restore verifier against an isolated recovery database.
 - [ ] Seed users, workspace memberships, client connections, and least-privilege grants through an auditable operator flow.
 
