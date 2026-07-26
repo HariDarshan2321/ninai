@@ -1,7 +1,7 @@
 {
   "name": "Ninai",
   "short_name": "Ninai",
-  "description": "User-owned AI memory and permissioned context",
+  "description": "Permissioned AI memory for Claude Code and Codex",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4f2ec",

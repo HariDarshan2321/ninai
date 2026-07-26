@@ -76,12 +76,14 @@ const organizationSchema = {
       url: `${siteUrl}/`,
       logo: `${siteUrl}/assets/ninai-wordmark.svg`,
       email: "hello@ninai.io",
+      sameAs: ["https://github.com/HariDarshan2321/ninai"],
     },
     {
       "@type": "WebSite",
       "@id": `${siteUrl}/#website`,
       url: `${siteUrl}/`,
       name: "Ninai",
+      alternateName: "Ninai AI Memory",
       publisher: { "@id": `${siteUrl}/#organization` },
       inLanguage: "en",
     },
@@ -92,7 +94,7 @@ const organizationSchema = {
       operatingSystem: "macOS, Linux, Windows",
       url: `${siteUrl}/`,
       description:
-        "A permissioned, source-backed project memory layer for Claude and Codex.",
+        "Permissioned, source-backed AI memory for Claude Code and Codex.",
       softwareVersion: "0.1",
       offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
       publisher: { "@id": `${siteUrl}/#organization` },

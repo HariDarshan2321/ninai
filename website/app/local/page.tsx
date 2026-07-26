@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Open-source local AI memory engine",
+  title: "Local AI memory for Claude Code and Codex",
   description: "Run Ninai's permissioned MCP memory engine locally with SQLite, provenance, explicit scopes, disclosure logs, and no automatic cloud sync.",
   alternates: { canonical: "/local/" },
   openGraph: { title: "Ninai local engine", description: "Open-source, local-first AI memory with explicit boundaries.", url: "/local/", images: [{ url: "/assets/og-image.png", width: 1200, height: 630, alt: "Ninai local engine" }] },

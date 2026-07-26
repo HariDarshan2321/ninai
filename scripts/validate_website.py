@@ -41,11 +41,10 @@ indexable_pages = [
     root / "index.html",
     root / "install/index.html",
     root / "local/index.html",
-    root / "compatibility/index.html",
-    root / "research/index.html",
     root / "privacy/index.html",
 ]
-public_pages = [*indexable_pages, root / "404.html"]
+nonindex_pages = [root / "compatibility/index.html", root / "research/index.html"]
+public_pages = [*indexable_pages, *nonindex_pages, root / "404.html"]
 parsed_pages: dict[Path, PageParser] = {}
 for html in public_pages:
     parser = PageParser()
@@ -115,4 +114,8 @@ if 'name="robots" content="noindex"' not in not_found:
     raise SystemExit("404.html: expected noindex")
 if len(re.findall(r"<h1(?:\s|>)", not_found)) != 1:
     raise SystemExit("404.html: expected exactly one H1")
+for html in nonindex_pages:
+    text = html.read_text(encoding="utf-8")
+    if 'name="robots" content="noindex, follow"' not in text:
+        raise SystemExit(f"{html}: expected noindex, follow")
 print("Website validation passed")

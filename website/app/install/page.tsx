@@ -4,7 +4,7 @@ import Link from "next/link";
 import { CopyCommand } from "@/components/copy-command";
 
 export const metadata: Metadata = {
-  title: "Choose hosted beta or local installation",
+  title: "Install Ninai AI memory locally or use the hosted beta",
   description:
     "Join Ninai's operator-assisted hosted beta or install the available open-source local MCP memory engine.",
   alternates: { canonical: "/install/" },

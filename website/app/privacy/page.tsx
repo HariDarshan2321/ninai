@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Privacy architecture",
   description:
-    "Compare Ninai's implemented local privacy boundary with the planned hosted cloud boundary and current security limitations.",
+    "Compare Ninai's local and hosted AI-memory trust boundaries, permissions, disclosure logs, and current security limitations.",
   alternates: { canonical: "/privacy/" },
   openGraph: {
     title: "Ninai privacy architecture",
@@ -32,8 +32,8 @@ export default function PrivacyPage() {
           </div>
           <div className="page-hero__aside">
             <p>
-              Local mode keeps its vault on your machine. Hosted mode will store workspace
-              memory in managed cloud infrastructure and is still under development.
+              Local mode keeps its vault on your machine. The separate hosted invitation beta
+              stores workspace memory in managed cloud infrastructure and never syncs local data automatically.
             </p>
             <span className="privacy-version">Current product model · July 2026</span>
           </div>
@@ -43,7 +43,7 @@ export default function PrivacyPage() {
       <section className="mode-section shell">
         <div className="mode-grid">
           <article className="mode-card"><span className="status-pill status-pill--ready">Implemented</span><h2>Local trust boundary</h2><p>The complete SQLite vault, grants, sources, and logs remain on your machine. There is no automatic cloud upload or sync.</p><p>When you send a selected context packet to a cloud AI, that packet leaves the device and the provider's policy applies.</p></article>
-          <article className="mode-card mode-card--future"><span className="status-pill">Under development</span><h2>Hosted trust boundary</h2><p>Hosted workspaces will persist memory in managed cloud storage so authorized clients can connect remotely.</p><p>Authentication, tenant isolation, deletion, export, disclosure logging, and revocation must pass testing before release. No hosted security certification is claimed.</p></article>
+          <article className="mode-card mode-card--future"><span className="status-pill">Invitation beta</span><h2>Hosted trust boundary</h2><p>Hosted workspaces persist memory in managed PostgreSQL so explicitly authorized clients can connect remotely.</p><p>OAuth login, tenant isolation, review, export, disclosure logging, and revocation are implemented. External acceptance and operational hardening remain incomplete; no hosted security certification is claimed.</p></article>
         </div>
       </section>
 
@@ -139,7 +139,7 @@ export default function PrivacyPage() {
               <li>No SQLCipher or full-database encryption yet</li>
               <li>No signed and notarized desktop package</li>
               <li>No prompt-injection classifier or independent audit</li>
-              <li>Hosted storage, authentication, export, and deletion are not yet release-tested</li>
+              <li>Hosted external acceptance, backup operations, and deletion verification remain incomplete</li>
             </ul>
           </div>
         </article>

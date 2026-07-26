@@ -1,6 +1,6 @@
 # Ninai
 
-Ninai carries permissioned, source-backed project decisions across Claude and Codex. Its hosted invitation beta and open-source local engine are available.
+Ninai is permissioned, source-backed AI memory for Claude Code and Codex. Its open-source local engine is available now; its separate hosted service is an operator-assisted invitation beta.
 
 ## Canonical pages
 - Home: https://ninai.io/

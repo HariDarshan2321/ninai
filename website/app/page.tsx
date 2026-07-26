@@ -6,9 +6,9 @@ import { ContextAperture } from "@/components/context-aperture";
 import styles from "./home.module.css";
 
 export const metadata: Metadata = {
-  title: "Shared memory for Claude and Codex",
+  title: "Ninai AI memory for Claude Code and Codex",
   description:
-    "Carry source-backed project decisions from Claude to Codex without sharing your whole history.",
+    "Ninai is permissioned AI memory for Claude Code and Codex. Remember project decisions, recall them with sources, and revoke access at any time.",
   alternates: { canonical: "/" },
 };
 

@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Client compatibility and test status",
   description: "See which AI clients Ninai has tested, which integrations are in development, and which host-controlled restrictions apply.",
   alternates: { canonical: "/compatibility/" },
+  robots: { index: false, follow: true },
   openGraph: { title: "Ninai client compatibility", description: "Tested support, development status, and host restrictions—without guesswork.", url: "/compatibility/", images: [{ url: "/assets/og-image.png", width: 1200, height: 630, alt: "Ninai client compatibility" }] },
 };
 

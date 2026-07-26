@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   description:
     "Explore Ninai's permission-first, provenance-backed approach to minimum sufficient context and the evaluation plan behind it.",
   alternates: { canonical: "/research/" },
+  robots: { index: false, follow: true },
   openGraph: {
     title: "PACT — Minimum sufficient context for AI memory",
     description: "Permission-first retrieval, provenance, and compact evidence packets.",
