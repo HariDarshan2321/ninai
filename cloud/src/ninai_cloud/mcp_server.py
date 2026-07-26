@@ -10,6 +10,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import TokenVerifier
 from mcp.server.auth.settings import AuthSettings as MCPAuthSettings
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -230,26 +231,56 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
         except ValueError as exc:
             return {"ok": False, "error": {"code": "invalid_request", "message": str(exc)}}
 
-    @mcp.tool(description="Search active memories in this client's granted scopes. Results include provenance.", structured_output=True)
+    @mcp.tool(
+        title="Search Ninai memory",
+        description="Search active memories in this client's granted scopes. Results include provenance.",
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True,
+                                    openWorldHint=False),
+        structured_output=True,
+    )
     def search(query: str, purpose: str, limit: int = 10) -> dict[str, Any]:
         return guarded(tools.search, query, purpose, limit)
 
-    @mcp.tool(description="Fetch one active memory by ID if it is in this client's granted scopes.", structured_output=True)
+    @mcp.tool(
+        title="Fetch Ninai memory",
+        description="Fetch one active memory by ID if it is in this client's granted scopes.",
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True,
+                                    openWorldHint=False),
+        structured_output=True,
+    )
     def fetch(memory_id: str, purpose: str) -> dict[str, Any]:
         return guarded(tools.fetch, memory_id, purpose)
 
-    @mcp.tool(description="Return a compact, token-bounded context packet with provenance and disclosure audit.", structured_output=True)
+    @mcp.tool(
+        title="Recall from Ninai",
+        description="Return a compact, token-bounded context packet with provenance and disclosure audit.",
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True,
+                                    openWorldHint=False),
+        structured_output=True,
+    )
     def recall(query: str, purpose: str, max_items: int = 6, max_tokens: int = 600) -> dict[str, Any]:
         return guarded(tools.recall, query, purpose, max_items, max_tokens)
 
-    @mcp.tool(description="Propose source-backed durable memory for review; proposed items are not recalled.", structured_output=True)
+    @mcp.tool(
+        title="Propose Ninai memory",
+        description="Propose source-backed durable memory for review; proposed items are not recalled.",
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
+                                    openWorldHint=False),
+        structured_output=True,
+    )
     def propose_memory(content: str, memory_type: str, scope_kind: str, scope_id: str,
                        source_uri: str, idempotency_key: str, project_id: str | None = None,
                        importance: float = 0.6, confidence: float = 1.0) -> dict[str, Any]:
         return guarded(tools.propose_memory, content, memory_type, scope_kind, scope_id,
                        source_uri, idempotency_key, project_id, importance, confidence)
 
-    @mcp.tool(description="Activate durable memory only with explicit auto-activate permission.", structured_output=True)
+    @mcp.tool(
+        title="Remember with Ninai",
+        description="Activate durable memory only with explicit auto-activate permission.",
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
+                                    openWorldHint=False),
+        structured_output=True,
+    )
     def remember(content: str, memory_type: str, scope_kind: str, scope_id: str,
                  source_uri: str, idempotency_key: str, project_id: str | None = None,
                  importance: float = 0.6, confidence: float = 1.0) -> dict[str, Any]:
