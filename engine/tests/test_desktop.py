@@ -25,6 +25,14 @@ class DesktopApiTest(unittest.TestCase):
         self.assertIn("restricted", res["data"]["sensitivities"])
         self.assertTrue(res["data"]["vault_path"])
 
+    def test_desktop_assets_keep_brand_and_first_run_guidance(self) -> None:
+        web = Path(__file__).resolve().parents[1] / "src" / "ninai" / "desktop" / "web"
+        css = (web / "app.css").read_text(encoding="utf-8").lower()
+        script = (web / "app.js").read_text(encoding="utf-8")
+        for color in ("#0b302b", "#f4efe5", "#ff6846", "#dcef7b"):
+            self.assertIn(color, css)
+        self.assertIn("open Permissions and grant only the scope", script)
+
     def test_add_get_and_search_memory(self) -> None:
         added = self.api.add_memory(
             "Send Priya the launch deck", memory_type="commitment", scope="project"

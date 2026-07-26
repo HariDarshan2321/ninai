@@ -48,6 +48,25 @@ for mutations. **Sign out** clears the Ninai browser session. Auth0 SSO logout
 can be added later if product policy requires terminating the tenant-wide SSO
 session as well.
 
+## Universal Login branding still required in Auth0
+
+The repository controls the Ninai dashboard after Auth0 redirects back. Auth0
+Universal Login is tenant-hosted, so align it separately in **Branding →
+Universal Login** and the `Ninai Dashboard` application:
+
+- application name: `Ninai`;
+- logo URL: `https://ninai.io/assets/ninai-app-icon.svg`;
+- primary action: Signal `#FF6846`;
+- page background: Paper `#F4EFE5`;
+- text/contrast: Ink `#111512` and Vault `#0B302B`;
+- concise prompt: `Your AI should remember the work. Not your whole life.`;
+- support/privacy links on `ninai.io`, with no claims of universal capture,
+  end-to-end encryption, or completed independent security audit.
+
+Permit `#DCEF7B` is reserved for an explicitly allowed state and should not be
+used as general login decoration. Preview sign-up, sign-in, consent, password
+reset, MFA, error, and narrow mobile layouts before the external tester gate.
+
 Auth0 DCR clients require PKCE and support authorization-code and refresh-token
 grants. The host must store and reuse a registration rather than creating a new
 application on each login.

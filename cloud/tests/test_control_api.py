@@ -105,6 +105,9 @@ class ControlAppTest(unittest.TestCase):
         self.assertIn("sessionStorage", response.text)
         for label in ("Memories", "Permissions", "Download workspace export", "Delete workspace"):
             self.assertIn(label, response.text)
+        for brand_copy in ("#0b302b", "#f4efe5", "#ff6846", "#dcef7b",
+                           "Your AI should remember the work. Not your whole life."):
+            self.assertIn(brand_copy, response.text)
 
     def test_control_and_error_responses_have_security_headers(self):
         for response in (

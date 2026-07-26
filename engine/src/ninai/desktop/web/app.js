@@ -331,7 +331,7 @@
         title: filtering ? "No memories match" : "Your vault is empty",
         body: filtering
           ? "Try a different search term or clear the filters."
-          : "Add your first memory, or let a connected assistant capture the work as you go."
+          : "Add one durable decision here. Then open Permissions and grant only the scope your AI needs."
       }));
       return;
     }

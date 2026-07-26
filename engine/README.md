@@ -2,6 +2,39 @@
 
 A focused local MCP memory service for the Ninai MVP.
 
+Your AI should remember the work. Not your whole life. Local mode keeps the
+complete SQLite vault on this machine and releases only memories in explicitly
+granted scopes.
+
+## Local desktop quick start
+
+From the repository root:
+
+```bash
+cd engine
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e '.[desktop]'
+ninai doctor
+ninai-app
+```
+
+In the app, add one durable decision, open **Permissions**, and grant the
+`project` scope only to the client that needs it. The vault path shown in the
+sidebar is the local source of truth. Closing the app does not upload it.
+
+To connect Claude Code to the local MCP server after the app works:
+
+```bash
+claude mcp add --transport stdio --scope user ninai -- ninai-mcp
+ninai permission grant claude-code project
+ninai doctor
+```
+
+If `ninai-app` reports that PyWebView is missing, reactivate `.venv` and rerun
+`python -m pip install -e '.[desktop]'` from this directory.
+
 ## Design
 
 Ninai separates domain rules, policy-aware persistence, retrieval, capture, and transport:
