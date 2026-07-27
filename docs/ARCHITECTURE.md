@@ -135,6 +135,9 @@ Present in the MVP:
 
 The hosted implementation adds tenant-bound PostgreSQL records, asymmetric JWT validation against an external issuer, live membership/client revocation checks, distinct propose/auto-activate grants, idempotent writes, and disclosure records. These controls have repository tests; they are not an independent security audit or proof of a hardened production deployment. See [SECURITY-REPORT.md](SECURITY-REPORT.md).
 
+The exact hosted isolation model, including the shared-database boundary and
+OAuth/DCR behavior, is documented in [HOSTED-TENANT-ISOLATION.md](HOSTED-TENANT-ISOLATION.md).
+
 Not present yet:
 
 - SQLCipher/full-database encryption;

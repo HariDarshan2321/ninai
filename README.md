@@ -21,25 +21,24 @@ is too old and will fail the install with a `requires-python` / build error.
 Check with `python3 --version`; if it is below 3.11, use an explicit interpreter
 (`python3.11`, `python3.12`, or `python3.13`) in the `venv` command below.
 
-For the stable desktop-and-engine installation used by the public setup guide:
+For the one-command desktop-and-engine installation used by the public setup guide:
 
 ```bash
-./scripts/install-local
+# Claude Code (downloads the reviewed installer, installs Ninai, grants only
+# project scope, and registers the local MCP server).
+curl -fsSL https://raw.githubusercontent.com/HariDarshan2321/ninai/main/scripts/install-local | \
+  bash -s -- --client claude-code
 
 # Open the local control panel.
 ~/.ninai-app/venv/bin/ninai-app
-
-# Grant Claude Code access to selected scopes.
-~/.ninai-app/venv/bin/ninai permission grant claude-code project
-
-# Register the stable MCP executable.
-claude mcp add --transport stdio --scope user ninai-local -- \
-  "$HOME/.ninai-app/venv/bin/ninai-mcp"
 ```
 
 The installer requires Python 3.11+ and selects `python3.13`, `python3.12`, or
 `python3.11` automatically. Set `NINAI_PYTHON` to choose another compatible
 interpreter or `NINAI_INSTALL_DIR` to change the stable installation directory.
+Use `--client codex` for Codex or run `./scripts/install-local` from a cloned
+repository. Review [`scripts/install-local`](scripts/install-local) before
+running a downloaded script.
 
 In Claude Code, try:
 

@@ -33,9 +33,34 @@ read the private SQLite vault in the macOS app.
 - Tools: search, fetch, recall, propose_memory, remember
 
 All tools publish titles and explicit MCP safety annotations. Search, fetch, and
-recall are read-only. Proposal and memory activation are write operations and
-are marked accordingly. Idempotency keys prevent duplicate writes, permission
+recall are read-only. Proposal and memory activation are non-destructive write
+operations and are marked accordingly. Idempotency keys prevent duplicate writes, permission
 checks precede retrieval, provenance is preserved, and disclosures are logged.
+
+## Policy readiness inventory
+
+Ready:
+
+- public HTTPS Streamable HTTP endpoint and secure OAuth;
+- successful Claude.ai OAuth, five-tool scan, and read-tool invocation;
+- tool names below 64 characters, narrow descriptions, titles, and applicable
+  `readOnlyHint`, `destructiveHint`, and idempotency annotations;
+- bounded outputs, structured errors, provenance, permission checks, and
+  disclosure logging;
+- public website, privacy URL, support and security addresses.
+
+Still required before submission:
+
+- a dedicated reviewer account with synthetic sample data (Anthropic policy
+  explicitly requires a standard testing account);
+- three recorded, working examples covering core functionality;
+- a clear hosted-service privacy policy that states collection, use, retention,
+  deletion, and subprocessors—not only architectural boundaries;
+- public troubleshooting documentation and a support/incident runbook;
+- production availability/latency, backup/restore, deletion, and refresh-token
+  evidence;
+- verified ownership/control of every connected endpoint and acceptance of the
+  current MCP Directory Terms at submission time.
 
 ## Release gate
 
@@ -49,3 +74,14 @@ checks precede retrieval, provenance is preserved, and disclosures are logged.
 
 The public one-click listing exists only after Anthropic accepts the submission.
 No repository or Render deployment can bypass that external review.
+
+## Official references
+
+- Anthropic, *Connectors Directory FAQ*:
+  https://support.anthropic.com/en/articles/11596036-anthropic-mcp-directory-faq
+- Anthropic, *MCP Directory Policy* (requirements 1–27):
+  https://support.anthropic.com/en/articles/11697096-anthropic-mcp-directory-policy
+- Anthropic, *MCP Directory Terms and Conditions*:
+  https://support.anthropic.com/en/articles/11697081-anthropic-mcp-directory-terms-and-conditions
+- Anthropic, *Getting Started with Custom Connectors Using Remote MCP*:
+  https://support.anthropic.com/en/articles/11175166-about-custom-integrations-using-remote-mcp

@@ -23,9 +23,11 @@ export const metadata: Metadata = {
   },
 };
 
-const installCommand = `git clone https://github.com/HariDarshan2321/ninai.git
-cd ninai
-./scripts/install-local`;
+const installCommand = `curl -fsSL https://raw.githubusercontent.com/HariDarshan2321/ninai/main/scripts/install-local | bash`;
+
+const installClaudeCommand = `${installCommand} -s -- --client claude-code`;
+
+const installCodexCommand = `${installCommand} -s -- --client codex`;
 
 const appCommand = `~/.ninai-app/venv/bin/ninai-app`;
 
@@ -77,7 +79,7 @@ export default function InstallPage() {
           <div className="page-hero__aside">
             <p>
               The local engine is available today. The hosted endpoint and OAuth login are
-              live, while workspace and client grants remain operator-assisted during beta.
+              live; each customer manages their own workspace, projects, connections, and grants.
             </p>
             <div className="requirement-row">
               <span>Local</span><strong>macOS</strong>
@@ -118,7 +120,7 @@ export default function InstallPage() {
             <div>
               <p className="install-step__label">Claude Code</p>
               <h2>Add Ninai, then authenticate in the browser.</h2>
-              <p>Open <code>/mcp</code>, approve Ninai, and choose Authenticate. Then email <a href="mailto:hello@ninai.io?subject=Ninai%20Claude%20beta%20connection">hello@ninai.io</a> from your sign-in address and say “Claude connected.” The beta operator binds the public client ID and grants your project. Never send a token, authorization code, or secret.</p>
+              <p>Open <code>/mcp</code>, approve Ninai, and choose Authenticate. OAuth creates a connection in your workspace with no memory access. In the Ninai dashboard, open Connections and grant only the project and actions this client needs.</p>
               <CopyCommand>{hostedClaudeCommand}</CopyCommand>
             </div>
           </section>
@@ -127,7 +129,7 @@ export default function InstallPage() {
             <div>
               <p className="install-step__label">Codex</p>
               <h2>Add the same endpoint as a separate connection.</h2>
-              <p>Complete browser login, then email <a href="mailto:hello@ninai.io?subject=Ninai%20Codex%20beta%20connection">hello@ninai.io</a> from the same address and say “Codex connected.” Restart Codex after the operator confirms the project grant.</p>
+              <p>Complete browser login, open the connection in your Ninai dashboard, and grant the intended project. Restart Codex after saving the grant.</p>
               <CopyCommand>{hostedCodexCommand}</CopyCommand>
             </div>
           </section>
@@ -137,7 +139,7 @@ export default function InstallPage() {
               <p className="install-step__label">ChatGPT and Claude.ai</p>
               <h2>Add Ninai as a remote MCP app when your plan supports custom connectors.</h2>
               <p>Use <code>https://ninai-cloud.onrender.com/mcp</code> as the server URL and complete Ninai OAuth. ChatGPT currently limits custom MCP apps to supported managed workspaces, and Claude availability depends on the selected Claude surface and plan. These hosts use the cloud vault—not the private database on your Mac.</p>
-              <p>After the host scans Ninai&apos;s tools, sign in to the dashboard and bind that connection before granting a project. This connector path remains beta until a real-host acceptance run is recorded.</p>
+              <p>After the host scans Ninai&apos;s tools and you approve OAuth, the connection appears automatically in your dashboard. It starts with zero project grants; choose the project and allowed actions before the first recall.</p>
             </div>
           </section>
           <section className="install-step" id="hosted-verify">
@@ -151,8 +153,8 @@ export default function InstallPage() {
             </div>
           </section>
           <div className="notice notice--good">
-            <strong>Operator-assisted while the beta is small</strong>
-            <p>OAuth dynamic registration does not silently grant memory access. Sign in to the <a href="https://ninai-cloud.onrender.com/control">hosted control center</a> to manage projects, grants, review, export, and revocation. See the <a href="https://github.com/HariDarshan2321/ninai/blob/main/docs/HOSTED-BETA.md">complete beta guide</a>.</p>
+            <strong>Connected automatically, access denied by default</strong>
+            <p>OAuth dynamic registration creates the client connection but never silently grants memory access. Sign in to the <a href="https://ninai-cloud.onrender.com/control">hosted control center</a> to choose projects and actions, then manage review, export, and revocation. See the <a href="https://github.com/HariDarshan2321/ninai/blob/main/docs/HOSTED-BETA.md">complete beta guide</a>.</p>
           </div>
         </div>
       </section>
@@ -174,15 +176,18 @@ export default function InstallPage() {
             <div className="install-step__number">01</div>
             <div>
               <p className="install-step__label">Install engine</p>
-              <h2>Install the local macOS package.</h2>
+              <h2>Install and connect in one command.</h2>
               <p>
-                Ninai requires Python 3.11 or newer. The installer automatically chooses
-                Python 3.13, 3.12, or 3.11 and installs the engine and desktop app in
-                <code> ~/.ninai-app</code>. On macOS, run <code>brew install python@3.13</code>
-                first if no compatible version is installed.
+                Choose your client below. The installer checks for Python 3.11+, installs
+                the engine and desktop app in <code> ~/.ninai-app</code>, grants only the
+                project scope, and registers the local MCP server. It does not require a Ninai account.
               </p>
-              <CopyCommand>{installCommand}</CopyCommand>
-              <p>A one-click customer download is being prepared as a signed and notarized <code>Ninai.app</code>. Until that release is published, the command above is the verified installation path; do not bypass Gatekeeper for an unsigned build.</p>
+              <p><strong>Claude Code</strong></p>
+              <CopyCommand>{installClaudeCommand}</CopyCommand>
+              <p><strong>Codex</strong></p>
+              <CopyCommand>{installCodexCommand}</CopyCommand>
+              <p>Review the <a href="https://github.com/HariDarshan2321/ninai/blob/main/scripts/install-local">installer source</a> before running a downloaded script. If Python is missing, install it with <code>brew install python@3.13</code> and rerun the same command.</p>
+              <p>A double-click <code>Ninai.app</code> download is packaged but cannot be published safely until it is signed and notarized with the Ninai Apple Developer identity. Do not bypass Gatekeeper for an unsigned build.</p>
             </div>
           </section>
 

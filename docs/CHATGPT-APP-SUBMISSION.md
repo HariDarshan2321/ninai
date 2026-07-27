@@ -1,4 +1,10 @@
-# ChatGPT app submission
+# ChatGPT app / plugin submission
+
+> Current platform terminology (checked 27 July 2026): OpenAI moved public
+> discovery from the App Directory to the **Plugin Directory** on 9 July 2026.
+> An app remains the authenticated MCP integration; an approved public listing
+> may distribute that app inside a plugin. Publishing a custom app to one
+> workspace does not publish a public plugin listing.
 
 ## Live acceptance status
 
@@ -7,8 +13,8 @@ completed Ninai OAuth, loaded the hosted MCP app, invoked the Ninai search tool,
 and returned `0 results` for the synthetic query
 `NINAI_CHATGPT_ACCEPTANCE_2026`. The connector call completed successfully.
 
-The customer experience target is a directory-listed Ninai app: choose Ninai in
-ChatGPT, click **Connect**, complete Ninai OAuth, and use the hosted memory tools.
+The customer experience target is a Plugin Directory-listed Ninai integration:
+choose Ninai, click **Connect**, complete Ninai OAuth, and use the hosted memory tools.
 This is the hosted PostgreSQL product; it does not connect to the local macOS
 SQLite vault.
 
@@ -29,21 +35,63 @@ explicitly granted remember tools. Every returned memory retains its source, and
 all reads are disclosure-logged. Connecting an OAuth client must never silently
 grant it a workspace or project scope.
 
-## Directory release gate
+## Submission inventory
 
-1. Complete the external ChatGPT tool scan and OAuth flow in a supported
-   Business, Enterprise, or Edu workspace using developer mode.
-2. Bind the resulting OAuth client connection in the Ninai dashboard and grant
+Ready:
+
+- production HTTPS Streamable HTTP MCP endpoint;
+- OAuth authorization-code flow with PKCE, protected-resource discovery, and
+  refresh-token support;
+- successful external ChatGPT tool scan, OAuth, and read-tool invocation;
+- tool titles, narrow descriptions, structured outputs, and safety annotations;
+- public website, privacy URL, support address, and brand assets.
+
+Still required before submission:
+
+- a final public terms-of-service URL (the privacy architecture page is not a
+  substitute for contractual terms);
+- a reviewer account/workspace containing synthetic sample memories and
+  least-privilege grants;
+- recorded tests for search, fetch, recall, proposal, approval, revocation, and
+  reconnect/refresh-token behavior—not only the successful empty search;
+- final listing copy, category, icon/logo files, screenshots, example prompts,
+  reviewer instructions, supported countries/plans, and a support runbook;
+- OpenAI Platform organization ownership or an assigned role with **Apps
+  Management: Write**, plus verified individual/business identity;
+- five positive and three negative test cases with expected behavior;
+- domain-verification access for the MCP host and a portal-generated token at
+  `/.well-known/openai-apps-challenge` during submission;
+- acceptance of the terms and policy attestations shown at submission time;
+- production reliability, incident, deletion, retention, and backup evidence
+  required by Ninai's own hosted launch gate.
+
+## Public release gate
+
+1. Keep the verified developer-mode app installed as a private acceptance target.
+2. Bind each resulting OAuth client connection in the Ninai dashboard and grant
    only the acceptance-test project.
 3. Record search, fetch, recall, propose, approval, revocation, and disclosure
    evidence against the production endpoint.
 4. Verify the app name, logo, description, privacy policy, support contact,
    screenshots, test prompts, and reviewer instructions.
-5. Submit the app from the OpenAI developer/workspace account and respond to the
-   platform review. A public one-click directory listing exists only after that
-   external review is accepted; repository deployment alone cannot publish it.
+5. Submit using OpenAI's current public app/plugin submission flow and respond
+   to review. A public one-click Plugin Directory listing exists only after
+   external acceptance; repository deployment alone cannot publish it.
 
-OpenAI currently documents custom MCP apps and full write support as a beta for
-managed ChatGPT workspaces. Workspace admins control developer mode, publishing,
-available actions, and user access. Treat those plan and review requirements as
+OpenAI documents developer mode as the private build/test path. Workspace admins
+control private publication, actions, and access; public discovery is a separate
+review path. Treat plan, regional, workspace-policy, and review requirements as
 platform dependencies, not capabilities Ninai can bypass.
+
+## Official references
+
+- OpenAI, *Apps in ChatGPT* (including the 9 July 2026 Plugin Directory change):
+  https://help.openai.com/en/articles/11487775-apps-in-chatgpt
+- OpenAI, *Submit plugins* (authoritative portal fields and review process):
+  https://developers.openai.com/plugins/deploy/submission
+- OpenAI, *Plugin guidelines*:
+  https://developers.openai.com/plugins/app-guidelines
+- OpenAI, *Developer mode and MCP apps in ChatGPT*:
+  https://help.openai.com/en/articles/12584461
+- OpenAI, *Build with the Apps SDK*:
+  https://help.openai.com/en/articles/12515353-build-with-the-apps-sdk

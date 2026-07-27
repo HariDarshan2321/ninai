@@ -142,6 +142,51 @@ class PostgresStore:
         if not row:
             raise AuthorizationError(f"Client lacks {capability} for requested scope")
 
+    @staticmethod
+    def _validate_scope_target(
+        db: Any, principal: Principal, scope_kind: str, scope_id: str,
+        project_id: str | None,
+    ) -> str | None:
+        """Resolve a write target inside the authenticated workspace.
+
+        Grants are the capability boundary, but this separate check protects
+        tenant integrity if a grant was inserted manually or by a future admin
+        path. Polymorphic ``scope_id`` cannot be expressed as one PostgreSQL
+        foreign key, so its workspace relationship is checked transactionally.
+        """
+        try:
+            normalized_scope_id = str(uuid.UUID(scope_id))
+            normalized_project_id = str(uuid.UUID(project_id)) if project_id else None
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValueError("scope_id and project_id must be UUIDs") from exc
+
+        if scope_kind == "workspace":
+            if normalized_scope_id != principal.workspace_id or normalized_project_id is not None:
+                raise AuthorizationError("Workspace scope must target the authenticated workspace")
+            return None
+        if scope_kind == "user":
+            member = db.execute(
+                """SELECT 1 FROM workspace_members WHERE workspace_id=%s AND user_id=%s
+                   AND revoked_at IS NULL""",
+                (principal.workspace_id, normalized_scope_id),
+            ).fetchone()
+            if not member or normalized_project_id is not None:
+                raise AuthorizationError("User scope must target an active member of the workspace")
+            return None
+
+        # Project-scoped memories always carry the same project in both fields;
+        # callers may omit project_id because scope_id already identifies it.
+        if normalized_project_id is not None and normalized_project_id != normalized_scope_id:
+            raise AuthorizationError("project_id must match the project scope_id")
+        project = db.execute(
+            """SELECT 1 FROM projects WHERE workspace_id=%s AND id=%s
+               AND archived_at IS NULL""",
+            (principal.workspace_id, normalized_scope_id),
+        ).fetchone()
+        if not project:
+            raise AuthorizationError("Project scope is unavailable in the authenticated workspace")
+        return normalized_scope_id
+
     def create_memory(
         self,
         principal: Principal,
@@ -179,14 +224,18 @@ class PostgresStore:
         if not freshness_policy.strip() or len(freshness_policy) > 100:
             raise ValueError("freshness_policy is required and must be at most 100 characters")
 
-        payload = {
-            "content": clean, "memory_type": memory_type, "scope_kind": scope_kind,
-            "scope_id": scope_id, "source_uri": source_uri, "project_id": project_id,
-            "activate": activate, "valid_until": valid_until, "freshness_policy": freshness_policy,
-        }
-        digest = _request_hash(payload)
         with self._connection() as db:
             self._validate_principal(db, principal)
+            project_id = self._validate_scope_target(
+                db, principal, scope_kind, scope_id, project_id
+            )
+            payload = {
+                "content": clean, "memory_type": memory_type, "scope_kind": scope_kind,
+                "scope_id": scope_id, "source_uri": source_uri, "project_id": project_id,
+                "activate": activate, "valid_until": valid_until,
+                "freshness_policy": freshness_policy,
+            }
+            digest = _request_hash(payload)
             policy = classify_write(
                 content=clean, memory_type=memory_type, scope_kind=scope_kind, scope_id=scope_id,
                 source_uri=source_uri, requested_auto=activate, contains_secret=secret_detected,

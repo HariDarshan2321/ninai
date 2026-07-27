@@ -5,8 +5,9 @@
 The invitation beta is online at `https://ninai-cloud.onrender.com/mcp` and is
 covered by unit and PostgreSQL integration tests. It is an explicit opt-in
 service: it never reads or synchronizes the local SQLite vault. OAuth login and
-dynamic client registration are live, but account setup and client-to-workspace
-binding are still operator-assisted. The independent external-tester release
+dynamic client registration are live. A newly authenticated client is attached
+to the customer's sole active workspace with zero scope grants; the customer
+must explicitly choose projects and actions in the dashboard. The independent external-tester release
 gate must pass before hosted compatibility is described as generally available.
 
 The beta MCP endpoint is `https://ninai-cloud.onrender.com/mcp`. It uses
@@ -17,7 +18,7 @@ protected-resource metadata is published at
 
 ## Invitation-beta setup
 
-Ask the beta operator to provision your Ninai workspace first. Then configure
+Sign in to the control center and create a workspace and project. Then configure
 one client at a time; Claude and Codex receive distinct client connections and
 grants.
 
@@ -31,11 +32,10 @@ claude
 
 In Claude Code, open `/mcp`, approve the `ninai` server, select **Authenticate**,
 and complete the browser login. Dynamic registration creates a public OAuth
-client identifier; it does not create a Ninai scope grant. During the invitation
-beta, tell the operator that you completed Claude login. The operator locates
-the newly registered application in the OAuth dashboard, binds its public client
-ID to your Claude connection, and grants only the requested Ninai project. Never
-send an access token, refresh token, authorization code, or client secret.
+client identifier and a zero-access connection in your workspace; it does not
+create a Ninai scope grant. Open the control center, select that connection, and
+grant only the requested project and actions. Never send an access token,
+refresh token, authorization code, or client secret.
 
 Restart Claude Code, open `/mcp`, and verify `ninai` is connected and exposes
 `search`, `fetch`, `recall`, `propose_memory`, and `remember`.
@@ -48,13 +48,12 @@ codex mcp login ninai --scopes ninai:read,ninai:propose,ninai:remember
 codex mcp list
 ```
 
-Complete the browser login, then tell the beta operator that Codex registration
-finished. As with Claude, the operator binds only the public OAuth client ID and
-adds least-privilege project grants. Restart Codex after the operator confirms
-the binding. `codex mcp list` should report `ninai` as enabled with OAuth.
+Complete the browser login, then open the new connection in the control center
+and add least-privilege project grants. Restart Codex after saving the grant.
+`codex mcp list` should report `ninai` as enabled with OAuth.
 
 The hosted [control center](https://ninai-cloud.onrender.com/control) is the
-operator-assisted dashboard for workspaces, projects, connections, grants,
+customer dashboard for workspaces, projects, connections, grants,
 review, disclosures, export, and revocation. Use its **Create account** or **Sign
 in** button; the browser completes OAuth with PKCE and keeps the resulting
 session credential in an HTTP-only cookie. The access-token field is only for

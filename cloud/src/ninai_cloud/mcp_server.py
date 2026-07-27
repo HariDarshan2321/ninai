@@ -264,7 +264,7 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     @mcp.tool(
         title="Propose Ninai memory",
         description="Propose source-backed durable memory for review; proposed items are not recalled.",
-        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
                                     openWorldHint=False),
         structured_output=True,
     )
@@ -277,7 +277,7 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     @mcp.tool(
         title="Remember with Ninai",
         description="Activate durable memory only with explicit auto-activate permission.",
-        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
                                     openWorldHint=False),
         structured_output=True,
     )
