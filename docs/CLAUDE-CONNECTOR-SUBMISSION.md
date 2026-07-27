@@ -1,5 +1,12 @@
 # Claude connector submission
 
+## Live acceptance status
+
+Validated on July 26, 2026 with Claude.ai. Claude completed Ninai OAuth, loaded
+all five hosted MCP tools, invoked **Search Ninai memory**, and returned
+`0 results` for the synthetic query `NINAI_CLAUDE_ACCEPTANCE_2026`. The connector
+call completed successfully.
+
 The target customer experience is an Anthropic-directory connector: choose
 **Ninai**, click **Connect**, authenticate with Ninai OAuth, and enable its tools
 for a conversation. Until directory approval, the same hosted connector can be

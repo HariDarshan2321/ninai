@@ -1,5 +1,12 @@
 # ChatGPT app submission
 
+## Live acceptance status
+
+Validated on July 27, 2026 with a ChatGPT Plus account in developer mode. ChatGPT
+completed Ninai OAuth, loaded the hosted MCP app, invoked the Ninai search tool,
+and returned `0 results` for the synthetic query
+`NINAI_CHATGPT_ACCEPTANCE_2026`. The connector call completed successfully.
+
 The customer experience target is a directory-listed Ninai app: choose Ninai in
 ChatGPT, click **Connect**, complete Ninai OAuth, and use the hosted memory tools.
 This is the hosted PostgreSQL product; it does not connect to the local macOS
