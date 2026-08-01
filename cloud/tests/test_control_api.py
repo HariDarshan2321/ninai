@@ -143,7 +143,14 @@ class ControlAppTest(unittest.TestCase):
             Route("/control", endpoint, methods=["GET"]),
             Route("/control/login", endpoint, methods=["GET"]),
         ]))
-        self.assertIn("const oauthEnabled=true", client.get("/control").text)
+        landing = client.get("/control").text
+        self.assertIn("const oauthEnabled=true", landing)
+        for copy in ("Ninai hosted · public beta", "Remember the project across Claude and ChatGPT.",
+                     "Create your workspace", "OAuth creates a connection with zero memory access."):
+            self.assertIn(copy, landing)
+        self.assertIn('href="/control/login?screen_hint=signup"', landing)
+        self.assertIn('href="/control/login"', landing)
+        self.assertNotIn("Hosted invitation beta", landing)
         response = client.get("/control/login?screen_hint=signup", follow_redirects=False)
         self.assertEqual(response.status_code, 302)
         location = response.headers["location"]
