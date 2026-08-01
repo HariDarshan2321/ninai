@@ -108,6 +108,7 @@ class ControlAppTest(unittest.TestCase):
         for brand_copy in ("#0b302b", "#f4efe5", "#ff6846", "#dcef7b",
                            "Your AI should remember the work. Not your whole life."):
             self.assertIn(brand_copy, response.text)
+        self.assertIn('src="https://ninai.io/assets/ninai-wordmark.svg" alt="Ninai"', response.text)
 
     def test_control_and_error_responses_have_security_headers(self):
         for response in (

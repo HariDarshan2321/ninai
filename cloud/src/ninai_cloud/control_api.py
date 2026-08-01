@@ -308,7 +308,7 @@ class ControlApp:
             "Content-Security-Policy": (
                 "default-src 'none'; base-uri 'none'; form-action 'none'; "
                 "frame-ancestors 'none'; script-src 'unsafe-inline'; "
-                "style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+                "style-src 'unsafe-inline'; img-src 'self' data: https://ninai.io; connect-src 'self'"
             ),
             "X-Content-Type-Options": "nosniff",
             "X-Frame-Options": "DENY",
