@@ -4,13 +4,20 @@ Use this kit for OpenAI app review and Anthropic's connector directory. Do not m
 
 ## Listing copy
 
-**Name:** Ninai  
-**Tagline:** Permissioned, source-backed memory shared across AI tools.  
-**Category:** Developer tools / productivity  
-**Website:** https://ninai.io/  
-**MCP endpoint:** https://ninai-cloud.onrender.com/mcp  
-**Privacy:** https://ninai.io/privacy/  
-**Terms:** https://ninai.io/terms/  
+**Name:** Ninai
+
+**Tagline:** Permissioned, source-backed memory shared across AI tools.
+
+**Category:** Developer tools / productivity
+
+**Website:** https://ninai.io/
+
+**MCP endpoint:** https://ninai-cloud.onrender.com/mcp
+
+**Privacy:** https://ninai.io/privacy/
+
+**Terms:** https://ninai.io/terms/
+
 **Support:** hello@ninai.io
 
 **Short description:** Remember a project decision once and recall it in Claude, ChatGPT, or another authorized MCP client—with sources, explicit project grants, review-first writes, and immediate revocation.
