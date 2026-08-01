@@ -12,7 +12,7 @@ from mcp.server.auth.settings import AuthSettings as MCPAuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from .postgres_store import AuthorizationError, HostedMemory, IdempotencyConflict, PostgresStore, Principal
 from .policy import validate_memory_type
@@ -32,6 +32,12 @@ MAX_IDEMPOTENCY_KEY_CHARS = 200
 MAX_IDENTIFIER_CHARS = 100
 DEFAULT_READ_CALLS_PER_MINUTE = 120
 DEFAULT_WRITE_CALLS_PER_MINUTE = 30
+
+FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<rect width="64" height="64" rx="15" fill="#0B302B"/>
+<path d="M45 43a19 19 0 1 1 1-23" fill="none" stroke="#F4EFE5" stroke-width="7" stroke-linecap="round"/>
+<circle cx="33" cy="34" r="5" fill="#DCEF7B"/>
+</svg>"""
 
 
 class PrincipalResolver(Protocol):
@@ -290,6 +296,15 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> JSONResponse:
         return JSONResponse({"status": "ok", "service": "ninai-cloud-mcp"})
+
+    @mcp.custom_route("/", methods=["GET"])
+    async def root(_: Request) -> RedirectResponse:
+        return RedirectResponse("/control", status_code=307)
+
+    @mcp.custom_route("/favicon.svg", methods=["GET"])
+    async def favicon(_: Request) -> Response:
+        return Response(FAVICON_SVG, media_type="image/svg+xml",
+                        headers={"Cache-Control": "public, max-age=86400"})
 
     connect = getattr(store, "_connection", None)
     if connect is None:  # Allows transport registration with contract-test stores.

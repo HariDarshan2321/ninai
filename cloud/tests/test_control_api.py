@@ -320,9 +320,16 @@ class ControlAppTest(unittest.TestCase):
             principal_resolver=lambda: None,
         )
         paths = {route.path for route in server.streamable_http_app().routes}
-        self.assertTrue({"/health", "/control", "/control/login", "/control/logout",
+        self.assertTrue({"/", "/health", "/favicon.svg", "/control", "/control/login", "/control/logout",
                          "/api/control/{path:path}"}.issubset(paths))
         with TestClient(server.streamable_http_app()) as client:
+            root = client.get("/", follow_redirects=False)
+            self.assertEqual(root.status_code, 307)
+            self.assertEqual(root.headers["location"], "/control")
+            icon = client.get("/favicon.svg")
+            self.assertEqual(icon.status_code, 200)
+            self.assertEqual(icon.headers["content-type"], "image/svg+xml")
+            self.assertIn("#0B302B", icon.text)
             self.assertEqual(client.get("/health").json()["status"], "ok")
             self.assertIn("Ninai Control Center", client.get("/control").text)
             response = client.get("/api/control/overview", headers=self.auth)
