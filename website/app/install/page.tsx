@@ -112,7 +112,7 @@ export default function InstallPage() {
               <p className="install-step__label">Ninai account</p>
               <h2>Sign in and create one workspace and project.</h2>
               <p>The hosted vault is separate from local mode. Open the control center, sign in with Auth0, create a workspace, then create the project boundary you want to share.</p>
-              <p><a href="https://ninai-cloud.onrender.com/control/login?screen_hint=signup">Create account ↗</a> · <a href="https://ninai-cloud.onrender.com/control/login">Sign in</a></p>
+              <div className="inline-actions"><a href="https://ninai-cloud.onrender.com/control/login?screen_hint=signup">Create account ↗</a><a href="https://ninai-cloud.onrender.com/control/login">Sign in</a></div>
             </div>
           </section>
           <section className="install-step" id="hosted-claude">

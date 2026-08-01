@@ -157,7 +157,8 @@ pre,
 }
 
 .main-nav a:hover::after,
-.main-nav a:focus-visible::after {
+.main-nav a:focus-visible::after,
+.main-nav a[aria-current="page"]::after {
   transform: scaleX(1);
   transform-origin: left;
 }
@@ -212,7 +213,8 @@ pre,
 }
 
 .mobile-nav__panel a:hover,
-.mobile-nav__panel a:focus-visible {
+.mobile-nav__panel a:focus-visible,
+.mobile-nav__panel a[aria-current="page"] {
   background: var(--paper-deep);
 }
 
@@ -296,6 +298,7 @@ a:focus-visible {
 .beta-cta { padding-block: clamp(70px, 10vw, 130px); color: var(--paper); background: var(--ink); text-align: center; }
 .beta-cta p { max-width: 660px; margin: 0 auto 28px; color: var(--mint); }
 .install-choice { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; padding-block: 70px 20px; }
+.onboarding-steps { grid-template-columns: repeat(3, 1fr); }
 .install-choice article { border: 1px solid var(--line); border-radius: 24px; padding: 30px; background: var(--paper-soft); }
 .install-choice h2 { margin: 18px 0 8px; }
 .install-choice a { font-weight: 760; }
@@ -304,6 +307,10 @@ a:focus-visible {
 .compat-row p { margin: 0; color: var(--muted); }
 .compat-row--head { font-family: monospace; font-size: .75rem; text-transform: uppercase; }
 .compat-section .notice { margin-top: 40px; }
+
+@media (max-width: 900px) {
+  .onboarding-steps { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 760px) {
   .mode-grid, .install-choice, .beta-trust { grid-template-columns: 1fr; }
@@ -1731,8 +1738,8 @@ a:focus-visible {
 
 .footer-label {
   margin: 0 0 8px;
-  color: #62675f;
-  font-size: 0.59rem;
+  color: #aebbb3;
+  font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1744,9 +1751,9 @@ a:focus-visible {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   margin-top: 70px;
   padding-top: 20px;
-  color: #656b62;
+  color: #aebbb3;
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 0.57rem;
+  font-size: 0.7rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1781,6 +1788,20 @@ a:focus-visible {
   margin: 0;
   color: var(--muted);
   font-size: 1.12rem;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 18px;
 }
 
 .requirement-row {
@@ -2923,6 +2944,7 @@ a:focus-visible {
   .privacy-sections article {
     grid-template-columns: 1fr;
     gap: 16px;
+    padding-block: 48px;
   }
 
   .rejected-sample {

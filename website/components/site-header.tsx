@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Brand } from "./brand";
@@ -8,6 +9,8 @@ import { Brand } from "./brand";
 export function SiteHeader() {
   const mobileMenu = useRef<HTMLDetailsElement>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const currentSection = pathname.replace(/\/$/, "");
 
   useEffect(() => {
     // Start refreshes at the top of the page instead of restoring the previous
@@ -30,8 +33,8 @@ export function SiteHeader() {
         <Brand />
         <nav className="main-nav" aria-label="Primary navigation">
           <Link href="/#how-it-works">How it works</Link>
-          <Link href="/local/">Local</Link>
-          <Link href="/start/">Hosted</Link>
+          <Link href="/local/" aria-current={currentSection === "/local" ? "page" : undefined}>Local</Link>
+          <Link href="/start/" aria-current={currentSection === "/start" ? "page" : undefined}>Hosted</Link>
         </nav>
         <Link className="button button--compact button--ink" href="/start/">
           Get started
@@ -47,8 +50,8 @@ export function SiteHeader() {
           </summary>
           <nav className="mobile-nav__panel" aria-label="Mobile navigation">
             <Link href="/#how-it-works" onClick={closeMobileMenu}>How it works</Link>
-            <Link href="/local/" onClick={closeMobileMenu}>Local</Link>
-            <Link href="/start/" onClick={closeMobileMenu}>Hosted</Link>
+            <Link href="/local/" aria-current={currentSection === "/local" ? "page" : undefined} onClick={closeMobileMenu}>Local</Link>
+            <Link href="/start/" aria-current={currentSection === "/start" ? "page" : undefined} onClick={closeMobileMenu}>Hosted</Link>
             <Link className="mobile-nav__install" href="/install/" onClick={closeMobileMenu}>
               Install local ↗
             </Link>

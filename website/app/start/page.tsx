@@ -22,8 +22,8 @@ export default function StartPage() {
           <div className="page-hero__aside"><p>Ninai denies access by default. Connecting creates an empty-permission client; you decide which project it can read or propose to.</p><div className="hero-actions"><a className="button button--acid" href="https://ninai-cloud.onrender.com/control/login?screen_hint=signup">Create account ↗</a><a className="button button--ink" href="https://ninai-cloud.onrender.com/control/login">Sign in</a></div></div>
         </div>
       </section>
-      <section className="install-choice shell" aria-label="Hosted onboarding steps">
-        <article><span className="status-pill status-pill--ready">1 minute</span><h2>1. Create a workspace</h2><p>Sign up, name your workspace, and create the first project. Local Mac memory is not uploaded.</p></article>
+      <section className="install-choice onboarding-steps shell" aria-label="Hosted onboarding steps">
+        <article><span className="status-pill status-pill--ready">Account setup</span><h2>1. Create a workspace</h2><p>Sign up, name your workspace, and create the first project. Local Mac memory is not uploaded.</p></article>
         <article><span className="status-pill">Zero access initially</span><h2>2. Connect an AI</h2><p>Choose Ninai in Claude or ChatGPT when listed, or add the hosted MCP endpoint during beta.</p></article>
         <article><span className="status-pill">Explicit grant</span><h2>3. Select a project</h2><p>Open Connections, grant read and propose access to one project, then test a safe synthetic memory.</p></article>
       </section>
