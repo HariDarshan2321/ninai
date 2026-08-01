@@ -109,6 +109,11 @@ class ControlAppTest(unittest.TestCase):
                            "Your AI should remember the work. Not your whole life."):
             self.assertIn(brand_copy, response.text)
         self.assertIn('src="https://ninai.io/assets/ninai-wordmark.svg" alt="Ninai"', response.text)
+        for native_dialog in ("prompt(", "alert(", "confirm("):
+            self.assertNotIn(native_dialog, response.text)
+        for dashboard_copy in ("Finish setup", "Copy MCP address", "Manual beta connection",
+                               "Choose a project", "Create your workspace"):
+            self.assertIn(dashboard_copy, response.text)
 
     def test_control_and_error_responses_have_security_headers(self):
         for response in (
