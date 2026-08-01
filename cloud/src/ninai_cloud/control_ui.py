@@ -3,7 +3,7 @@
 import json
 
 CONTROL_CENTER_HTML = r"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b302b"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" href="/favicon.svg">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b302b"><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2"><link rel="shortcut icon" href="/favicon.svg?v=2"><link rel="apple-touch-icon" href="/favicon.svg?v=2">
 <title>Ninai Control Center — Hosted AI memory</title><style>
 :root{font:15px "Avenir Next",Avenir,system-ui,sans-serif;color:#111512;background:#f4efe5;--vault:#0b302b;--paper:#f4efe5;--soft:#fbf8f1;--signal:#ff6846;--permit:#dcef7b;--moss:#9cb5a8;--line:rgba(17,21,18,.18)}*{box-sizing:border-box}html{background:var(--paper)}body{margin:0;background:var(--paper)}
 .topbar{min-height:78px;display:flex;align-items:center;justify-content:space-between;gap:24px;border-bottom:1px solid var(--line);padding:0 max(24px,calc((100vw - 1180px)/2));background:rgba(244,239,229,.94)}.wordmark{width:112px;display:inline-flex;align-items:center;text-decoration:none}.wordmark img{width:112px;height:auto;display:block}.topbar__meta{display:flex;align-items:center;gap:12px;color:#52615b;font:11px ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase}.return-mark{width:24px;height:24px;display:block;border-radius:7px}
