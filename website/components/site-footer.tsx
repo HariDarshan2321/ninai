@@ -18,8 +18,10 @@ export function SiteFooter() {
           <div>
             <p className="footer-label">Product</p>
             <Link href="/install/">Install</Link>
+            <Link href="/start/">Hosted signup</Link>
             <Link href="/local/">Local Claude Code memory</Link>
             <Link href="/privacy/">Privacy</Link>
+            <Link href="/terms/">Terms</Link>
           </div>
           <div>
             <p className="footer-label">Connect</p>
@@ -31,7 +33,7 @@ export function SiteFooter() {
       </div>
       <div className="shell site-footer__bottom">
         <span>© 2026 Ninai</span>
-        <span>Hosted invitation beta · Open-source local engine</span>
+        <span>Hosted public beta · Open-source local engine</span>
       </div>
     </footer>
   );

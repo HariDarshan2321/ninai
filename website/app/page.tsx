@@ -50,7 +50,7 @@ export default function HomePage() {
             </p>
             <div className={styles.heroActions}>
               <Link className={styles.primaryAction} href="/install/#local-install">Install locally <span aria-hidden="true">↗</span></Link>
-              <a className={styles.secondaryAction} href="mailto:hello@ninai.io?subject=Ninai%20hosted%20beta">Request hosted access</a>
+              <Link className={styles.secondaryAction} href="/start/">Create hosted account</Link>
             </div>
             <ul className={styles.proofList} aria-label="MVP properties">
               <li>Local cross-agent gate passed</li><li>Source-backed recall</li><li>Immediate revocation</li>
@@ -104,7 +104,7 @@ export default function HomePage() {
         <div className={`shell ${styles.setupLayout}`}>
           <div className={styles.setupCopy}>
             <p className={styles.eyebrow}>Choose your vault</p><h2>Hosted beta or local.</h2>
-            <p>Use the invitation beta across Claude and Codex, or keep an open-source SQLite vault entirely on your machine. Local memory is never uploaded automatically.</p>
+            <p>Use the hosted public beta across Claude and Codex, or keep an open-source SQLite vault entirely on your machine. Local memory is never uploaded automatically.</p>
             <Link href="/install/">Open the setup guide →</Link>
           </div>
           <div className={styles.setupDiagram} aria-label="Ninai product flow">

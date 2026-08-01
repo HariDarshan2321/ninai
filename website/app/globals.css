@@ -1765,6 +1765,10 @@ a:focus-visible {
   align-items: end;
 }
 
+.page-hero__grid > * {
+  min-width: 0;
+}
+
 .page-hero h1 {
   max-width: 900px;
   margin: 24px 0 0;
@@ -2870,7 +2874,23 @@ a:focus-visible {
 
   .page-hero h1,
   .research-hero h1 {
-    font-size: clamp(3.5rem, 18vw, 5rem);
+    font-size: clamp(3rem, 15vw, 4rem);
+    letter-spacing: -0.065em;
+  }
+
+  .page-hero__grid {
+    gap: 36px;
+  }
+
+  .hero-actions {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .hero-actions .button {
+    width: 100%;
   }
 
   .install-layout {
@@ -2942,6 +2962,16 @@ a:focus-visible {
 }
 
 @media (max-width: 380px) {
+  .site-header__inner {
+    grid-template-columns: 1fr auto;
+  }
+
+  .site-header__inner > .button {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
   .site-header__inner {
     grid-template-columns: 1fr auto;
   }

@@ -5,7 +5,7 @@ description = "Opt-in hosted PostgreSQL service for Ninai"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
-  "mcp[cli]>=1.12.0",
+  "mcp[cli]>=1.12.0,<2",
   "psycopg[binary]>=3.2,<4",
   "PyJWT[crypto]>=2.9,<3",
 ]
@@ -13,6 +13,7 @@ dependencies = [
 [project.scripts]
 ninai-cloud-mcp = "ninai_cloud.mcp_server:main"
 ninai-cloud-bootstrap = "ninai_cloud.bootstrap:main"
+ninai-cloud-reviewer-seed = "ninai_cloud.reviewer_seed:main"
 
 [project.optional-dependencies]
 test = []

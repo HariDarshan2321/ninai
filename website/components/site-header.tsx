@@ -31,10 +31,10 @@ export function SiteHeader() {
         <nav className="main-nav" aria-label="Primary navigation">
           <Link href="/#how-it-works">How it works</Link>
           <Link href="/local/">Local</Link>
-          <Link href="/install/#hosted-beta">Hosted beta</Link>
+          <Link href="/start/">Hosted</Link>
         </nav>
-        <Link className="button button--compact button--ink" href="/install/">
-          Install local
+        <Link className="button button--compact button--ink" href="/start/">
+          Get started
           <span aria-hidden="true">↗</span>
         </Link>
         <details
@@ -48,7 +48,7 @@ export function SiteHeader() {
           <nav className="mobile-nav__panel" aria-label="Mobile navigation">
             <Link href="/#how-it-works" onClick={closeMobileMenu}>How it works</Link>
             <Link href="/local/" onClick={closeMobileMenu}>Local</Link>
-            <Link href="/install/#hosted-beta" onClick={closeMobileMenu}>Hosted beta</Link>
+            <Link href="/start/" onClick={closeMobileMenu}>Hosted</Link>
             <Link className="mobile-nav__install" href="/install/" onClick={closeMobileMenu}>
               Install local ↗
             </Link>

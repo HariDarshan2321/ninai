@@ -28,6 +28,7 @@ SQLite vault.
 - Dashboard: `https://ninai-cloud.onrender.com/control`
 - Website: `https://ninai.io`
 - Privacy policy: `https://ninai.io/privacy/`
+- Terms: `https://ninai.io/terms/`
 - Support: `hello@ninai.io`
 
 The server exposes bounded search, fetch, recall, review-first proposal, and
@@ -46,16 +47,19 @@ Ready:
 - tool titles, narrow descriptions, structured outputs, and safety annotations;
 - public website, privacy URL, support address, and brand assets.
 
+Prepared in the repository:
+
+- public terms and expanded hosted-data privacy pages;
+- an idempotent synthetic reviewer-workspace seeder;
+- listing copy, prompts, screenshot plan, reviewer steps, and an evidence matrix
+  in [`DIRECTORY-SUBMISSION-KIT.md`](DIRECTORY-SUBMISSION-KIT.md).
+
 Still required before submission:
 
-- a final public terms-of-service URL (the privacy architecture page is not a
-  substitute for contractual terms);
-- a reviewer account/workspace containing synthetic sample memories and
-  least-privilege grants;
-- recorded tests for search, fetch, recall, proposal, approval, revocation, and
-  reconnect/refresh-token behavior—not only the successful empty search;
-- final listing copy, category, icon/logo files, screenshots, example prompts,
-  reviewer instructions, supported countries/plans, and a support runbook;
+- create the controlled reviewer mailbox/account, run the seeder, and enter its
+  credentials only in OpenAI's protected reviewer field;
+- execute and capture the pending manual positive/negative tests in the kit;
+- final screenshots, supported countries/plans, and a support runbook;
 - OpenAI Platform organization ownership or an assigned role with **Apps
   Management: Write**, plus verified individual/business identity;
 - five positive and three negative test cases with expected behavior;

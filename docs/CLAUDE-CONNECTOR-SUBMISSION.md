@@ -28,6 +28,7 @@ read the private SQLite vault in the macOS app.
 - Website: `https://ninai.io`
 - Dashboard: `https://ninai-cloud.onrender.com/control`
 - Privacy: `https://ninai.io/privacy/`
+- Terms: `https://ninai.io/terms/`
 - Support: `hello@ninai.io`
 - Authentication: OAuth 2.1 authorization-code flow with PKCE
 - Tools: search, fetch, recall, propose_memory, remember
@@ -49,13 +50,19 @@ Ready:
   disclosure logging;
 - public website, privacy URL, support and security addresses.
 
+Prepared in the repository:
+
+- public terms and hosted privacy details covering collection, use, retention,
+  deletion, subprocessors, and the local/hosted boundary;
+- an idempotent synthetic reviewer-workspace seeder plus reviewer instructions,
+  listing copy, screenshot plan, and evidence matrix in
+  [`DIRECTORY-SUBMISSION-KIT.md`](DIRECTORY-SUBMISSION-KIT.md).
+
 Still required before submission:
 
-- a dedicated reviewer account with synthetic sample data (Anthropic policy
-  explicitly requires a standard testing account);
-- three recorded, working examples covering core functionality;
-- a clear hosted-service privacy policy that states collection, use, retention,
-  deletion, and subprocessors—not only architectural boundaries;
+- create a controlled reviewer mailbox/account, run the seeder, and supply its
+  credentials only through Anthropic's protected review flow;
+- record the pending positive and negative reviewer cases in the kit;
 - public troubleshooting documentation and a support/incident runbook;
 - production availability/latency, backup/restore, deletion, and refresh-token
   evidence;

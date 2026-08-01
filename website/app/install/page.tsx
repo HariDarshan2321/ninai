@@ -74,16 +74,16 @@ export default function InstallPage() {
         <div className="shell page-hero__grid">
           <div>
             <p className="section-label">Choose your mode</p>
-            <h1>Run local now. Join the hosted beta by invitation.</h1>
+            <h1>Install locally or start a hosted workspace.</h1>
           </div>
           <div className="page-hero__aside">
             <p>
               The local engine is available today. The hosted endpoint and OAuth login are
-              live; each customer manages their own workspace, projects, connections, and grants.
+              live; create an account, connect an AI, and grant one project from the dashboard.
             </p>
             <div className="requirement-row">
               <span>Local</span><strong>macOS</strong>
-              <span>Hosted</span><strong>Invitation beta</strong>
+              <span>Hosted</span><strong>Public beta</strong>
               <span>Cloud sync</span><strong>Never automatic</strong>
             </div>
           </div>
@@ -92,7 +92,7 @@ export default function InstallPage() {
 
       <section className="install-choice shell" aria-label="Deployment choices">
         <article><span className="status-pill status-pill--ready">Available now</span><h2>Local macOS app</h2><p>Install the owner UI and keep the complete vault in SQLite on your Mac. No account is required.</p><a href="#local-install">Continue to local install ↓</a></article>
-        <article><span className="status-pill">Invitation beta</span><h2>Hosted cloud</h2><p>Sign in from the website dashboard and connect a supported remote MCP client to the separate PostgreSQL vault.</p><a href="#hosted-beta">Configure a cloud client ↓</a></article>
+        <article><span className="status-pill">Public beta</span><h2>Hosted cloud</h2><p>Create an account, make one project, and connect a supported remote MCP client to the separate PostgreSQL vault.</p><Link href="/start/">Start hosted onboarding →</Link></article>
       </section>
 
       <section className="install-layout shell" id="hosted-beta">
@@ -112,7 +112,7 @@ export default function InstallPage() {
               <p className="install-step__label">Ninai account</p>
               <h2>Sign in and create one workspace and project.</h2>
               <p>The hosted vault is separate from local mode. Open the control center, sign in with Auth0, create a workspace, then create the project boundary you want to share.</p>
-              <p><a href="https://ninai-cloud.onrender.com/control">Open the hosted control center ↗</a></p>
+              <p><a href="https://ninai-cloud.onrender.com/control/login?screen_hint=signup">Create account ↗</a> · <a href="https://ninai-cloud.onrender.com/control/login">Sign in</a></p>
             </div>
           </section>
           <section className="install-step" id="hosted-claude">
@@ -147,7 +147,7 @@ export default function InstallPage() {
             <div>
               <p className="install-step__label">First memory</p>
               <h2>Propose, approve, then recall one safe test.</h2>
-              <p>After the operator confirms your project grant, paste this into the connected client. Open the dashboard Review queue and approve the proposal, then start a fresh session and run the recall prompt.</p>
+              <p>After you save the project grant, paste this into the connected client. Open the dashboard Review queue and approve the proposal, then start a fresh session and run the recall prompt.</p>
               <CopyCommand>{hostedProposalPrompt}</CopyCommand>
               <CopyCommand>{hostedRecallPrompt}</CopyCommand>
             </div>
@@ -186,8 +186,10 @@ export default function InstallPage() {
               <CopyCommand>{installClaudeCommand}</CopyCommand>
               <p><strong>Codex</strong></p>
               <CopyCommand>{installCodexCommand}</CopyCommand>
+              <p><a className="button button--ink" href="/download/install-ninai-macos.sh" download>Download the macOS installer ↓</a></p>
+              <p>After downloading, run <code>bash ~/Downloads/install-ninai-macos.sh --client claude-code</code> or replace <code>claude-code</code> with <code>codex</code>.</p>
               <p>Review the <a href="https://github.com/HariDarshan2321/ninai/blob/main/scripts/install-local">installer source</a> before running a downloaded script. If Python is missing, install it with <code>brew install python@3.13</code> and rerun the same command.</p>
-              <p>A double-click <code>Ninai.app</code> download is packaged but cannot be published safely until it is signed and notarized with the Ninai Apple Developer identity. Do not bypass Gatekeeper for an unsigned build.</p>
+              <p>The one-command installer is the supported Mac download today. A double-click <code>Ninai.app</code> is packaged internally but will be published only after Developer ID signing and Apple notarization. Do not bypass Gatekeeper for an unsigned build.</p>
             </div>
           </section>
 

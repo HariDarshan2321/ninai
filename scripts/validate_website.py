@@ -26,10 +26,10 @@ website = Path(__file__).resolve().parents[1] / "website"
 root = website / "out"
 required = [
     "index.html", "install/index.html", "local/index.html", "compatibility/index.html",
-    "research/index.html", "privacy/index.html",
+    "research/index.html", "privacy/index.html", "terms/index.html", "start/index.html",
     "404.html", "robots.txt", "sitemap.xml", "site.webmanifest", "llms.txt",
     ".well-known/security.txt", "assets/og-image.png", "assets/ninai-wordmark.svg",
-    "CNAME",
+    "download/install-ninai-macos.sh", "CNAME",
 ]
 for item in required:
     if not (root / item).exists():
@@ -42,6 +42,8 @@ indexable_pages = [
     root / "install/index.html",
     root / "local/index.html",
     root / "privacy/index.html",
+    root / "terms/index.html",
+    root / "start/index.html",
 ]
 nonindex_pages = [root / "compatibility/index.html", root / "research/index.html"]
 public_pages = [*indexable_pages, *nonindex_pages, root / "404.html"]

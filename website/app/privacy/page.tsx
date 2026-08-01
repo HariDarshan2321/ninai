@@ -2,160 +2,33 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy architecture",
-  description:
-    "Compare Ninai's local and hosted AI-memory trust boundaries, permissions, disclosure logs, and current security limitations.",
+  title: "Privacy Policy",
+  description: "How Ninai handles account data, hosted memories, local vaults, connected AI providers, retention, deletion, and security.",
   alternates: { canonical: "/privacy/" },
-  openGraph: {
-    title: "Ninai privacy architecture",
-    description: "Separate local and hosted trust boundaries, stated plainly.",
-    url: "/privacy/",
-    images: [
-      {
-        url: "/assets/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Ninai local-first privacy architecture",
-      },
-    ],
-  },
+  openGraph: { title: "Ninai Privacy Policy", description: "Local and hosted data boundaries, stated plainly.", url: "/privacy/", images: [{ url: "/assets/og-image.png", width: 1200, height: 630, alt: "Ninai privacy" }] },
 };
 
 export default function PrivacyPage() {
-  return (
-    <main id="main-content">
-      <section className="page-hero page-hero--privacy">
-        <div className="shell page-hero__grid">
-          <div>
-            <p className="section-label section-label--light">Privacy architecture</p>
-            <h1>Two modes.<br />Two trust boundaries.</h1>
-          </div>
-          <div className="page-hero__aside">
-            <p>
-              Local mode keeps its vault on your machine. The separate hosted invitation beta
-              stores workspace memory in managed cloud infrastructure and never syncs local data automatically.
-            </p>
-            <span className="privacy-version">Current product model · July 2026</span>
-          </div>
-        </div>
-      </section>
+  return <main id="main-content">
+    <section className="page-hero page-hero--privacy"><div className="shell page-hero__grid">
+      <div><p className="section-label section-label--light">Privacy Policy</p><h1>Your memory.<br />A visible boundary.</h1></div>
+      <div className="page-hero__aside"><p>Local and hosted modes are separate. Ninai does not automatically upload a local vault, and a connected AI receives only memory allowed by its current grant.</p><span className="privacy-version">Effective 1 August 2026</span></div>
+    </div></section>
 
-      <section className="mode-section shell">
-        <div className="mode-grid">
-          <article className="mode-card"><span className="status-pill status-pill--ready">Implemented</span><h2>Local trust boundary</h2><p>The complete SQLite vault, grants, sources, and logs remain on your machine. There is no automatic cloud upload or sync.</p><p>When you send a selected context packet to a cloud AI, that packet leaves the device and the provider's policy applies.</p></article>
-          <article className="mode-card mode-card--future"><span className="status-pill">Invitation beta</span><h2>Hosted trust boundary</h2><p>Hosted workspaces persist memory in managed PostgreSQL so explicitly authorized clients can connect remotely.</p><p>OAuth login, tenant isolation, review, export, disclosure logging, and revocation are implemented. External acceptance and operational hardening remain incomplete; no hosted security certification is claimed.</p></article>
-        </div>
-      </section>
+    <section className="mode-section shell"><div className="mode-grid">
+      <article className="mode-card"><span className="status-pill status-pill--ready">Local</span><h2>Stored on your Mac</h2><p>The SQLite vault, sources, grants, and logs remain on your device. No Ninai account is required and no automatic cloud sync runs.</p><p>If you ask a cloud AI to use selected context, that packet leaves the device and the provider&apos;s policy applies.</p></article>
+      <article className="mode-card mode-card--future"><span className="status-pill">Hosted beta</span><h2>Stored for your workspace</h2><p>Hosted workspaces use managed cloud infrastructure so explicitly authorized clients can connect remotely.</p><p>OAuth identity, tenant checks, review, export, disclosure logging, revocation, and workspace deletion are implemented. No security certification is claimed.</p></article>
+    </div></section>
 
-      <section className="privacy-boundary shell">
-        <p className="section-label">The boundary / 01</p>
-        <div className="boundary-diagram">
-          <div className="boundary-zone boundary-zone--local">
-            <span className="boundary-zone__tag">YOUR MACHINE</span>
-            <div className="boundary-vault">
-              <img src="/assets/ninai-app-icon.svg" alt="" width="44" height="44" />
-              <strong>Complete Ninai vault</strong>
-              <p>Memories · sources · scopes · logs</p>
-            </div>
-            <div className="boundary-policy">permission + retrieval + composition</div>
-          </div>
-          <div className="boundary-crossing">
-            <span>release event</span>
-            <i />
-            <strong>2 facts<br />263 tokens</strong>
-          </div>
-          <div className="boundary-zone boundary-zone--provider">
-            <span className="boundary-zone__tag">AI PROVIDER</span>
-            <div className="boundary-provider">
-              <strong>Selected context packet</strong>
-              <p>The provider’s data policy applies here.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="privacy-sections shell">
-        <article>
-          <span className="privacy-index">02</span>
-          <div>
-            <p className="section-label">What is stored</p>
-            <h2>Compact memory with evidence.</h2>
-            <p>
-              The MVP stores durable content, memory type, scope, source URI, importance,
-              confidence, timestamps, permission grants, and disclosure logs in SQLite.
-            </p>
-            <ul>
-              <li>Decisions, commitments, facts, preferences, procedures, and events</li>
-              <li>Source references such as <code>linear://NIN-42</code></li>
-              <li>Which client received which memory and why</li>
-            </ul>
-          </div>
-        </article>
-        <article>
-          <span className="privacy-index">03</span>
-          <div>
-            <p className="section-label">What is rejected</p>
-            <h2>Credentials are not memory.</h2>
-            <p>
-              Ninai rejects common private-key, bearer-token, GitHub-token, and API-key
-              patterns. The hook selects durable outcome fields instead of persisting whole
-              tool responses.
-            </p>
-            <div className="rejected-sample">
-              <span>api_key=sk-••••••••</span>
-              <strong>[REDACTED_SECRET]</strong>
-            </div>
-          </div>
-        </article>
-        <article>
-          <span className="privacy-index">04</span>
-          <div>
-            <p className="section-label">Permission model</p>
-            <h2>One client. Explicit scopes.</h2>
-            <p>
-              A grant applies to a named client and one scope. Access to project memory does
-              not imply access to personal, health, or finance memory. Revocation takes effect
-              on the next recall.
-            </p>
-            <div className="scope-map">
-              <span className="is-granted">project · allow</span>
-              <span className="is-granted">preference · allow</span>
-              <span>personal · deny</span>
-              <span>health · deny</span>
-              <span>finance · deny</span>
-            </div>
-          </div>
-        </article>
-        <article>
-          <span className="privacy-index">05</span>
-          <div>
-            <p className="section-label">Current limitations</p>
-            <h2>An MVP, not a security certification.</h2>
-            <p>
-              The MVP implements the policy layer. It has not completed the
-              controls required for high-risk production data.
-            </p>
-            <ul>
-              <li>No SQLCipher or full-database encryption yet</li>
-              <li>No signed and notarized desktop package</li>
-              <li>No prompt-injection classifier or independent audit</li>
-              <li>Hosted external acceptance, backup operations, and deletion verification remain incomplete</li>
-            </ul>
-          </div>
-        </article>
-      </section>
-
-      <section className="privacy-cta">
-        <div className="shell">
-          <h2>Inspect before you trust.</h2>
-          <p>Ninai is open for technical review. Security reports are welcome.</p>
-          <div>
-            <a className="button button--acid" href="https://github.com/HariDarshan2321/ninai">View source ↗</a>
-            <a className="button button--dark-line" href="mailto:security@ninai.io">security@ninai.io</a>
-          </div>
-          <Link href="/install/">Continue to installation →</Link>
-        </div>
-      </section>
-    </main>
-  );
+    <section className="privacy-sections shell">
+      <article><span className="privacy-index">01</span><div><p className="section-label">Hosted data</p><h2>What we process.</h2><ul><li>Account identifiers supplied by Auth0, such as email, display name, and identity subject.</li><li>Workspace, project, connection, permission-grant, and review metadata.</li><li>Memories you submit, their source references, and disclosure records showing what a client received.</li><li>Limited operational and security logs needed to run and protect the service.</li></ul><p>We use this data only to provide, secure, troubleshoot, and improve Ninai. Ninai does not sell personal data, run behavioral advertising, or train a Ninai model on hosted memories.</p></div></article>
+      <article><span className="privacy-index">02</span><div><p className="section-label">Service providers</p><h2>Who helps operate the service.</h2><p>Auth0 provides authentication, Render hosts the cloud service and PostgreSQL deployment, Vercel hosts the public website, and GitHub hosts source and installer files. Their processing is governed by their own terms.</p><p>OpenAI, Anthropic, or another AI provider receives a context packet only when you connect that provider and make an authorized request. Provider retention and model-training choices are controlled by your provider account and its policy, not by Ninai.</p></div></article>
+      <article><span className="privacy-index">03</span><div><p className="section-label">Permissions</p><h2>Connected does not mean permitted.</h2><p>A new OAuth client begins with no memory grants. A workspace owner chooses a project and whether the client can read, propose, or auto-activate. Revocation is checked on the next request. Tenant identity comes from verified credentials, never from a client-supplied workspace header.</p></div></article>
+      <article><span className="privacy-index">04</span><div><p className="section-label">Retention and control</p><h2>Export, revoke, or delete.</h2><p>Hosted workspace content remains while the workspace is active. Owners can export data, revoke a client, delete memories, or delete the workspace from the control center. Deletion immediately removes the workspace from normal application access; residual copies may remain temporarily in infrastructure backups until those backups rotate.</p><p>We do not promise a fixed backup-retention period until the public-beta backup policy is finalized. For access, correction, portability, deletion, or objection requests, email <a href="mailto:privacy@ninai.io">privacy@ninai.io</a>. We may need to verify the request.</p></div></article>
+      <article><span className="privacy-index">05</span><div><p className="section-label">Safety</p><h2>Credentials are not memory.</h2><p>Ninai blocks common secret patterns, uses encrypted HTTPS transport for the hosted service, and applies server-side authorization. These controls reduce risk but do not make the beta suitable for passwords, private keys, health records, payment-card data, government identifiers, children&apos;s data, or other high-risk regulated information.</p></div></article>
+      <article><span className="privacy-index">06</span><div><p className="section-label">International processing</p><h2>Cloud data may cross borders.</h2><p>Our service providers may process data in countries different from yours. Use hosted mode only if this is appropriate for your organization. Local mode is available when you prefer the vault to remain on your device.</p></div></article>
+      <article><span className="privacy-index">07</span><div><p className="section-label">Security and changes</p><h2>A public beta, not a certification.</h2><ul><li>No signed and notarized desktop package yet.</li><li>No independent security audit or compliance certification yet.</li><li>No prompt-injection classifier or guarantee that an AI provider will interpret context correctly.</li></ul><p>We may update this policy as the service changes. Material updates will receive a new effective date on this page. Security reports: <a href="mailto:security@ninai.io">security@ninai.io</a>.</p></div></article>
+    </section>
+    <section className="privacy-cta"><div className="shell"><h2>Choose the boundary that fits.</h2><p>Start hosted or keep the complete vault on your Mac.</p><div><Link className="button button--acid" href="/start/">Start hosted ↗</Link><Link className="button button--dark-line" href="/install/#local-install">Install local</Link></div><Link href="/terms/">Read the Terms of Service →</Link></div></section>
+  </main>;
 }
