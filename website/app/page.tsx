@@ -103,8 +103,8 @@ export default function HomePage() {
       <section className={styles.setupSection}>
         <div className={`shell ${styles.setupLayout}`}>
           <div className={styles.setupCopy}>
-            <p className={styles.eyebrow}>Choose your vault</p><h2>Hosted beta or local.</h2>
-            <p>Use the hosted public beta across Claude and Codex, or keep an open-source SQLite vault entirely on your machine. Local memory is never uploaded automatically.</p>
+            <p className={styles.eyebrow}>Choose your vault</p><h2>Invitation beta or local.</h2>
+            <p>Try the hosted invitation beta with supported OAuth clients, or keep an open-source SQLite vault entirely on your machine. Local memory is never uploaded automatically.</p>
             <Link href="/install/">Open the setup guide →</Link>
           </div>
           <div className={styles.setupDiagram} aria-label="Ninai product flow">

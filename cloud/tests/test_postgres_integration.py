@@ -206,25 +206,23 @@ class PostgresLifecycleTest(unittest.TestCase):
         self.assertEqual(str(row[1]), self.user)
         self.assertEqual(row[2], hashlib.sha256(raw.encode()).hexdigest())
 
-    def test_authenticated_subject_can_create_workspace_without_body_identity(self) -> None:
+    def test_authenticated_subject_gets_existing_workspace_without_body_identity(self) -> None:
         control = ControlService(self.store._connection)
         created = control.create_workspace(
             ControlIdentity(self.user, None, f"{self.user}@test.invalid", "Verified Owner"),
             {"name": "Second Workspace", "user_id": str(uuid.uuid4()),
              "workspace_id": str(uuid.uuid4())},
         )
-        try:
-            with self.psycopg.connect(DATABASE_URL) as db:
-                row = db.execute("""SELECT w.owner_user_id,m.user_id,m.role FROM workspaces w
-                    JOIN workspace_members m ON m.workspace_id=w.id WHERE w.id=%s""",
-                    (created["id"],)).fetchone()
-            self.assertEqual(str(row[0]), self.user)
-            self.assertEqual(str(row[1]), self.user)
-            self.assertEqual(row[2], "owner")
-        finally:
-            with self.psycopg.connect(DATABASE_URL) as db:
-                db.execute("DELETE FROM workspace_members WHERE workspace_id=%s", (created["id"],))
-                db.execute("DELETE FROM workspaces WHERE id=%s", (created["id"],))
+        with self.psycopg.connect(DATABASE_URL) as db:
+            memberships = db.execute("""SELECT w.id,w.owner_user_id,m.user_id,m.role FROM workspaces w
+                JOIN workspace_members m ON m.workspace_id=w.id
+                WHERE m.user_id=%s AND m.revoked_at IS NULL AND w.deleted_at IS NULL""",
+                (self.user,)).fetchall()
+        self.assertEqual(str(created["id"]), self.workspace)
+        self.assertEqual(len(memberships), 1)
+        self.assertEqual(str(memberships[0][1]), self.user)
+        self.assertEqual(str(memberships[0][2]), self.user)
+        self.assertEqual(memberships[0][3], "owner")
 
     def test_auth0_subject_and_dynamic_client_map_to_internal_uuids(self) -> None:
         settings = AuthSettings(

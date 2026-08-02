@@ -120,4 +120,10 @@ for html in nonindex_pages:
     text = html.read_text(encoding="utf-8")
     if 'name="robots" content="noindex, follow"' not in text:
         raise SystemExit(f"{html}: expected noindex, follow")
+
+global_css = (website / "app/globals.css").read_text(encoding="utf-8")
+closed_panel = re.search(r"\.mobile-nav__panel\s*\{[^}]*display:\s*none;", global_css, re.S)
+open_panel = re.search(r"\.mobile-nav\[open\]\s+\.mobile-nav__panel\s*\{[^}]*display:\s*grid;", global_css, re.S)
+if closed_panel is None or open_panel is None:
+    raise SystemExit("Mobile navigation panel must remain hidden until its details element is open")
 print("Website validation passed")

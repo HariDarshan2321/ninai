@@ -33,7 +33,7 @@ export function SiteFooter() {
       </div>
       <div className="shell site-footer__bottom">
         <span>© 2026 Ninai</span>
-        <span>Hosted public beta · Open-source local engine</span>
+        <span>Hosted invitation beta · Open-source local engine</span>
       </div>
     </footer>
   );

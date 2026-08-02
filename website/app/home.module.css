@@ -1250,7 +1250,26 @@
 @media (max-width: 480px) {
   .kicker {
     align-items: flex-start;
+    font-size: 0.75rem;
     line-height: 1.5;
+  }
+
+  .productCaption,
+  .eyebrow,
+  .cardMeta,
+  .personaTopline,
+  .diagramLabel,
+  .boundaryVisual span,
+  .boundaryVisual small,
+  .toolEvent span,
+  .toolEvent small,
+  .memoryReceipt small,
+  .receiptFooter,
+  .personaCard small,
+  .diagramArrow span,
+  .hostColumn small,
+  .ninaiColumn small {
+    font-size: 0.75rem;
   }
 
   .heroTitle {

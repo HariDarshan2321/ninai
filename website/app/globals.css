@@ -196,12 +196,16 @@ pre,
   position: absolute;
   top: calc(100% + 12px);
   right: 0;
-  display: grid;
+  display: none;
   border: 1px solid var(--ink);
   border-radius: 22px 22px 5px 22px;
   padding: 10px;
   background: var(--paper-soft);
   box-shadow: 12px 12px 0 rgba(11, 48, 43, 0.16);
+}
+
+.mobile-nav[open] .mobile-nav__panel {
+  display: grid;
 }
 
 .mobile-nav__panel a {

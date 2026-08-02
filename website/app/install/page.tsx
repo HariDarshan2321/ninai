@@ -4,13 +4,13 @@ import Link from "next/link";
 import { CopyCommand } from "@/components/copy-command";
 
 export const metadata: Metadata = {
-  title: "Install Ninai AI memory locally or use the hosted beta",
+  title: "Install Ninai AI memory locally or use the hosted invitation beta",
   description:
     "Connect a supported cloud AI client to Ninai's hosted dashboard or install the open-source local memory engine on macOS.",
   alternates: { canonical: "/install/" },
   openGraph: {
     title: "Choose how to run Ninai",
-    description: "Hosted beta status and the complete local engine installation path.",
+    description: "Hosted invitation-beta status and the complete local engine installation path.",
     url: "/install/",
     images: [
       {
@@ -83,7 +83,7 @@ export default function InstallPage() {
             </p>
             <div className="requirement-row">
               <span>Local</span><strong>macOS</strong>
-              <span>Hosted</span><strong>Public beta</strong>
+              <span>Hosted</span><strong>Invitation beta</strong>
               <span>Cloud sync</span><strong>Never automatic</strong>
             </div>
           </div>
@@ -92,12 +92,12 @@ export default function InstallPage() {
 
       <section className="install-choice shell" aria-label="Deployment choices">
         <article><span className="status-pill status-pill--ready">Available now</span><h2>Local macOS app</h2><p>Install the owner UI and keep the complete vault in SQLite on your Mac. No account is required.</p><a href="#local-install">Continue to local install ↓</a></article>
-        <article><span className="status-pill">Public beta</span><h2>Hosted cloud</h2><p>Create an account, make one project, and connect a supported remote MCP client to the separate PostgreSQL vault.</p><Link href="/start/">Start hosted onboarding →</Link></article>
+        <article><span className="status-pill">Invitation beta</span><h2>Hosted cloud</h2><p>Create an account, make one project, and connect a supported remote MCP client to the separate PostgreSQL vault.</p><Link href="/start/">Start hosted onboarding →</Link></article>
       </section>
 
       <section className="install-layout shell" id="hosted-beta">
         <aside className="install-toc">
-          <p className="section-label">Hosted beta</p>
+          <p className="section-label">Hosted invitation beta</p>
           <a href="#hosted-account">Ninai account</a>
           <a href="#hosted-claude">Claude Code</a>
           <a href="#hosted-codex">Codex</a>

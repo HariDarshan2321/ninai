@@ -38,6 +38,32 @@ class RecordingDB:
         return None
 
 
+class WorkspaceCreationDB:
+    def __init__(self, existing=None):
+        self.calls = []
+        self.existing = existing
+        self.sql = ""
+        self.params = ()
+
+    def execute(self, sql, params=()):
+        self.calls.append((sql, params))
+        self.sql = sql
+        self.params = params
+        if "INSERT INTO workspaces" in sql:
+            self.existing = {
+                "id": params[0], "name": params[1], "slug": params[2],
+                "plan": "free", "default_write_mode": "propose", "created_at": None,
+            }
+        return self
+
+    def fetchone(self):
+        if "FROM workspaces w JOIN workspace_members" in self.sql:
+            return self.existing
+        if "RETURNING id,name,slug,plan" in self.sql:
+            return self.existing
+        return None
+
+
 @contextmanager
 def recording_connection(db):
     yield db
@@ -112,8 +138,11 @@ class ControlAppTest(unittest.TestCase):
         for native_dialog in ("prompt(", "alert(", "confirm("):
             self.assertNotIn(native_dialog, response.text)
         for dashboard_copy in ("Finish setup", "Copy MCP address", "Manual beta connection",
-                               "Choose a project", "Create your workspace"):
+                               "Choose a project", "Create your workspace", "Read approved memories",
+                               "Propose new memories", "Check configuration", "#hosted-chat"):
             self.assertIn(dashboard_copy, response.text)
+        self.assertNotIn("Ninai is ready to use", response.text)
+        self.assertNotIn("#hosted-openai", response.text)
 
     def test_control_and_error_responses_have_security_headers(self):
         for response in (
@@ -183,6 +212,27 @@ class ControlAppTest(unittest.TestCase):
         response = client.get("/control?code=authorization-code&state=wrong")
         self.assertEqual(response.status_code, 400)
         self.assertIn("state validation", response.json()["error"])
+
+    def test_dashboard_oauth_cancel_is_explained_and_clears_transient_cookies(self):
+        from ninai_cloud.auth import AuthSettings
+        settings = AuthSettings(
+            issuer="https://tenant.auth0.com/", audience="https://api.example/mcp",
+            resource="https://api.example/mcp", jwks_uri="https://tenant.auth0.com/jwks",
+            authorization_endpoint="https://tenant.auth0.com/authorize",
+            token_endpoint="https://tenant.auth0.com/oauth/token",
+            control_client_id="dashboard-client", control_base_url="https://api.example",
+        )
+        endpoint = ControlApp(self.service, Verifier(), settings).handle
+        client = TestClient(Starlette(routes=[Route("/control", endpoint, methods=["GET"])]))
+        response = client.get("/control?error=access_denied&error_description=untrusted")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Sign-in was canceled. No Ninai access was granted.", response.text)
+        self.assertNotIn("untrusted", response.text)
+        cookies = response.headers.get_list("set-cookie")
+        self.assertTrue(any(value.startswith("ninai_oauth_state=") and "Max-Age=0" in value
+                            for value in cookies))
+        self.assertTrue(any(value.startswith("ninai_pkce_verifier=") and "Max-Age=0" in value
+                            for value in cookies))
 
     def test_dashboard_oauth_callback_sets_httponly_session_cookie(self):
         from ninai_cloud.auth import AuthSettings
@@ -306,6 +356,41 @@ class ControlAppTest(unittest.TestCase):
                             if "INSERT INTO personal_access_tokens" in sql)
         self.assertEqual(token_insert[4], hashlib.sha256(token.encode()).hexdigest())
         self.assertNotIn(token, token_insert)
+
+    def test_first_workspace_creation_is_idempotent_across_retries(self):
+        db = WorkspaceCreationDB()
+        service = ControlService(lambda: recording_connection(db))
+        who = ControlIdentity("user-1", None, "owner@example.test", "Owner")
+
+        created = service.create_workspace(who, {"name": "Acme"})
+        retried = service.create_workspace(who, {"name": "Ignored retry name"})
+
+        self.assertEqual(retried, created)
+        self.assertEqual(len([sql for sql, _ in db.calls if "INSERT INTO workspaces" in sql]), 1)
+        self.assertEqual(len([sql for sql, _ in db.calls if "INSERT INTO workspace_members" in sql]), 1)
+        lock_indexes = [i for i, (sql, _) in enumerate(db.calls)
+                        if "pg_advisory_xact_lock" in sql]
+        lookup_indexes = [i for i, (sql, _) in enumerate(db.calls)
+                          if "FROM workspaces w JOIN workspace_members" in sql]
+        self.assertEqual(len(lock_indexes), 2)
+        self.assertTrue(all(lock < lookup for lock, lookup in zip(lock_indexes, lookup_indexes)))
+
+    def test_authenticated_member_gets_existing_workspace_without_new_insert(self):
+        existing = {
+            "id": "workspace-1", "name": "Acme", "slug": "acme",
+            "plan": "free", "default_write_mode": "propose", "created_at": None,
+        }
+        db = WorkspaceCreationDB(existing)
+        service = ControlService(lambda: recording_connection(db))
+        who = ControlIdentity("user-1", "workspace-1", "owner@example.test", "Owner")
+
+        result = service.create_workspace(who, {"name": "Another workspace"})
+
+        self.assertEqual(result, existing)
+        self.assertFalse(any("INSERT INTO workspaces" in sql for sql, _ in db.calls))
+        lookup = next(params for sql, params in db.calls
+                      if "FROM workspaces w JOIN workspace_members" in sql)
+        self.assertEqual(lookup, ("user-1", "workspace-1"))
 
     def test_grants_require_an_explicit_coherent_permission(self):
         service = ControlService(lambda: recording_connection(RecordingDB()))

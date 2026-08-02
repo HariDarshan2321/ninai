@@ -24,7 +24,7 @@ SQLite vault.
 - MCP server: `https://ninai-cloud.onrender.com/mcp`
 - Authentication: OAuth 2.1 authorization-code flow with PKCE through Auth0
 - Protected-resource discovery:
-  `https://ninai-cloud.onrender.com/.well-known/oauth-protected-resource`
+  `https://ninai-cloud.onrender.com/.well-known/oauth-protected-resource/mcp`
 - Dashboard: `https://ninai-cloud.onrender.com/control`
 - Website: `https://ninai.io`
 - Privacy policy: `https://ninai.io/privacy/`

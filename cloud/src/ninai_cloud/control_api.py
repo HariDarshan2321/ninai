@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import hashlib
 import base64
+import html
 import re
 import secrets
 import uuid
@@ -56,18 +57,33 @@ class ControlService:
         return slug or "ninai"
 
     def create_workspace(self, identity: ControlIdentity, data: Mapping[str, Any]) -> dict[str, Any]:
-        """Create the first tenant using only the verified token subject as owner."""
+        """Create the first tenant using only the verified token subject as owner.
+
+        The per-user transaction lock makes browser retries and concurrent form
+        submissions idempotent.  Once a user has an active workspace, this
+        endpoint returns it instead of creating another membership that would
+        make the user's workspace identity ambiguous.
+        """
         name = str(data.get("name", "")).strip()
         if not name:
             raise ValueError("name is required")
-        workspace_id = str(uuid.uuid4())
-        slug = f"{self._slug(name)}-{workspace_id.split('-')[0]}"
         email = identity.email or f"{identity.user_id}@identity.invalid"
         display_name = identity.display_name or email.split("@", 1)[0]
         with self._connect() as db:
+            db.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                       (identity.user_id,))
             db.execute("""INSERT INTO users(id,email,display_name) VALUES(%s,%s,%s)
               ON CONFLICT(id) DO UPDATE SET display_name=EXCLUDED.display_name""",
               (identity.user_id, email, display_name))
+            existing = db.execute("""SELECT w.id,w.name,w.slug,w.plan,w.default_write_mode,w.created_at
+              FROM workspaces w JOIN workspace_members m ON m.workspace_id=w.id
+              WHERE m.user_id=%s AND m.revoked_at IS NULL AND w.deleted_at IS NULL
+              ORDER BY (w.id=%s::uuid) DESC NULLS LAST,m.created_at LIMIT 1""",
+              (identity.user_id, identity.workspace_id)).fetchone()
+            if existing:
+                return dict(existing)
+            workspace_id = str(uuid.uuid4())
+            slug = f"{self._slug(name)}-{workspace_id.split('-')[0]}"
             row = db.execute("""INSERT INTO workspaces(id,name,slug,owner_user_id)
               VALUES(%s,%s,%s,%s) RETURNING id,name,slug,plan,default_write_mode,created_at""",
               (workspace_id, name, slug, identity.user_id)).fetchone()
@@ -382,6 +398,17 @@ class ControlApp:
         if path == "/control/logout" and request.method == "GET":
             response = RedirectResponse("/control", status_code=302, headers=self._security_headers())
             response.delete_cookie("ninai_access_token", path="/")
+            return response
+        if path == "/control" and request.method == "GET" and request.query_params.get("error"):
+            error = request.query_params.get("error", "")
+            message = ("Sign-in was canceled. No Ninai access was granted."
+                       if error == "access_denied"
+                       else "Sign-in could not be completed. Please try again.")
+            body = render_control_center(oauth_enabled=self._oauth_ready(), signed_in=False).replace(
+                '<main>', f'<main><div class="notice notice--error" role="alert">{html.escape(message)}</div>', 1)
+            response = HTMLResponse(body, status_code=400, headers=self._security_headers())
+            response.delete_cookie("ninai_oauth_state", path="/control")
+            response.delete_cookie("ninai_pkce_verifier", path="/control")
             return response
         if path == "/control" and request.method == "GET" and request.query_params.get("code"):
             return await self._oauth_callback(request)
