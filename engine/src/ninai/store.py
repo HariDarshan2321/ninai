@@ -290,6 +290,25 @@ class MemoryStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def export_sessions(self) -> list[dict[str, object]]:
+        with self._connection() as db:
+            rows = db.execute(
+                """SELECT s.*,p.name project_name,a.content,a.content_hash,a.updated_at artifact_updated_at
+                   FROM sessions s JOIN projects p ON p.id=s.project_id
+                   LEFT JOIN session_artifacts a ON a.session_id=s.id
+                   WHERE s.deleted_at IS NULL ORDER BY s.updated_at DESC"""
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_session(self, session_id: str) -> bool:
+        with self._connection() as db:
+            db.execute("DELETE FROM session_artifacts WHERE session_id=?", (session_id,))
+            changed = db.execute(
+                "UPDATE sessions SET deleted_at=?,updated_at=? WHERE id=? AND deleted_at IS NULL",
+                (now_iso(), now_iso(), session_id),
+            )
+        return changed.rowcount == 1
+
     def session_context(self, *, project_id: str, client_id: str, max_tokens: int = 600) -> dict[str, object]:
         if "project" not in self.allowed_scopes(client_id):
             return {"project_id": project_id, "sessions": [], "estimated_tokens": 0,

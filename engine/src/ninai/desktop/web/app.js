@@ -240,7 +240,12 @@
             h("div", { class: "today-item__meta" },
               h("span", { class: "badge badge--type", text: s.provider }),
               h("span", { class: "badge badge--scope", text: s.project_name }),
-              sourceTag(s.source_uri), formatRelative(s.updated_at)
+              h("span", { class: "badge", text: s.capture_status }),
+              sourceTag(s.source_uri), formatRelative(s.updated_at),
+              h("button", { class: "btn btn--danger", type: "button", text: "Delete archive", onclick: async function () {
+                if (!window.confirm("Delete this archived session from the local vault?")) return;
+                await B.deleteSession(s.id); toast("Session archive deleted."); loadSessions();
+              } })
             )
           ));
         });

@@ -292,6 +292,20 @@ class ControlService:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    def delete_session(self, identity: ControlIdentity, session_id: str) -> bool:
+        with self._connect() as db:
+            self._member(db, identity, admin=True)
+            db.execute(
+                "DELETE FROM session_artifacts WHERE workspace_id=%s AND session_id=%s",
+                (identity.workspace_id, session_id),
+            )
+            changed = db.execute(
+                """UPDATE sessions SET deleted_at=COALESCE(deleted_at,now()),updated_at=now()
+                   WHERE workspace_id=%s AND id=%s AND deleted_at IS NULL""",
+                (identity.workspace_id, session_id),
+            )
+            return changed.rowcount == 1
+
     def capture_settings(self, identity: ControlIdentity) -> dict[str, Any]:
         with self._connect() as db:
             self._member(db, identity)
@@ -570,6 +584,7 @@ class ControlApp:
         elif method == "GET" and (m := re.fullmatch(r"/connections/([^/]+)/grants", suffix)): result = {"items": self.service.grants(identity, m[1])}
         elif method == "GET" and suffix == "/activity": result = {"items": self.service.activity(identity, query.get("limit", [100])[0])}
         elif method == "GET" and suffix == "/sessions": result = {"items": self.service.sessions(identity, query.get("limit", [100])[0])}
+        elif method == "POST" and (m := re.fullmatch(r"/sessions/([^/]+)/delete", suffix)): result = {"deleted": self.service.delete_session(identity, m[1])}
         elif method == "GET" and suffix == "/capture-settings": result = self.service.capture_settings(identity)
         elif method == "POST" and suffix == "/capture-settings": result = self.service.update_capture_settings(identity, data)
         elif method == "GET" and suffix == "/export": result = self.service.export(identity)

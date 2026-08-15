@@ -95,6 +95,23 @@ class PostgresLifecycleTest(unittest.TestCase):
         exported = control.export(identity)
         self.assertEqual(len(exported["sessions"]), 1)
         self.assertEqual(len(exported["session_artifacts"]), 1)
+        control.update_capture_settings(identity, {
+            "archive_sessions": True, "propose_memories": False,
+            "auto_approve_low_risk": False, "retention_days": 1,
+        })
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute(
+                "UPDATE sessions SET updated_at=now()-interval '2 days' WHERE workspace_id=%s AND id=%s",
+                (self.workspace, first.id),
+            )
+        self.store.capture_session(
+            self.principal, provider="codex", external_session_id="s-2",
+            project_id=self.project, title="New", source_uri="ignored://forged",
+            status="completed", transcript='{"role":"user","content":"Fresh"}',
+        )
+        self.assertEqual(len(control.sessions(identity)), 1)
+        self.assertTrue(control.delete_session(identity, str(control.sessions(identity)[0]["id"])))
+        self.assertEqual(control.sessions(identity), [])
 
     def test_session_identity_cannot_be_reassigned_to_another_project(self) -> None:
         control = ControlService(self.store._connection)

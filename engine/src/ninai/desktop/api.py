@@ -221,6 +221,12 @@ class DesktopApi:
         except Exception as error:
             return _err(str(error))
 
+    def delete_session(self, session_id: str) -> dict[str, Any]:
+        try:
+            return _ok({"deleted": self.store.delete_session(session_id)})
+        except Exception as error:
+            return _err(str(error))
+
     def capture_status(self) -> dict[str, Any]:
         try:
             return _ok({"enabled": self.store.capture_enabled()})

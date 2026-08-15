@@ -45,6 +45,9 @@ def parser() -> argparse.ArgumentParser:
     lifecycle.add_argument("--provider", required=True, choices=("claude-code", "codex"))
     capture_setting = sub.add_parser("capture", help="Manage automatic session archiving consent")
     capture_setting.add_argument("action", choices=("enable", "disable", "status"))
+    sessions = sub.add_parser("sessions", help="Export or delete local session archives")
+    sessions.add_argument("action", choices=("export", "delete"))
+    sessions.add_argument("session_id", nargs="?")
     return root
 
 
@@ -130,6 +133,15 @@ def main() -> None:
         elif args.action == "disable":
             store.set_capture_enabled(False)
         print(json.dumps({"session_capture": store.capture_enabled()}))
+        return
+
+    if args.command == "sessions":
+        if args.action == "export":
+            print(json.dumps({"sessions": store.export_sessions()}, indent=2, ensure_ascii=False))
+        else:
+            if not args.session_id:
+                raise SystemExit("sessions delete requires a session_id")
+            print(json.dumps({"deleted": store.delete_session(args.session_id)}))
         return
 
 

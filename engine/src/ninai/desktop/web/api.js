@@ -78,6 +78,7 @@
     },
     listLogs: function (limit) { return call("list_logs", limit == null ? 100 : limit); },
     listSessions: function (limit) { return call("list_sessions", limit == null ? 100 : limit); },
+    deleteSession: function (id) { return call("delete_session", id); },
     captureStatus: function () { return call("capture_status"); },
     setCaptureEnabled: function (enabled) { return call("set_capture_enabled", enabled); }
   };

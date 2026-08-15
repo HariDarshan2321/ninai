@@ -93,6 +93,7 @@ class FakeService:
     def grants(self, who, connection_id): return [{"id": "g1", "client_connection_id": connection_id}]
     def activity(self, who, limit): return []
     def sessions(self, who, limit): return []
+    def delete_session(self, who, session_id): return session_id == "s1"
     def capture_settings(self, who): return {"archive_sessions": False, "propose_memories": True}
     def update_capture_settings(self, who, data): return data
     def export(self, who): return {"format": "ninai-export-v1"}
@@ -325,6 +326,8 @@ class ControlAppTest(unittest.TestCase):
         )
         self.assertEqual(settings.status_code, 200)
         self.assertTrue(settings.json()["archive_sessions"])
+        deleted = self.client.post("/api/control/sessions/s1/delete", headers=self.auth, json={})
+        self.assertEqual(deleted.json(), {"deleted": True})
         self.assertEqual(self.client.get("/api/control/connections/c1/grants", headers=self.auth).json()["items"][0]["id"], "g1")
 
     def test_provisioning_routes_derive_identity_from_token_not_body(self):

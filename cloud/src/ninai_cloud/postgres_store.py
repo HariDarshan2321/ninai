@@ -552,6 +552,20 @@ class PostgresStore:
             ).fetchone()
             if not consent or not consent["archive_sessions"]:
                 raise AuthorizationError("Automatic session archive consent is not enabled")
+            db.execute(
+                """DELETE FROM session_artifacts a USING sessions s,workspace_capture_settings c
+                   WHERE a.workspace_id=%s AND a.workspace_id=s.workspace_id AND a.session_id=s.id
+                     AND c.workspace_id=a.workspace_id AND c.retention_days IS NOT NULL
+                     AND s.updated_at < now() - make_interval(days => c.retention_days)""",
+                (principal.workspace_id,),
+            )
+            db.execute(
+                """UPDATE sessions s SET deleted_at=COALESCE(s.deleted_at,now()),updated_at=now()
+                   FROM workspace_capture_settings c WHERE s.workspace_id=%s
+                     AND c.workspace_id=s.workspace_id AND c.retention_days IS NOT NULL
+                     AND s.updated_at < now() - make_interval(days => c.retention_days)""",
+                (principal.workspace_id,),
+            )
             existing = db.execute(
                 """SELECT project_id,client_connection_id,capture_status FROM sessions
                    WHERE workspace_id=%s AND provider=%s AND external_session_id=%s""",

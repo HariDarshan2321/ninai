@@ -114,6 +114,7 @@ class DesktopApiTest(unittest.TestCase):
         sessions = self.api.list_sessions()
         self.assertTrue(sessions["ok"])
         self.assertEqual(sessions["data"], [])
+        self.assertFalse(self.api.delete_session("missing")["data"]["deleted"])
 
 
 if __name__ == "__main__":
