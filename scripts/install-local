@@ -92,10 +92,10 @@ if [[ -z "${python_cmd}" ]] || ! command -v "${python_cmd}" >/dev/null 2>&1 || !
 fi
 
 if [[ -f "${repo_root}/engine/pyproject.toml" ]]; then
-  package_source="${repo_root}/engine[desktop]"
+  package_source="${repo_root}/engine[macos-build]"
 else
   package_url="${NINAI_PACKAGE_URL:-https://github.com/${repository}/archive/refs/heads/main.tar.gz#subdirectory=engine}"
-  package_source="ninai-memory[desktop] @ ${package_url}"
+  package_source="ninai-memory[macos-build] @ ${package_url}"
 fi
 
 # Preserve the previous installation until the replacement passes diagnostics.
@@ -131,10 +131,11 @@ printf '%s\n' 'Installing Ninai local mode…'
 "${install_dir}/venv/bin/ninai" doctor
 
 app_bundle="${install_dir}/Ninai.app"
-app_contents="${app_bundle}/Contents"
 iconset="${install_dir}/Ninai.iconset"
+app_build="${install_dir}/.app-build"
 icon_source=$("${install_dir}/venv/bin/python" -c 'from importlib.resources import files; print(files("ninai.desktop").joinpath("web", "ninai-app-icon.svg"))')
-mkdir -p "${app_contents}/MacOS" "${app_contents}/Resources" "${iconset}"
+app_entry=$("${install_dir}/venv/bin/python" -c 'import ninai.desktop.app as app; print(app.__file__)')
+mkdir -p "${iconset}" "${app_build}/work" "${app_build}/spec"
 for size in 16 32 128 256 512; do
   sips -s format png -z "${size}" "${size}" "${icon_source}" \
     --out "${iconset}/icon_${size}x${size}.png" >/dev/null
@@ -142,30 +143,18 @@ for size in 16 32 128 256 512; do
   sips -s format png -z "${double}" "${double}" "${icon_source}" \
     --out "${iconset}/icon_${size}x${size}@2x.png" >/dev/null
 done
-iconutil -c icns "${iconset}" -o "${app_contents}/Resources/Ninai.icns"
+icon_file="${app_build}/Ninai.icns"
+iconutil -c icns "${iconset}" -o "${icon_file}"
 rm -rf "${iconset}"
-cat >"${app_contents}/Info.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>CFBundleDisplayName</key><string>Ninai</string>
-  <key>CFBundleName</key><string>Ninai</string>
-  <key>CFBundleExecutable</key><string>Ninai</string>
-  <key>CFBundleIdentifier</key><string>io.ninai.local</string>
-  <key>CFBundleIconFile</key><string>Ninai.icns</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>LSMinimumSystemVersion</key><string>12.0</string>
-  <key>NSHighResolutionCapable</key><true/>
-</dict></plist>
-PLIST
-cat >"${app_contents}/MacOS/Ninai" <<'LAUNCHER'
-#!/bin/sh
-bundle_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
-exec "$bundle_dir/venv/bin/ninai-app"
-LAUNCHER
-chmod 755 "${app_contents}/MacOS/Ninai"
+"${install_dir}/venv/bin/pyinstaller" \
+  --noconfirm --clean --windowed --name Ninai \
+  --osx-bundle-identifier io.ninai.app \
+  --icon "${icon_file}" --collect-data ninai \
+  --distpath "${install_dir}" --workpath "${app_build}/work" \
+  --specpath "${app_build}/spec" "${app_entry}"
 xattr -cr "${app_bundle}"
 codesign --force --deep --sign - "${app_bundle}" >/dev/null
+rm -rf "${app_build}" "${install_dir}/Ninai"
 install_complete=1
 
 if [[ "${session_capture}" == "ask" ]]; then
