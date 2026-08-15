@@ -129,6 +129,43 @@ printf '%s\n' 'Installing Ninai local mode…'
 "${install_dir}/venv/bin/python" -m pip --disable-pip-version-check install --upgrade pip
 "${install_dir}/venv/bin/python" -m pip --disable-pip-version-check install "${package_source}"
 "${install_dir}/venv/bin/ninai" doctor
+
+app_bundle="${install_dir}/Ninai.app"
+app_contents="${app_bundle}/Contents"
+iconset="${install_dir}/Ninai.iconset"
+icon_source=$("${install_dir}/venv/bin/python" -c 'from importlib.resources import files; print(files("ninai.desktop").joinpath("web", "ninai-app-icon.svg"))')
+mkdir -p "${app_contents}/MacOS" "${app_contents}/Resources" "${iconset}"
+for size in 16 32 128 256 512; do
+  sips -s format png -z "${size}" "${size}" "${icon_source}" \
+    --out "${iconset}/icon_${size}x${size}.png" >/dev/null
+  double=$((size * 2))
+  sips -s format png -z "${double}" "${double}" "${icon_source}" \
+    --out "${iconset}/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil -c icns "${iconset}" -o "${app_contents}/Resources/Ninai.icns"
+rm -rf "${iconset}"
+cat >"${app_contents}/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleDisplayName</key><string>Ninai</string>
+  <key>CFBundleName</key><string>Ninai</string>
+  <key>CFBundleExecutable</key><string>Ninai</string>
+  <key>CFBundleIdentifier</key><string>io.ninai.local</string>
+  <key>CFBundleIconFile</key><string>Ninai.icns</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict></plist>
+PLIST
+cat >"${app_contents}/MacOS/Ninai" <<'LAUNCHER'
+#!/bin/sh
+bundle_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
+exec "$bundle_dir/venv/bin/ninai-app"
+LAUNCHER
+chmod 755 "${app_contents}/MacOS/Ninai"
+xattr -cr "${app_bundle}"
+codesign --force --deep --sign - "${app_bundle}" >/dev/null
 install_complete=1
 
 if [[ "${session_capture}" == "ask" ]]; then
@@ -239,6 +276,7 @@ esac
 
 printf '\nNinai is ready.\n'
 printf 'Open the local app:\n  %s\n' "${install_dir}/venv/bin/ninai-app"
+printf 'Or open the branded Mac app:\n  open %s\n' "${app_bundle}"
 if [[ "${client}" == "none" ]]; then
   printf 'No supported AI client was detected. Rerun with --client after installing Claude Code or Codex.\n'
 else

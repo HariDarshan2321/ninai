@@ -30,7 +30,7 @@ const installClaudeCommand = `${installCommand} -s -- --client claude-code`;
 const installCodexCommand = `${installCommand} -s -- --client codex`;
 const installBothCommand = `${installCommand} -s -- --client both`;
 
-const appCommand = `~/.ninai-app/venv/bin/ninai-app`;
+const appCommand = `open ~/.ninai-app/Ninai.app`;
 
 const grantCommand = `~/.ninai-app/venv/bin/ninai permission grant claude-code project
 ~/.ninai-app/venv/bin/ninai permission list claude-code`;

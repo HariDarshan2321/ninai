@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/HariDarshan2321/ninai/main/scripts/
   bash -s -- --client both
 
 # Open the local control panel.
-~/.ninai-app/venv/bin/ninai-app
+open ~/.ninai-app/Ninai.app
 ```
 
 The installer requires Python 3.11+ and selects `python3.13`, `python3.12`, or

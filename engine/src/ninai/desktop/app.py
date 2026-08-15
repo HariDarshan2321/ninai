@@ -16,6 +16,27 @@ def _index_path() -> Path:
     return index
 
 
+def _configure_macos_app() -> None:
+    """Give an unbundled pywebview launch Ninai's Dock identity."""
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSApplication, NSImage
+        from Foundation import NSProcessInfo
+
+        icon_path = Path(str(files("ninai.desktop").joinpath("web", "ninai-app-icon.svg")))
+        icon = NSImage.alloc().initWithContentsOfFile_(str(icon_path))
+        app = NSApplication.sharedApplication()
+        if icon is not None:
+            app.setApplicationIconImage_(icon)
+        process = NSProcessInfo.processInfo()
+        if hasattr(process, "setProcessName_"):
+            process.setProcessName_(WINDOW_TITLE)
+    except Exception:
+        # Branding must not prevent the local vault UI from opening.
+        return
+
+
 def main() -> None:
     """Launch the Ninai desktop window.
 
@@ -31,6 +52,7 @@ def main() -> None:
         raise SystemExit(1)
 
     api = DesktopApi()
+    _configure_macos_app()
     sys.stdout.write("Opening Ninai…\n")
     sys.stdout.flush()
     webview.create_window(
