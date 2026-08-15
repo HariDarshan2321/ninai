@@ -106,6 +106,15 @@ class DesktopApiTest(unittest.TestCase):
         self.assertTrue(res["ok"])
         self.assertIsInstance(res["data"], list)
 
+    def test_sessions_and_capture_consent_are_exposed(self) -> None:
+        self.assertFalse(self.api.capture_status()["data"]["enabled"])
+        enabled = self.api.set_capture_enabled(True)
+        self.assertTrue(enabled["ok"])
+        self.assertTrue(enabled["data"]["enabled"])
+        sessions = self.api.list_sessions()
+        self.assertTrue(sessions["ok"])
+        self.assertEqual(sessions["data"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

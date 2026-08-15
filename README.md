@@ -7,7 +7,7 @@ Ninai is a local-first, permissioned memory layer for AI tools. This repository 
 - `engine/` — an installable Python MCP server with local SQLite memory, scoped permissions, provenance, access logs, and compact context packets.
 - `cloud/` — an explicit opt-in PostgreSQL store, authenticated Streamable HTTP MCP service, and hosted control-center API/UI.
 - `website/` — a statically exported Next.js launch site for `ninai.io`, including an interactive permission model, sitemap, robots.txt, JSON-LD, Open Graph metadata, privacy page, install guide, and research page.
-- `.claude/` — an optional Claude Code `PostToolUse` hook that captures durable results from existing MCP tools without asking users to reconnect Linear, GitHub, or other services.
+- `.claude/` and `.codex/` — merge-safe lifecycle hook examples for local Claude Code ↔ Codex session continuity, plus optional durable MCP-result capture.
 - `docs/` — product architecture, brand guidance, deployment instructions, and the SEO launch checklist.
 
 The MVP intentionally keeps the trust boundary small: memory is stored on the user's machine and only permission-filtered context packets are returned to an AI client.
@@ -24,10 +24,10 @@ Check with `python3 --version`; if it is below 3.11, use an explicit interpreter
 For the one-command desktop-and-engine installation used by the public setup guide:
 
 ```bash
-# Claude Code (downloads the reviewed installer, installs Ninai, grants only
-# project scope, and registers the local MCP server).
+# Claude Code + Codex (installs Ninai, grants project scope, registers both
+# local MCP clients, and asks before enabling lifecycle session archive).
 curl -fsSL https://raw.githubusercontent.com/HariDarshan2321/ninai/main/scripts/install-local | \
-  bash -s -- --client claude-code
+  bash -s -- --client both
 
 # Open the local control panel.
 ~/.ninai-app/venv/bin/ninai-app
@@ -36,7 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/HariDarshan2321/ninai/main/scripts/
 The installer requires Python 3.11+ and selects `python3.13`, `python3.12`, or
 `python3.11` automatically. Set `NINAI_PYTHON` to choose another compatible
 interpreter or `NINAI_INSTALL_DIR` to change the stable installation directory.
-Use `--client codex` for Codex or run `./scripts/install-local` from a cloned
+Use `--client claude-code` or `--client codex` for only one client, or run `./scripts/install-local` from a cloned
 repository. Review [`scripts/install-local`](scripts/install-local) before
 running a downloaded script.
 
@@ -54,8 +54,8 @@ What should I finish before launch?
 
 ## 1b. Optional: open the desktop control panel
 
-Ninai ships a native desktop control panel — a window with five screens
-(Today, Memories, Sources, Permissions, Activity) for the vault owner to see and
+Ninai ships a native desktop control panel with Today, Memories, Sources,
+Permissions, Sessions, and Activity screens for the vault owner to see and
 manage everything the engine stores. It runs as the local operator (full access)
 and talks to the same local vault the MCP server uses.
 
@@ -70,7 +70,20 @@ toggle each AI client's scope permissions; and read the full disclosure log. It 
 below. Sensitivity labels are shown for your reference but do not yet affect what is
 disclosed; scope is the control that gates recall.
 
-## 2. Optional: capture results from existing MCP tools
+## 2. Automatic local session handoff
+
+With explicit consent, the installer merges `SessionStart`, `Stop`, and
+`SessionEnd` hooks for Claude Code and Codex. A completed session is normalized
+to user/assistant text, secret-redacted, stored only in the local vault, and
+offered to the next supported agent only for the same project and only after a
+project-scope permission check. Injected excerpts are token-bounded and marked
+as untrusted historical data. Disable capture at any time:
+
+```bash
+~/.ninai-app/venv/bin/ninai capture disable
+```
+
+## 2b. Optional: capture results from existing MCP tools
 
 Claude Code hooks receive tool events after tools complete. Copy the example settings into your project:
 
@@ -160,8 +173,8 @@ Ninai does not claim that cloud AI providers never receive context. The full vau
 ## Current boundaries
 
 - SQLite + FTS5 retrieval; no vector embeddings yet.
-- Claude Code automatic capture through a local hook.
-- Other clients use explicit `remember` and `recall` MCP calls.
+- Claude Code and Codex lifecycle continuity is automatic only in consented local installs.
+- Claude.ai, ChatGPT, and hosted MCP clients use explicit scoped tools; they do not passively expose full chat transcripts to Ninai.
 - Hosted PostgreSQL and remote MCP are implemented, and the local PAT-backed real-host compatibility gate passed. Production deployment, issuer onboarding, billing, and automated local-to-hosted sync are not implemented. Local mode never uploads automatically.
 - Vector search, local-model extraction, consolidation, and richer temporal state remain post-MVP evaluation work. They should be added behind explicit interfaces only when benchmarks justify the extra installation and security surface.
 

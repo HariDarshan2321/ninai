@@ -13,7 +13,7 @@ from ..store import MemoryStore
 
 # Default clients shown on the Permissions screen even before they appear in the
 # vault, so the owner can pre-authorize the assistants Ninai targets first.
-DEFAULT_CLIENTS = ["claude-code", "claude-desktop"]
+DEFAULT_CLIENTS = ["claude-code", "codex", "claude-desktop"]
 
 
 def _ok(data: Any) -> dict[str, Any]:
@@ -212,5 +212,24 @@ class DesktopApi:
     def list_logs(self, limit: int = 100) -> dict[str, Any]:
         try:
             return _ok(self.store.list_logs(limit=int(limit)))
+        except Exception as error:
+            return _err(str(error))
+
+    def list_sessions(self, limit: int = 100) -> dict[str, Any]:
+        try:
+            return _ok(self.store.list_sessions(limit=int(limit)))
+        except Exception as error:
+            return _err(str(error))
+
+    def capture_status(self) -> dict[str, Any]:
+        try:
+            return _ok({"enabled": self.store.capture_enabled()})
+        except Exception as error:
+            return _err(str(error))
+
+    def set_capture_enabled(self, enabled: bool) -> dict[str, Any]:
+        try:
+            self.store.set_capture_enabled(bool(enabled))
+            return _ok({"enabled": self.store.capture_enabled()})
         except Exception as error:
             return _err(str(error))

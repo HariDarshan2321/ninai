@@ -76,6 +76,9 @@
     setPermission: function (clientId, scope, allowed) {
       return call("set_permission", clientId, scope, allowed);
     },
-    listLogs: function (limit) { return call("list_logs", limit == null ? 100 : limit); }
+    listLogs: function (limit) { return call("list_logs", limit == null ? 100 : limit); },
+    listSessions: function (limit) { return call("list_sessions", limit == null ? 100 : limit); },
+    captureStatus: function () { return call("capture_status"); },
+    setCaptureEnabled: function (enabled) { return call("set_capture_enabled", enabled); }
   };
 })();

@@ -58,6 +58,11 @@
           <span class="nav__name">Sources</span>
           <span class="nav__count" data-count="sources" hidden></span>
         </button>
+        <button class="nav__item" type="button" data-screen="sessions">
+          <span class="nav__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span>
+          <span class="nav__name">Sessions</span>
+          <span class="nav__count" data-count="sessions" hidden></span>
+        </button>
         <button class="nav__item" type="button" data-screen="permissions">
           <span class="nav__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.2-2.9 7.4-7 8.5-4.1-1.1-7-4.3-7-8.5V6l7-3Z"/><path d="M9.2 12l2 2 3.6-3.7"/></svg></span>
           <span class="nav__name">Permissions</span>
@@ -129,6 +134,12 @@
           </div>
         </header>
         <div id="sources-body"></div>
+      </section>
+
+      <!-- Permissions -->
+      <section class="screen" id="screen-sessions" role="tabpanel" aria-labelledby="sessions-title" tabindex="-1">
+        <header class="screen__head"><div><p class="screen__eyebrow">Connected-agent history kept on this Mac</p><h1 class="screen__title" id="sessions-title">Sessions</h1><p class="screen__sub">Automatic archiving is consent-based. Project context is disclosed only to clients with project access.</p></div></header>
+        <div id="sessions-body"></div>
       </section>
 
       <!-- Permissions -->

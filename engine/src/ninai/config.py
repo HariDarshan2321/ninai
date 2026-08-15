@@ -7,7 +7,8 @@ from pathlib import Path
 def data_dir() -> Path:
     configured = os.getenv("NINAI_DATA_DIR")
     path = Path(configured).expanduser() if configured else Path.home() / ".ninai"
-    path.mkdir(parents=True, exist_ok=True)
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.chmod(0o700)
     return path
 
 

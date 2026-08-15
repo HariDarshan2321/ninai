@@ -278,6 +278,69 @@ class ControlService:
               (identity.workspace_id, max(1, min(int(limit), 200)))).fetchall()
             return [dict(row) for row in rows]
 
+    def sessions(self, identity: ControlIdentity, limit: int = 100) -> list[dict[str, Any]]:
+        with self._connect() as db:
+            self._member(db, identity)
+            rows = db.execute(
+                """SELECT s.id,s.project_id,s.client_connection_id,s.provider,s.external_session_id,
+                     s.title,s.source_uri,s.cwd_or_repo,s.started_at,s.ended_at,s.capture_status,
+                     s.last_checkpoint_at,s.updated_at,p.name project_name
+                   FROM sessions s JOIN projects p ON p.workspace_id=s.workspace_id AND p.id=s.project_id
+                   WHERE s.workspace_id=%s AND s.deleted_at IS NULL
+                   ORDER BY s.updated_at DESC LIMIT %s""",
+                (identity.workspace_id, max(1, min(int(limit), 200))),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def capture_settings(self, identity: ControlIdentity) -> dict[str, Any]:
+        with self._connect() as db:
+            self._member(db, identity)
+            row = db.execute(
+                """SELECT archive_sessions,propose_memories,auto_approve_low_risk,retention_days,
+                     accepted_at,updated_at FROM workspace_capture_settings WHERE workspace_id=%s""",
+                (identity.workspace_id,),
+            ).fetchone()
+            return dict(row) if row else {
+                "archive_sessions": False, "propose_memories": True,
+                "auto_approve_low_risk": False, "retention_days": None,
+                "accepted_at": None,
+            }
+
+    def update_capture_settings(self, identity: ControlIdentity, data: Mapping[str, Any]) -> dict[str, Any]:
+        archive = bool(data.get("archive_sessions"))
+        propose = bool(data.get("propose_memories", True))
+        auto = bool(data.get("auto_approve_low_risk", False))
+        retention = data.get("retention_days")
+        if retention in ("", None):
+            retention = None
+        else:
+            retention = int(retention)
+            if not 1 <= retention <= 3650:
+                raise ValueError("retention_days must be between 1 and 3650")
+        if auto and not propose:
+            raise ValueError("Auto-approve requires memory proposals")
+        with self._connect() as db:
+            self._member(db, identity, admin=True)
+            row = db.execute(
+                """INSERT INTO workspace_capture_settings(workspace_id,archive_sessions,
+                     propose_memories,auto_approve_low_risk,retention_days,accepted_by_user_id,accepted_at)
+                   VALUES(%s,%s,%s,%s,%s,%s,CASE WHEN %s THEN now() END)
+                   ON CONFLICT(workspace_id) DO UPDATE SET
+                     archive_sessions=EXCLUDED.archive_sessions,
+                     propose_memories=EXCLUDED.propose_memories,
+                     auto_approve_low_risk=EXCLUDED.auto_approve_low_risk,
+                     retention_days=EXCLUDED.retention_days,
+                     accepted_by_user_id=EXCLUDED.accepted_by_user_id,
+                     accepted_at=CASE WHEN EXCLUDED.archive_sessions THEN
+                       COALESCE(workspace_capture_settings.accepted_at,now()) ELSE NULL END,
+                     updated_at=now()
+                   RETURNING archive_sessions,propose_memories,auto_approve_low_risk,
+                     retention_days,accepted_at,updated_at""",
+                (identity.workspace_id, archive, propose, auto, retention,
+                 identity.user_id, archive),
+            ).fetchone()
+            return dict(row)
+
     def export(self, identity: ControlIdentity) -> dict[str, Any]:
         with self._connect() as db:
             workspace = self._member(db, identity, admin=True)
@@ -290,6 +353,9 @@ class ControlService:
                 ("grants", "client_scope_grants"), ("memories", "memories"),
                 ("sources", "memory_sources"), ("relations", "memory_relations"),
                 ("feedback", "memory_feedback"), ("disclosures", "disclosure_logs"),
+                ("sessions", "sessions"), ("session_artifacts", "session_artifacts"),
+                ("session_disclosures", "session_disclosure_logs"),
+                ("capture_settings", "workspace_capture_settings"),
             ):
                 rows = db.execute(f"SELECT * FROM {table} WHERE workspace_id=%s ORDER BY created_at", (identity.workspace_id,)).fetchall()
                 exported[key] = [dict(row) for row in rows]
@@ -305,6 +371,8 @@ class ControlService:
             db.execute("UPDATE client_scope_grants SET revoked_at=COALESCE(revoked_at,now()) WHERE workspace_id=%s", (identity.workspace_id,))
             db.execute("UPDATE client_connections SET status='revoked',revoked_at=COALESCE(revoked_at,now()) WHERE workspace_id=%s", (identity.workspace_id,))
             db.execute("UPDATE memories SET status='deleted',deleted_at=COALESCE(deleted_at,now()),updated_at=now() WHERE workspace_id=%s", (identity.workspace_id,))
+            db.execute("DELETE FROM session_artifacts WHERE workspace_id=%s", (identity.workspace_id,))
+            db.execute("UPDATE sessions SET deleted_at=COALESCE(deleted_at,now()),updated_at=now() WHERE workspace_id=%s", (identity.workspace_id,))
             changed = db.execute("UPDATE workspaces SET deleted_at=now() WHERE id=%s AND deleted_at IS NULL", (identity.workspace_id,))
             return changed.rowcount == 1
 
@@ -501,6 +569,9 @@ class ControlApp:
         elif method == "POST" and suffix == "/connections": result = self.service.create_connection(identity, data)
         elif method == "GET" and (m := re.fullmatch(r"/connections/([^/]+)/grants", suffix)): result = {"items": self.service.grants(identity, m[1])}
         elif method == "GET" and suffix == "/activity": result = {"items": self.service.activity(identity, query.get("limit", [100])[0])}
+        elif method == "GET" and suffix == "/sessions": result = {"items": self.service.sessions(identity, query.get("limit", [100])[0])}
+        elif method == "GET" and suffix == "/capture-settings": result = self.service.capture_settings(identity)
+        elif method == "POST" and suffix == "/capture-settings": result = self.service.update_capture_settings(identity, data)
         elif method == "GET" and suffix == "/export": result = self.service.export(identity)
         elif method == "POST" and (m := re.fullmatch(r"/memories/([^/]+)/(approve|reject)", suffix)): result = self.service.review(identity, m[1], approve=m[2] == "approve")
         elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/grants", suffix)): result = self.service.create_grant(identity, m[1], data)

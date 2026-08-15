@@ -1,7 +1,7 @@
 /* ==========================================================================
    Ninai desktop — application logic
    Vanilla JS, no build step. Renders five screens over the Python bridge:
-   Today, Memories, Sources, Permissions, Activity.
+   Today, Memories, Sources, Sessions, Permissions, Activity.
    ========================================================================== */
 (function () {
   "use strict";
@@ -212,9 +212,45 @@
     today: loadToday,
     memories: loadMemories,
     sources: loadSources,
+    sessions: loadSessions,
     permissions: loadPermissions,
     activity: loadActivity
   };
+
+  async function loadSessions() {
+    var body = $("#sessions-body");
+    clear(body);
+    body.appendChild(loadingBlock());
+    try {
+      var result = await Promise.all([B.listSessions(100), B.captureStatus()]);
+      var sessions = result[0], capture = result[1];
+      clear(body);
+      var consent = h("section", { class: "today-group" },
+        h("div", { class: "today-group__head" }, h("h2", { text: "Automatic archive" })),
+        h("p", { class: "state__body", text: capture.enabled ? "Enabled — connected Claude Code and Codex sessions are stored locally." : "Disabled — no lifecycle transcript is archived." }),
+        h("button", { class: "btn btn--primary", type: "button", text: capture.enabled ? "Disable archive" : "Enable archive", onclick: async function () { await B.setCaptureEnabled(!capture.enabled); loadSessions(); } })
+      );
+      body.appendChild(consent);
+      if (!sessions.length) body.appendChild(stateBlock({ title: "No archived sessions", body: "Enable capture, then finish a Claude Code or Codex session." }));
+      else {
+        var list = h("div", { class: "today-list" });
+        sessions.forEach(function (s) {
+          list.appendChild(h("article", { class: "today-item" },
+            h("p", { class: "today-item__content", text: s.title }),
+            h("div", { class: "today-item__meta" },
+              h("span", { class: "badge badge--type", text: s.provider }),
+              h("span", { class: "badge badge--scope", text: s.project_name }),
+              sourceTag(s.source_uri), formatRelative(s.updated_at)
+            )
+          ));
+        });
+        body.appendChild(list);
+      }
+      setCount("sessions", sessions.length);
+    } catch (err) {
+      clear(body); body.appendChild(stateBlock({ title: "Could not load sessions", body: err.message, error: true }));
+    }
+  }
 
   function navTo(name) {
     if (!LOADERS[name]) return;

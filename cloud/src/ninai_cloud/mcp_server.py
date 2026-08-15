@@ -14,7 +14,8 @@ from mcp.types import ToolAnnotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
-from .postgres_store import AuthorizationError, HostedMemory, IdempotencyConflict, PostgresStore, Principal
+from .postgres_store import (AuthorizationError, HostedMemory, HostedSession,
+                             IdempotencyConflict, PostgresStore, Principal)
 from .policy import validate_memory_type
 from .control_api import ControlService, create_control_app
 from .auth import AuthSettings as HostedAuthSettings
@@ -62,6 +63,14 @@ def _memory_result(memory: HostedMemory) -> dict[str, Any]:
     result["updated_at"] = memory.updated_at.isoformat()
     result["scope"] = {"kind": memory.scope_kind, "id": memory.scope_id}
     result["source"] = {"uri": memory.source_uri}
+    return result
+
+
+def _session_result(session: HostedSession) -> dict[str, Any]:
+    result = asdict(session)
+    for field in ("started_at", "ended_at", "last_checkpoint_at", "updated_at"):
+        value = result[field]
+        result[field] = value.isoformat() if value else None
     return result
 
 
@@ -187,6 +196,32 @@ class HostedMCPTools:
                            idempotency_key=idempotency_key, project_id=project_id,
                            importance=importance, confidence=confidence)
 
+    def capture_session(
+        self, *, status: str, provider: str, external_session_id: str, project_id: str,
+        title: str, source_uri: str, cwd_or_repo: str = "", transcript: str | None = None,
+    ) -> dict[str, Any]:
+        provider = _required_text(provider, "provider", MAX_IDENTIFIER_CHARS)
+        external_session_id = _required_text(external_session_id, "external_session_id", 300)
+        project_id = _required_text(project_id, "project_id", MAX_IDENTIFIER_CHARS)
+        title = _required_text(title, "title", 240)
+        source_uri = _required_text(source_uri, "source_uri", MAX_SOURCE_URI_CHARS)
+        if transcript is not None and (not isinstance(transcript, str) or len(transcript) > 1_000_000):
+            raise ValueError("transcript must be text no larger than 1,000,000 characters")
+        principal = self._authorized(write=True)
+        session = self.store.capture_session(
+            principal, provider=provider, external_session_id=external_session_id,
+            project_id=project_id, title=title, source_uri=source_uri, status=status,
+            cwd_or_repo=cwd_or_repo, transcript=transcript,
+        )
+        return {"ok": True, "session": _session_result(session)}
+
+    def session_context(self, project_id: str, max_tokens: int = 600) -> dict[str, Any]:
+        project_id = _required_text(project_id, "project_id", MAX_IDENTIFIER_CHARS)
+        principal = self._authorized()
+        return {"ok": True, **self.store.session_context(
+            principal, project_id=project_id, max_tokens=max_tokens
+        )}
+
 
 def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
                control_token_verifier: TokenVerifier | None = None,
@@ -288,6 +323,59 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
                  importance: float = 0.6, confidence: float = 1.0) -> dict[str, Any]:
         return guarded(tools.remember, content, memory_type, scope_kind, scope_id,
                        source_uri, idempotency_key, project_id, importance, confidence)
+
+    @mcp.tool(
+        title="Start a Ninai session archive",
+        description="Start an explicitly consented project session archive. Requires project propose permission.",
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
+                                    openWorldHint=False),
+        structured_output=True,
+    )
+    def capture_session_start(provider: str, external_session_id: str, project_id: str,
+                              title: str, source_uri: str, cwd_or_repo: str = "") -> dict[str, Any]:
+        return guarded(tools.capture_session, status="started", provider=provider,
+                       external_session_id=external_session_id, project_id=project_id,
+                       title=title, source_uri=source_uri, cwd_or_repo=cwd_or_repo)
+
+    @mcp.tool(
+        title="Checkpoint a Ninai session archive",
+        description="Idempotently checkpoint a connected-agent transcript after explicit archive consent.",
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
+                                    openWorldHint=False),
+        structured_output=True,
+    )
+    def capture_session_checkpoint(provider: str, external_session_id: str, project_id: str,
+                                   title: str, source_uri: str, transcript: str,
+                                   cwd_or_repo: str = "") -> dict[str, Any]:
+        return guarded(tools.capture_session, status="checkpointed", provider=provider,
+                       external_session_id=external_session_id, project_id=project_id,
+                       title=title, source_uri=source_uri, cwd_or_repo=cwd_or_repo,
+                       transcript=transcript)
+
+    @mcp.tool(
+        title="Finalize a Ninai session archive",
+        description="Finalize an idempotent connected-agent transcript archive.",
+        annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
+                                    openWorldHint=False),
+        structured_output=True,
+    )
+    def capture_session_end(provider: str, external_session_id: str, project_id: str,
+                            title: str, source_uri: str, transcript: str,
+                            cwd_or_repo: str = "") -> dict[str, Any]:
+        return guarded(tools.capture_session, status="completed", provider=provider,
+                       external_session_id=external_session_id, project_id=project_id,
+                       title=title, source_uri=source_uri, cwd_or_repo=cwd_or_repo,
+                       transcript=transcript)
+
+    @mcp.tool(
+        title="Load Ninai project handoff",
+        description="Return a compact project-only session context packet after permission filtering.",
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True,
+                                    openWorldHint=False),
+        structured_output=True,
+    )
+    def session_context(project_id: str, max_tokens: int = 600) -> dict[str, Any]:
+        return guarded(tools.session_context, project_id, max_tokens)
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> JSONResponse:

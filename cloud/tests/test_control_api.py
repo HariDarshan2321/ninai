@@ -92,6 +92,9 @@ class FakeService:
         self.calls.append(("test_connection", who, connection_id)); return {"id": connection_id, "metadata_json": {"connection_test": {"status": "ready"}}}
     def grants(self, who, connection_id): return [{"id": "g1", "client_connection_id": connection_id}]
     def activity(self, who, limit): return []
+    def sessions(self, who, limit): return []
+    def capture_settings(self, who): return {"archive_sessions": False, "propose_memories": True}
+    def update_capture_settings(self, who, data): return data
     def export(self, who): return {"format": "ninai-export-v1"}
     def review(self, who, memory_id, approve):
         self.calls.append(("review", who, memory_id, approve)); return {"id": memory_id, "status": "active" if approve else "deleted"}
@@ -132,7 +135,7 @@ class ControlAppTest(unittest.TestCase):
         for label in ("Memories", "Permissions", "Download workspace export", "Delete workspace"):
             self.assertIn(label, response.text)
         for brand_copy in ("#0b302b", "#f4efe5", "#ff6846", "#dcef7b",
-                           "Your AI should remember the work. Not your whole life."):
+                           "Switch agents. Keep the project."):
             self.assertIn(brand_copy, response.text)
         self.assertIn('src="https://ninai.io/assets/ninai-wordmark.svg" alt="Ninai"', response.text)
         for native_dialog in ("prompt(", "alert(", "confirm("):
@@ -143,6 +146,7 @@ class ControlAppTest(unittest.TestCase):
             self.assertIn(dashboard_copy, response.text)
         self.assertNotIn("Ninai is ready to use", response.text)
         self.assertNotIn("#hosted-openai", response.text)
+        self.assertIn("Allow supported clients to archive sessions", response.text)
 
     def test_control_and_error_responses_have_security_headers(self):
         for response in (
@@ -180,12 +184,11 @@ class ControlAppTest(unittest.TestCase):
         ]))
         landing = client.get("/control").text
         self.assertIn("const oauthEnabled=true", landing)
-        for copy in ("Ninai hosted · public beta", "Remember the project across Claude and ChatGPT.",
-                     "Create your workspace", "OAuth creates a connection with zero memory access."):
+        for copy in ("Ninai hosted · invitation beta", "Switch agents. Keep the project.",
+                     "Create your workspace", "Every connection starts with zero memory access."):
             self.assertIn(copy, landing)
         self.assertIn('href="/control/login?screen_hint=signup"', landing)
         self.assertIn('href="/control/login"', landing)
-        self.assertNotIn("Hosted invitation beta", landing)
         response = client.get("/control/login?screen_hint=signup", follow_redirects=False)
         self.assertEqual(response.status_code, 302)
         location = response.headers["location"]
@@ -311,6 +314,17 @@ class ControlAppTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()[field], expected)
         self.assertEqual(self.client.get("/api/control/export", headers=self.auth).json()["format"], "ninai-export-v1")
+
+    def test_session_and_capture_setting_routes_use_verified_identity(self):
+        sessions = self.client.get("/api/control/sessions", headers=self.auth)
+        self.assertEqual(sessions.status_code, 200)
+        self.assertEqual(sessions.json(), {"items": []})
+        settings = self.client.post(
+            "/api/control/capture-settings", headers=self.auth,
+            json={"archive_sessions": True, "propose_memories": True},
+        )
+        self.assertEqual(settings.status_code, 200)
+        self.assertTrue(settings.json()["archive_sessions"])
         self.assertEqual(self.client.get("/api/control/connections/c1/grants", headers=self.auth).json()["items"][0]["id"], "g1")
 
     def test_provisioning_routes_derive_identity_from_token_not_body(self):

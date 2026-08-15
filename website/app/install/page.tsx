@@ -28,6 +28,7 @@ const installCommand = `curl -fsSL https://raw.githubusercontent.com/HariDarshan
 const installClaudeCommand = `${installCommand} -s -- --client claude-code`;
 
 const installCodexCommand = `${installCommand} -s -- --client codex`;
+const installBothCommand = `${installCommand} -s -- --client both`;
 
 const appCommand = `~/.ninai-app/venv/bin/ninai-app`;
 
@@ -182,12 +183,11 @@ export default function InstallPage() {
                 the engine and desktop app in <code> ~/.ninai-app</code>, grants only the
                 project scope, and registers the local MCP server. It does not require a Ninai account.
               </p>
-              <p><strong>Claude Code</strong></p>
-              <CopyCommand>{installClaudeCommand}</CopyCommand>
-              <p><strong>Codex</strong></p>
-              <CopyCommand>{installCodexCommand}</CopyCommand>
+              <p><strong>Claude Code + Codex</strong></p>
+              <CopyCommand>{installBothCommand}</CopyCommand>
+              <details><summary>Connect only one client</summary><CopyCommand>{installClaudeCommand}</CopyCommand><CopyCommand>{installCodexCommand}</CopyCommand></details>
               <p><a className="button button--ink" href="/download/install-ninai-macos.sh" download>Download the macOS installer ↓</a></p>
-              <p>After downloading, run <code>bash ~/Downloads/install-ninai-macos.sh --client claude-code</code> or replace <code>claude-code</code> with <code>codex</code>.</p>
+              <p>After downloading, run <code>bash ~/Downloads/install-ninai-macos.sh --client both</code>. The installer merges lifecycle hooks without overwriting existing settings and asks before enabling local session archive.</p>
               <p>Review the <a href="https://github.com/HariDarshan2321/ninai/blob/main/scripts/install-local">installer source</a> before running a downloaded script. If Python is missing, install it with <code>brew install python@3.13</code> and rerun the same command.</p>
               <p>The one-command installer is the supported Mac download today. A double-click <code>Ninai.app</code> is packaged internally but will be published only after Developer ID signing and Apple notarization. Do not bypass Gatekeeper for an unsigned build.</p>
             </div>
@@ -260,13 +260,13 @@ export default function InstallPage() {
           <section className="install-step" id="capture">
             <div className="install-step__number">06</div>
             <div>
-              <p className="install-step__label">Optional automatic capture</p>
-              <h2>Add capture only after explicit recall works.</h2>
+              <p className="install-step__label">Automatic handoff</p>
+              <h2>End in Claude Code. Continue in Codex.</h2>
               <p>
-                Claude Code can capture compact durable outcomes from existing MCP tools through
-                the included PostToolUse hook. Follow the repository instructions and merge the
-                hook entry into an existing <code>.claude/settings.json</code>; do not overwrite
-                your project settings.
+                When you consent during installation, Ninai merges SessionStart, Stop, and
+                SessionEnd hooks for Claude Code and Codex. The transcript remains in this Mac&apos;s
+                vault; only a small, project-scoped historical excerpt is injected on the next start.
+                Disable it with <code>~/.ninai-app/venv/bin/ninai capture disable</code>.
               </p>
               <p><a href="https://github.com/HariDarshan2321/ninai#2-optional-capture-results-from-existing-mcp-tools">Open the optional hook guide ↗</a></p>
             </div>
@@ -279,7 +279,7 @@ export default function InstallPage() {
               <h2>Know what this build is—and is not.</h2>
               <ul className="limit-list">
                 <li><span>Included</span> Local SQLite, FTS5, explicit scopes, provenance, access logs, soft deletion.</li>
-                <li><span>Included</span> Claude Code PostToolUse capture and explicit MCP remember/recall.</li>
+                <li><span>Included</span> Local Claude Code ↔ Codex lifecycle handoff and explicit MCP remember/recall.</li>
                 <li><span>Not yet</span> SQLCipher, signed desktop releases, universal capture, or an independent audit.</li>
                 <li><span>Not included</span> Automatic local-to-cloud sync, billing, Gmail OAuth, or mobile applications.</li>
               </ul>

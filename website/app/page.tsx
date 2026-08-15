@@ -53,7 +53,7 @@ export default function HomePage() {
               <Link className={styles.secondaryAction} href="/start/">Create hosted account</Link>
             </div>
             <ul className={styles.proofList} aria-label="MVP properties">
-              <li>Local cross-agent gate passed</li><li>Source-backed recall</li><li>Immediate revocation</li>
+              <li>Automatic Claude Code ↔ Codex handoff</li><li>Project-scoped</li><li>Sources on every recalled fact</li>
             </ul>
           </div>
           <div className={styles.heroProduct}>
@@ -72,13 +72,13 @@ export default function HomePage() {
           <div className={styles.returnFlow}>
             <article className={styles.sessionCard}>
               <div className={styles.cardMeta}><span>Session 01</span><span>Claude Code</span></div>
-              <p className={styles.userPrompt}>“Remember why migrations stay reversible.”</p>
-              <div className={styles.toolEvent}><span>Ninai stored</span><strong>Migrations must remain reversible.</strong><small>project scope · source attached</small></div>
+              <p className={styles.userPrompt}>Claude Code session ends.</p>
+              <div className={styles.toolEvent}><span>Ninai archived</span><strong>The scoped project outcome.</strong><small>automatic local handoff · source attached</small></div>
             </article>
             <div className={styles.returnBridge} aria-hidden="true"><div className={styles.returnMark}><img src="/assets/ninai-app-icon.svg" alt="" width="54" height="54" /></div><span>Only the durable outcome</span></div>
             <article className={`${styles.sessionCard} ${styles.sessionCardRecall}`}>
               <div className={styles.cardMeta}><span>Session 02</span><span>Codex</span></div>
-              <p className={styles.userPrompt}>“What did we decide about migrations?”</p>
+              <p className={styles.userPrompt}>Codex opens in the same project.</p>
               <div className={styles.memoryReceipt}><span className={styles.receiptIndex}>01</span><div><strong>Keep every migration reversible.</strong><small>claude-code://project/decision</small></div></div>
               <p className={styles.receiptFooter}>1 fact · source included</p>
             </article>

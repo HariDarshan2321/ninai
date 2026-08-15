@@ -7,6 +7,7 @@ script_dir="$(cd "$(dirname "${script_source:-.}")" 2>/dev/null && pwd || true)"
 repo_root="$(cd "${script_dir}/.." 2>/dev/null && pwd || true)"
 install_dir="${NINAI_INSTALL_DIR:-${HOME}/.ninai-app}"
 client="auto"
+session_capture="ask"
 
 case "${install_dir}" in
   /*) ;;
@@ -21,7 +22,7 @@ usage() {
   cat <<'EOF'
 Install Ninai's local engine and optional MCP client connection.
 
-Usage: install-local [--client claude-code|codex|none]
+Usage: install-local [--client both|claude-code|codex|none] [--session-capture ask|on|off]
 
 Environment:
   NINAI_INSTALL_DIR  Installation directory (default: ~/.ninai-app)
@@ -41,6 +42,11 @@ while [[ $# -gt 0 ]]; do
       client="$2"
       shift 2
       ;;
+    --session-capture)
+      [[ $# -ge 2 ]] || { printf '%s\n' 'Missing value after --session-capture.' >&2; exit 2; }
+      session_capture="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -54,8 +60,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${client}" in
-  auto|claude-code|codex|none) ;;
-  *) printf '%s\n' '--client must be claude-code, codex, or none.' >&2; exit 2 ;;
+  auto|both|claude-code|codex|none) ;;
+  *) printf '%s\n' '--client must be both, claude-code, codex, or none.' >&2; exit 2 ;;
+esac
+case "${session_capture}" in
+  ask|on|off) ;;
+  *) printf '%s\n' '--session-capture must be ask, on, or off.' >&2; exit 2 ;;
 esac
 
 case "$(uname -s)" in
@@ -121,8 +131,69 @@ printf '%s\n' 'Installing Ninai local mode…'
 "${install_dir}/venv/bin/ninai" doctor
 install_complete=1
 
+if [[ "${session_capture}" == "ask" ]]; then
+  if [[ -r /dev/tty ]]; then
+    printf '%s\n' \
+      'Ninai can automatically archive connected Claude Code/Codex sessions in your local vault.' \
+      'The archive stays on this Mac and can be disabled later with: ninai capture disable'
+    printf 'Enable automatic session capture? [Y/n] '
+    IFS= read -r answer </dev/tty || answer="n"
+    case "${answer}" in
+      n|N|no|NO) session_capture="off" ;;
+      *) session_capture="on" ;;
+    esac
+  else
+    session_capture="off"
+  fi
+fi
+if [[ "${session_capture}" == "on" ]]; then
+  "${install_dir}/venv/bin/ninai" capture enable >/dev/null
+else
+  "${install_dir}/venv/bin/ninai" capture disable >/dev/null
+fi
+
+merge_hooks() {
+  target="$1"
+  provider="$2"
+  include_post_tool="$3"
+  mkdir -p "$(dirname "${target}")"
+  NINAI_HOOK_TARGET="${target}" NINAI_HOOK_PROVIDER="${provider}" \
+  NINAI_HOOK_COMMAND="${install_dir}/venv/bin/ninai" NINAI_INCLUDE_POST_TOOL="${include_post_tool}" \
+    "${python_cmd}" - <<'PY'
+import json
+import os
+from pathlib import Path
+
+path = Path(os.environ["NINAI_HOOK_TARGET"])
+try:
+    data = json.loads(path.read_text()) if path.exists() else {}
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"Cannot safely merge hooks into {path}: {exc}")
+hooks = data.setdefault("hooks", {})
+provider = os.environ["NINAI_HOOK_PROVIDER"]
+executable = os.environ["NINAI_HOOK_COMMAND"]
+
+def add(event, command, matcher=""):
+    groups = hooks.setdefault(event, [])
+    for group in groups:
+        for item in group.get("hooks", []):
+            if item.get("command") == command:
+                return
+    groups.append({"matcher": matcher, "hooks": [{"type": "command", "command": command, "timeout": 15}]})
+
+lifecycle = f'{executable} session-hook --provider {provider}'
+for event in ("SessionStart", "Stop", "SessionEnd"):
+    add(event, lifecycle)
+if os.environ["NINAI_INCLUDE_POST_TOOL"] == "yes":
+    add("PostToolUse", f'{executable} capture-hook --quiet', "mcp__.*")
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+}
+
 if [[ "${client}" == "auto" ]]; then
-  if command -v claude >/dev/null 2>&1; then
+  if command -v claude >/dev/null 2>&1 && command -v codex >/dev/null 2>&1; then
+    client="both"
+  elif command -v claude >/dev/null 2>&1; then
     client="claude-code"
   elif command -v codex >/dev/null 2>&1; then
     client="codex"
@@ -131,8 +202,7 @@ if [[ "${client}" == "auto" ]]; then
   fi
 fi
 
-case "${client}" in
-  claude-code)
+connect_claude() {
     if ! command -v claude >/dev/null 2>&1; then
       printf '%s\n' 'Ninai installed, but Claude Code was not found. Install Claude Code and rerun with --client claude-code.' >&2
       exit 1
@@ -140,8 +210,10 @@ case "${client}" in
     "${install_dir}/venv/bin/ninai" permission grant claude-code project
     claude mcp remove ninai-local --scope user >/dev/null 2>&1 || true
     claude mcp add --transport stdio --scope user ninai-local -- "${install_dir}/venv/bin/ninai-mcp"
-    ;;
-  codex)
+    merge_hooks "${HOME}/.claude/settings.json" "claude-code" "yes"
+}
+
+connect_codex() {
     if ! command -v codex >/dev/null 2>&1; then
       printf '%s\n' 'Ninai installed, but Codex was not found. Install Codex and rerun with --client codex.' >&2
       exit 1
@@ -149,6 +221,19 @@ case "${client}" in
     "${install_dir}/venv/bin/ninai" permission grant codex project
     codex mcp remove ninai-local >/dev/null 2>&1 || true
     codex mcp add ninai-local --env NINAI_CLIENT_ID=codex -- "${install_dir}/venv/bin/ninai-mcp"
+    merge_hooks "${HOME}/.codex/hooks.json" "codex" "no"
+}
+
+case "${client}" in
+  both)
+    connect_claude
+    connect_codex
+    ;;
+  claude-code)
+    connect_claude
+    ;;
+  codex)
+    connect_codex
     ;;
 esac
 
@@ -158,4 +243,9 @@ if [[ "${client}" == "none" ]]; then
   printf 'No supported AI client was detected. Rerun with --client after installing Claude Code or Codex.\n'
 else
   printf 'Connected client: %s (project scope only)\n' "${client}"
+fi
+if [[ "${session_capture}" == "on" ]]; then
+  printf '%s\n' 'Automatic local session capture: enabled'
+else
+  printf '%s\n' 'Automatic local session capture: disabled (enable with: ninai capture enable)'
 fi

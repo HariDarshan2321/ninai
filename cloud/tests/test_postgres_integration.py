@@ -54,13 +54,77 @@ class PostgresLifecycleTest(unittest.TestCase):
     def tearDown(self) -> None:
         with self.psycopg.connect(DATABASE_URL) as db:
             db.execute("DELETE FROM oauth_identities WHERE user_id=%s", (self.user,))
-            for table in ("disclosure_logs", "idempotency_keys", "memory_relations", "memory_sources", "memories",
+            for table in ("session_disclosure_logs", "session_artifacts", "sessions", "workspace_capture_settings",
+                          "disclosure_logs", "idempotency_keys", "memory_relations", "memory_sources", "memories",
                           "personal_access_tokens",
                           "oauth_client_bindings", "client_scope_grants", "client_connections",
                           "projects", "workspace_members", "workspaces", "users"):
                 db.execute(f"DELETE FROM {table} WHERE workspace_id=%s" if table not in {"users", "workspaces"} else
                            ("DELETE FROM workspaces WHERE id=%s" if table == "workspaces" else "DELETE FROM users WHERE id=%s"),
                            (self.workspace if table != "users" else self.user,))
+
+    def test_session_archive_consent_idempotency_context_export_and_deletion(self) -> None:
+        control = ControlService(self.store._connection)
+        identity = ControlIdentity(self.user, self.workspace)
+        with self.assertRaisesRegex(AuthorizationError, "consent"):
+            self.store.capture_session(
+                self.principal, provider="codex", external_session_id="s-1",
+                project_id=self.project, title="Nova", source_uri="session://codex/s-1",
+                status="started",
+            )
+        settings = control.update_capture_settings(identity, {
+            "archive_sessions": True, "propose_memories": True,
+            "auto_approve_low_risk": False,
+        })
+        self.assertTrue(settings["archive_sessions"])
+        first = self.store.capture_session(
+            self.principal, provider="codex", external_session_id="s-1",
+            project_id=self.project, title="Nova", source_uri="session://codex/s-1",
+            status="checkpointed", transcript="Decision NINAI-PG-77 Bearer abcdefghijklmnopqrstuvwxyz",
+        )
+        second = self.store.capture_session(
+            self.principal, provider="codex", external_session_id="s-1",
+            project_id=self.project, title="Nova", source_uri="session://codex/s-1",
+            status="completed", transcript="Decision NINAI-PG-77 Bearer abcdefghijklmnopqrstuvwxyz",
+        )
+        self.assertEqual(first.id, second.id)
+        packet = self.store.session_context(self.principal, project_id=self.project)
+        self.assertIn("NINAI-PG-77", str(packet))
+        self.assertNotIn("abcdefghijklmnopqrstuvwxyz", str(packet))
+        self.assertEqual(len(control.sessions(identity)), 1)
+        exported = control.export(identity)
+        self.assertEqual(len(exported["sessions"]), 1)
+        self.assertEqual(len(exported["session_artifacts"]), 1)
+
+    def test_session_identity_cannot_be_reassigned_to_another_project(self) -> None:
+        control = ControlService(self.store._connection)
+        control.update_capture_settings(ControlIdentity(self.user, self.workspace), {
+            "archive_sessions": True, "propose_memories": True,
+            "auto_approve_low_risk": False,
+        })
+        other_project = str(uuid.uuid4())
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute(
+                "INSERT INTO projects(id,workspace_id,name,slug) VALUES(%s,%s,'Other','other')",
+                (other_project, self.workspace),
+            )
+            db.execute(
+                """INSERT INTO client_scope_grants(id,workspace_id,client_connection_id,scope_kind,scope_id,
+                     can_read,can_propose,can_auto_activate,created_by_user_id)
+                   VALUES(%s,%s,%s,'project',%s,true,true,false,%s)""",
+                (str(uuid.uuid4()), self.workspace, self.client, other_project, self.user),
+            )
+        self.store.capture_session(
+            self.principal, provider="codex", external_session_id="fixed",
+            project_id=self.project, title="Nova", source_uri="session://codex/fixed",
+            status="completed", transcript='{"role":"user","content":"Project A"}',
+        )
+        with self.assertRaisesRegex(AuthorizationError, "reassigned"):
+            self.store.capture_session(
+                self.principal, provider="codex", external_session_id="fixed",
+                project_id=other_project, title="Other", source_uri="session://codex/fixed",
+                status="completed", transcript='{"role":"user","content":"Project B"}',
+            )
 
     def test_lifecycle_idempotency_disclosure_and_revocation(self) -> None:
         args = dict(content="Nova uses PostgreSQL", memory_type="decision", scope_kind="project",

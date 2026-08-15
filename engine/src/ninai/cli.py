@@ -6,6 +6,7 @@ import sys
 
 from .config import client_id as configured_client_id
 from .hook_capture import capture
+from .session_capture import handle_lifecycle_event
 from .store import ALLOWED_SCOPES, MemoryStore
 
 
@@ -40,6 +41,10 @@ def parser() -> argparse.ArgumentParser:
 
     hook = sub.add_parser("capture-hook", help="Read a Claude Code hook event from stdin")
     hook.add_argument("--quiet", action="store_true")
+    lifecycle = sub.add_parser("session-hook", help="Read a Claude Code or Codex lifecycle hook event")
+    lifecycle.add_argument("--provider", required=True, choices=("claude-code", "codex"))
+    capture_setting = sub.add_parser("capture", help="Manage automatic session archiving consent")
+    capture_setting.add_argument("action", choices=("enable", "disable", "status"))
     return root
 
 
@@ -100,10 +105,31 @@ def main() -> None:
         return
 
     if args.command == "capture-hook":
-        event = json.load(sys.stdin)
-        memory_id = capture(event, store)
+        try:
+            event = json.load(sys.stdin)
+            memory_id = capture(event, store)
+        except Exception:
+            return
         if not args.quiet:
             print(json.dumps({"captured": memory_id is not None, "memory_id": memory_id}))
+        return
+
+    if args.command == "session-hook":
+        try:
+            event = json.load(sys.stdin)
+            output = handle_lifecycle_event(event, provider=args.provider, store=store)
+        except Exception:
+            return
+        if output:
+            print(json.dumps(output, ensure_ascii=False))
+        return
+
+    if args.command == "capture":
+        if args.action == "enable":
+            store.set_capture_enabled(True)
+        elif args.action == "disable":
+            store.set_capture_enabled(False)
+        print(json.dumps({"session_capture": store.capture_enabled()}))
         return
 
 

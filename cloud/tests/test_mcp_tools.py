@@ -115,7 +115,9 @@ class HostedMCPToolsTest(unittest.TestCase):
                             max_request_body_bytes=128)
         tools = asyncio.run(server.list_tools())
         self.assertEqual({tool.name for tool in tools},
-                         {"search", "fetch", "recall", "propose_memory", "remember"})
+                         {"search", "fetch", "recall", "propose_memory", "remember",
+                          "capture_session_start", "capture_session_checkpoint",
+                          "capture_session_end", "session_context"})
         paths = {route.path for route in server.streamable_http_app().routes}
         self.assertIn("/health", paths)
         self.assertIn("/mcp", paths)
