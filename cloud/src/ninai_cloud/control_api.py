@@ -231,7 +231,8 @@ class ControlService:
     def connections(self, identity: ControlIdentity) -> list[dict[str, Any]]:
         with self._connect() as db:
             self._member(db, identity)
-            rows = db.execute("""SELECT id,provider,client_type,display_name,status,created_at,last_seen_at,revoked_at
+            rows = db.execute("""SELECT id,provider,client_type,display_name,external_client_id,
+              status,created_at,last_seen_at,revoked_at
               FROM client_connections WHERE workspace_id=%s ORDER BY created_at DESC""", (identity.workspace_id,)).fetchall()
             return [dict(row) for row in rows]
 
