@@ -2,7 +2,7 @@
 
 ## Status
 
-The invitation beta is online at `https://ninai-cloud.onrender.com/mcp` and is
+The invitation beta is online at `https://app.ninai.io/mcp` and is
 covered by unit and PostgreSQL integration tests. It is an explicit opt-in
 service: it never reads or synchronizes the local SQLite vault. OAuth login and
 dynamic client registration are live. A newly authenticated client is attached
@@ -10,9 +10,9 @@ to the customer's sole active workspace with zero scope grants; the customer
 must explicitly choose projects and actions in the dashboard. The independent external-tester release
 gate must pass before hosted compatibility is described as generally available.
 
-The beta MCP endpoint is `https://ninai-cloud.onrender.com/mcp`. It uses
+The beta MCP endpoint is `https://app.ninai.io/mcp`. It uses
 Streamable HTTP and requires an OAuth access token. `GET
-https://ninai-cloud.onrender.com/health` is unauthenticated. The MCP
+https://app.ninai.io/health` is unauthenticated. The MCP
 protected-resource metadata is published at
 `/.well-known/oauth-protected-resource/mcp`.
 
@@ -26,7 +26,7 @@ grants.
 
 ```bash
 claude mcp add --transport http --scope user ninai \
-  https://ninai-cloud.onrender.com/mcp
+  https://app.ninai.io/mcp
 claude
 ```
 
@@ -43,7 +43,7 @@ Restart Claude Code, open `/mcp`, and verify `ninai` is connected and exposes
 ### Codex CLI and IDE
 
 ```bash
-codex mcp add ninai --url https://ninai-cloud.onrender.com/mcp
+codex mcp add ninai --url https://app.ninai.io/mcp
 codex mcp login ninai --scopes ninai:read,ninai:propose,ninai:remember
 codex mcp list
 ```
@@ -52,7 +52,7 @@ Complete the browser login, then open the new connection in the control center
 and add least-privilege project grants. Restart Codex after saving the grant.
 `codex mcp list` should report `ninai` as enabled with OAuth.
 
-The hosted [control center](https://ninai-cloud.onrender.com/control) is the
+The hosted [control center](https://app.ninai.io/control) is the
 customer dashboard for workspaces, projects, connections, grants,
 review, disclosures, export, and revocation. Use its **Create account** or **Sign
 in** button; the browser completes OAuth with PKCE and keeps the resulting

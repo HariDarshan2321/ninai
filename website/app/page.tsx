@@ -121,7 +121,7 @@ export default function HomePage() {
         <div className={`shell ${styles.finalCtaInner}`}>
           <img src="/assets/ninai-app-icon.svg" alt="" width="62" height="62" />
           <h2>Remember the work.<em>Keep the rest yours.</em></h2>
-          <div><Link className={styles.primaryAction} href="/install/">Set up Ninai ↗</Link><a className={styles.secondaryActionLight} href="https://ninai-cloud.onrender.com/control">Open dashboard</a></div>
+          <div><Link className={styles.primaryAction} href="/install/">Set up Ninai ↗</Link><a className={styles.secondaryActionLight} href="https://app.ninai.io/control">Open dashboard</a></div>
         </div>
       </section>
     </main>

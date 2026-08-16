@@ -21,11 +21,11 @@ SQLite vault.
 ## Technical endpoint
 
 - App name: **Ninai**
-- MCP server: `https://ninai-cloud.onrender.com/mcp`
+- MCP server: `https://app.ninai.io/mcp`
 - Authentication: OAuth 2.1 authorization-code flow with PKCE through Auth0
 - Protected-resource discovery:
-  `https://ninai-cloud.onrender.com/.well-known/oauth-protected-resource/mcp`
-- Dashboard: `https://ninai-cloud.onrender.com/control`
+  `https://app.ninai.io/.well-known/oauth-protected-resource/mcp`
+- Dashboard: `https://app.ninai.io/control`
 - Website: `https://ninai.io`
 - Privacy policy: `https://ninai.io/privacy/`
 - Terms: `https://ninai.io/terms/`

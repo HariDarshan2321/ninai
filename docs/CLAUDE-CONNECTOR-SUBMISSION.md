@@ -17,7 +17,7 @@ added manually as a custom remote MCP connector.
 In Claude, open **Customize → Connectors → Add custom connector** and use:
 
 - Name: **Ninai**
-- Remote MCP URL: `https://ninai-cloud.onrender.com/mcp`
+- Remote MCP URL: `https://app.ninai.io/mcp`
 
 Claude connects from Anthropic's cloud and completes OAuth in the browser. The
 connector uses Ninai's hosted PostgreSQL vault and cloud dashboard; it cannot
@@ -26,7 +26,7 @@ read the private SQLite vault in the macOS app.
 ## Directory submission data
 
 - Website: `https://ninai.io`
-- Dashboard: `https://ninai-cloud.onrender.com/control`
+- Dashboard: `https://app.ninai.io/control`
 - Privacy: `https://ninai.io/privacy/`
 - Terms: `https://ninai.io/terms/`
 - Support: `hello@ninai.io`

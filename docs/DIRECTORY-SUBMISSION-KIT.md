@@ -12,7 +12,7 @@ Use this kit for OpenAI app review and Anthropic's connector directory. Do not m
 
 **Website:** https://ninai.io/
 
-**MCP endpoint:** https://ninai-cloud.onrender.com/mcp
+**MCP endpoint:** https://app.ninai.io/mcp
 
 **Privacy:** https://ninai.io/privacy/
 
@@ -33,7 +33,7 @@ Suggested prompts:
 ## Reviewer account and workspace
 
 1. Create a controlled mailbox such as `reviewer@ninai.io`. Never put its password in source, issue trackers, or submission copy.
-2. Sign up at `https://ninai-cloud.onrender.com/control/login?screen_hint=signup` and finish email verification.
+2. Sign up at `https://app.ninai.io/control/login?screen_hint=signup` and finish email verification.
 3. From a protected Render shell with `DATABASE_URL` set, run `ninai-cloud-reviewer-seed --email reviewer@ninai.io`.
 4. Connect the reviewer's OpenAI or Anthropic client. The OAuth connection begins with zero grants.
 5. In the Ninai control center, grant the generated **Project Atlas** project `read` and `propose`; leave auto-activate off.

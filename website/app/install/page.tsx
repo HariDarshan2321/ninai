@@ -43,10 +43,10 @@ const registerCodexCommand = `codex mcp add ninai-local --env NINAI_CLIENT_ID=co
 ~/.ninai-app/venv/bin/ninai permission grant codex project`;
 
 const hostedClaudeCommand = `claude mcp add --transport http --scope user ninai-cloud \\
-  https://ninai-cloud.onrender.com/mcp
+  https://app.ninai.io/mcp
 claude`;
 
-const hostedCodexCommand = `codex mcp add ninai-cloud --url https://ninai-cloud.onrender.com/mcp
+const hostedCodexCommand = `codex mcp add ninai-cloud --url https://app.ninai.io/mcp
 codex mcp login ninai-cloud --scopes ninai:read,ninai:propose,ninai:remember
 codex mcp list`;
 
@@ -104,7 +104,7 @@ export default function InstallPage() {
           <a href="#hosted-codex">Codex</a>
           <a href="#hosted-chat">ChatGPT / Claude.ai</a>
           <a href="#hosted-verify">First memory</a>
-          <a href="https://ninai-cloud.onrender.com/control">Control center ↗</a>
+          <a href="https://app.ninai.io/control">Control center ↗</a>
         </aside>
         <div className="install-content">
           <section className="install-step" id="hosted-account">
@@ -113,7 +113,7 @@ export default function InstallPage() {
               <p className="install-step__label">Ninai account</p>
               <h2>Sign in and create one workspace and project.</h2>
               <p>The hosted vault is separate from local mode. Open the control center, sign in with Auth0, create a workspace, then create the project boundary you want to share.</p>
-              <div className="inline-actions"><a href="https://ninai-cloud.onrender.com/control/login?screen_hint=signup">Create account ↗</a><a href="https://ninai-cloud.onrender.com/control/login">Sign in</a></div>
+              <div className="inline-actions"><a href="https://app.ninai.io/control/login?screen_hint=signup">Create account ↗</a><a href="https://app.ninai.io/control/login">Sign in</a></div>
             </div>
           </section>
           <section className="install-step" id="hosted-claude">
@@ -139,7 +139,7 @@ export default function InstallPage() {
             <div>
               <p className="install-step__label">ChatGPT and Claude.ai</p>
               <h2>Add Ninai as a remote MCP app when your plan supports custom connectors.</h2>
-              <p>Use <code>https://ninai-cloud.onrender.com/mcp</code> as the server URL and complete Ninai OAuth. ChatGPT currently limits custom MCP apps to supported managed workspaces, and Claude availability depends on the selected Claude surface and plan. These hosts use the cloud vault—not the private database on your Mac.</p>
+              <p>Use <code>https://app.ninai.io/mcp</code> as the server URL and complete Ninai OAuth. ChatGPT currently limits custom MCP apps to supported managed workspaces, and Claude availability depends on the selected Claude surface and plan. These hosts use the cloud vault—not the private database on your Mac.</p>
               <p>After the host scans Ninai&apos;s tools and you approve OAuth, the connection appears automatically in your dashboard. It starts with zero project grants; choose the project and allowed actions before the first recall.</p>
             </div>
           </section>
@@ -155,7 +155,7 @@ export default function InstallPage() {
           </section>
           <div className="notice notice--good">
             <strong>Connected automatically, access denied by default</strong>
-            <p>OAuth dynamic registration creates the client connection but never silently grants memory access. Sign in to the <a href="https://ninai-cloud.onrender.com/control">hosted control center</a> to choose projects and actions, then manage review, export, and revocation. See the <a href="https://github.com/HariDarshan2321/ninai/blob/main/docs/HOSTED-BETA.md">complete beta guide</a>.</p>
+            <p>OAuth dynamic registration creates the client connection but never silently grants memory access. Sign in to the <a href="https://app.ninai.io/control">hosted control center</a> to choose projects and actions, then manage review, export, and revocation. See the <a href="https://github.com/HariDarshan2321/ninai/blob/main/docs/HOSTED-BETA.md">complete beta guide</a>.</p>
           </div>
         </div>
       </section>

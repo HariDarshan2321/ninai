@@ -74,7 +74,7 @@ deletion itself.
   **Block All Inbound IPs** was confirmed. Render reports that all internet
   traffic is blocked by the database inbound-IP policy.
 - Private-path validation: after the block was applied, the deployed service
-  continued to return HTTP 200 from `https://ninai-cloud.onrender.com/health`.
+  continued to return HTTP 200 from `https://app.ninai.io/health`.
 - Notifications: workspace email notifications are enabled for failure events.
 - Restore drill: not claimed as complete. Render recovery creates a separate,
   billable database. Create that isolated database only with release-owner cost

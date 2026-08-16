@@ -19,7 +19,7 @@ export default function StartPage() {
       <section className="page-hero page-hero--install">
         <div className="shell page-hero__grid">
           <div><p className="section-label">Hosted onboarding</p><h1>Create a vault. Connect one AI. Choose one project.</h1></div>
-          <div className="page-hero__aside"><p>Ninai denies access by default. Connecting creates an empty-permission client; you decide which project it can read or propose to.</p><div className="hero-actions"><a className="button button--acid" href="https://ninai-cloud.onrender.com/control/login?screen_hint=signup">Create account ↗</a><a className="button button--ink" href="https://ninai-cloud.onrender.com/control/login">Sign in</a></div></div>
+          <div className="page-hero__aside"><p>Ninai denies access by default. Connecting creates an empty-permission client; you decide which project it can read or propose to.</p><div className="hero-actions"><a className="button button--acid" href="https://app.ninai.io/control/login?screen_hint=signup">Create account ↗</a><a className="button button--ink" href="https://app.ninai.io/control/login">Sign in</a></div></div>
         </div>
       </section>
       <section className="install-choice onboarding-steps shell" aria-label="Hosted onboarding steps">
