@@ -106,18 +106,29 @@ class HostedMCPTools:
         (self.write_limiter if write else self.read_limiter).check(principal)
         return principal
 
-    def search(self, query: str, purpose: str, limit: int = 10) -> dict[str, Any]:
+    def projects(self) -> dict[str, Any]:
+        principal = self._authorized()
+        projects = self.store.granted_projects(principal)
+        return {"ok": True, "projects": projects, "count": len(projects)}
+
+    def search(
+        self, query: str, purpose: str, limit: int = 10,
+        project_id: str | None = None,
+    ) -> dict[str, Any]:
         query = _required_text(query, "query", MAX_QUERY_CHARS)
         purpose = _required_text(purpose, "purpose", MAX_PURPOSE_CHARS)
+        if project_id is not None:
+            project_id = _required_text(project_id, "project_id", MAX_IDENTIFIER_CHARS)
         limit = max(1, min(int(limit), MAX_SEARCH_ITEMS))
         principal = self._authorized()
-        memories = self.store.search(principal, query, limit=limit)
+        memories = self.store.search(principal, query, limit=limit, project_id=project_id)
         results = [_memory_result(memory) for memory in memories]
         self.store.record_disclosure(
             principal, tool_name="search", query=query, purpose=purpose,
             returned_memory_ids=[memory.id for memory in memories], estimated_tokens=_estimate_tokens(str(results)),
         )
-        return {"ok": True, "query": query, "results": results, "count": len(results)}
+        return {"ok": True, "query": query, "project_id": project_id,
+                "results": results, "count": len(results)}
 
     def fetch(self, memory_id: str, purpose: str) -> dict[str, Any]:
         memory_id = _required_text(memory_id, "memory_id", 100)
@@ -132,13 +143,20 @@ class HostedMCPTools:
         )
         return {"ok": True, "memory": result, "found": memory is not None}
 
-    def recall(self, query: str, purpose: str, max_items: int = 6, max_tokens: int = 600) -> dict[str, Any]:
+    def recall(
+        self, query: str, purpose: str, max_items: int = 6, max_tokens: int = 600,
+        project_id: str | None = None,
+    ) -> dict[str, Any]:
         query = _required_text(query, "query", MAX_QUERY_CHARS)
         purpose = _required_text(purpose, "purpose", MAX_PURPOSE_CHARS)
+        if project_id is not None:
+            project_id = _required_text(project_id, "project_id", MAX_IDENTIFIER_CHARS)
         max_items = max(1, min(int(max_items), MAX_RECALL_ITEMS))
         max_tokens = max(100, min(int(max_tokens), MAX_RECALL_TOKENS))
         principal = self._authorized()
-        candidates = self.store.search(principal, query, limit=max_items * 3)
+        candidates = self.store.search(
+            principal, query, limit=max_items * 3, project_id=project_id
+        )
         results: list[dict[str, Any]] = []
         estimated_tokens = 0
         for memory in candidates:
@@ -154,7 +172,8 @@ class HostedMCPTools:
             principal, tool_name="recall", query=query, purpose=purpose,
             returned_memory_ids=[result["id"] for result in results], estimated_tokens=estimated_tokens,
         )
-        return {"ok": True, "query": query, "purpose": purpose, "facts": results,
+        return {"ok": True, "query": query, "purpose": purpose,
+                "project_id": project_id, "facts": results,
                 "count": len(results), "estimated_tokens": estimated_tokens, "max_tokens": max_tokens}
 
     def _write(self, *, activate: bool, content: str, memory_type: str, scope_kind: str,
@@ -282,6 +301,19 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
             return {"ok": False, "error": {"code": "invalid_request", "message": str(exc)}}
 
     @mcp.tool(
+        title="List granted Ninai projects",
+        description=(
+            "List the projects this connection may use and whether each allows reading or proposing. "
+            "Call this before a project-scoped search or write when the project ID is not already known."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True,
+                                    openWorldHint=False),
+        structured_output=True,
+    )
+    def projects() -> dict[str, Any]:
+        return guarded(tools.projects)
+
+    @mcp.tool(
         title="Search Ninai memory",
         description=(
             "Search active, permission-filtered Ninai memories with provenance. Call this before asking "
@@ -292,8 +324,9 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
                                     openWorldHint=False),
         structured_output=True,
     )
-    def search(query: str, purpose: str, limit: int = 10) -> dict[str, Any]:
-        return guarded(tools.search, query, purpose, limit)
+    def search(query: str, purpose: str, limit: int = 10,
+               project_id: str | None = None) -> dict[str, Any]:
+        return guarded(tools.search, query, purpose, limit, project_id)
 
     @mcp.tool(
         title="Fetch Ninai memory",
@@ -308,15 +341,18 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     @mcp.tool(
         title="Recall from Ninai",
         description=(
-            "Load a compact, token-bounded Ninai context packet before answering a question that depends "
-            "on known prior project work. Results include provenance and a disclosure audit."
+            "Call before answering when the user continues prior project work, says 'remember', or uses "
+            "an unfamiliar project-specific name, acronym, decision, task, or incident. Load a compact, "
+            "project-filtered Ninai context packet with provenance. If no result matches, say that Ninai "
+            "has no verified matching memory instead of guessing."
         ),
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True,
                                     openWorldHint=False),
         structured_output=True,
     )
-    def recall(query: str, purpose: str, max_items: int = 6, max_tokens: int = 600) -> dict[str, Any]:
-        return guarded(tools.recall, query, purpose, max_items, max_tokens)
+    def recall(query: str, purpose: str, max_items: int = 6, max_tokens: int = 600,
+               project_id: str | None = None) -> dict[str, Any]:
+        return guarded(tools.recall, query, purpose, max_items, max_tokens, project_id)
 
     @mcp.tool(
         title="Propose Ninai memory",
@@ -337,7 +373,12 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
 
     @mcp.tool(
         title="Remember with Ninai",
-        description="Activate durable memory only with explicit auto-activate permission.",
+        description=(
+            "After the current conversation establishes a durable project fact, decision, commitment, "
+            "constraint, procedure, or project-state change, save one compact source-backed outcome when "
+            "this connection has explicit auto-activate permission. Never save raw transcripts, small "
+            "talk, speculation, credentials, secrets, or hidden reasoning."
+        ),
         annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
                                     openWorldHint=False),
         structured_output=True,

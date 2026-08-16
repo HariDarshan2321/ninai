@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ninai": {
+      "type": "http",
+      "url": "https://app.ninai.io/mcp"
+    }
+  }
+}

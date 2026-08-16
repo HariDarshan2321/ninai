@@ -38,7 +38,7 @@ grant only the requested project and actions. Never send an access token,
 refresh token, authorization code, or client secret.
 
 Restart Claude Code, open `/mcp`, and verify `ninai` is connected and exposes
-`search`, `fetch`, `recall`, `propose_memory`, and `remember`.
+`projects`, `search`, `fetch`, `recall`, `propose_memory`, and `remember`.
 
 ### Codex CLI and IDE
 
@@ -80,6 +80,7 @@ center or ask the operator to revoke the connection and handle export/deletion.
 
 | Tool | Required database grant | Behavior |
 | --- | --- | --- |
+| `projects` | live connection | Lists only projects currently granted to the connection, including its read/propose/auto-activate capabilities. |
 | `search` | `can_read` | Searches active memories within the connection's live scopes and logs the disclosure. |
 | `fetch` | `can_read` | Fetches one active, in-scope memory and logs the disclosure. |
 | `recall` | `can_read` | Returns a source-backed packet bounded to 12 items and 2,000 estimated tokens. |
@@ -109,7 +110,7 @@ claude mcp add --transport http --scope user ninai https://<host>/mcp
 claude
 ```
 
-Then run `/mcp`, select `ninai`, and complete the issuer's sign-in and authorization flow. Confirm that the server exposes `search`, `fetch`, `recall`, `propose_memory`, and `remember` before testing it. Do not put a long-lived token directly in a committed project configuration.
+Then run `/mcp`, select `ninai`, and complete the issuer's sign-in and authorization flow. Confirm that the server exposes `projects`, `search`, `fetch`, `recall`, `propose_memory`, and `remember` before testing it. Do not put a long-lived token directly in a committed project configuration.
 
 For a pre-issued short-lived token, use an environment-backed header in `.mcp.json`:
 
@@ -164,7 +165,7 @@ url = "https://<host>/mcp"
 bearer_token_env_var = "NINAI_ACCESS_TOKEN"
 ```
 
-Restart the Codex client after changing its MCP configuration, then verify that Ninai's five tools are visible. Codex CLI 0.145.0 and Claude Code 2.1.219 passed the local PAT-backed real-host acceptance run on 25 July 2026; production OAuth/HTTPS compatibility remains to be recorded after deployment.
+Restart the Codex client after changing its MCP configuration, then verify that Ninai's six tools are visible: projects, search, fetch, recall, propose_memory, and remember. Codex CLI 0.145.0 and Claude Code 2.1.219 passed the local PAT-backed real-host acceptance run on 25 July 2026; production OAuth/HTTPS compatibility remains to be recorded after deployment.
 
 The checked-in commands match the installed Codex CLI's `mcp add` and `mcp login` interfaces. Recheck `codex mcp add --help` and the current official Codex documentation when recording the release run.
 

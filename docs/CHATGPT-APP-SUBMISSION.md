@@ -18,6 +18,11 @@ choose Ninai, click **Connect**, complete Ninai OAuth, and use the hosted memory
 This is the hosted PostgreSQL product; it does not connect to the local macOS
 SQLite vault.
 
+ChatGPT decides when to invoke an enabled app. Ninai cannot passively read or
+archive every browser-chat turn. Its tool metadata asks ChatGPT to recall before
+prior-work answers and to propose compact durable outcomes after substantive
+project work; users can always say “use Ninai” when they want an explicit call.
+
 ## Technical endpoint
 
 - App name: **Ninai**
@@ -31,7 +36,7 @@ SQLite vault.
 - Terms: `https://ninai.io/terms/`
 - Support: `hello@ninai.io`
 
-The server exposes bounded search, fetch, recall, review-first proposal, and
+The server exposes project discovery, bounded search, fetch, recall, review-first proposal, and
 explicitly granted remember tools. Every returned memory retains its source, and
 all reads are disclosure-logged. Connecting an OAuth client must never silently
 grant it a workspace or project scope.

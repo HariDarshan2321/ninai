@@ -3,7 +3,7 @@
 ## Live acceptance status
 
 Validated on July 26, 2026 with Claude.ai. Claude completed Ninai OAuth, loaded
-all five hosted MCP tools, invoked **Search Ninai memory**, and returned
+all six core hosted MCP tools, invoked **Search Ninai memory**, and returned
 `0 results` for the synthetic query `NINAI_CLAUDE_ACCEPTANCE_2026`. The connector
 call completed successfully.
 
@@ -31,7 +31,7 @@ read the private SQLite vault in the macOS app.
 - Terms: `https://ninai.io/terms/`
 - Support: `hello@ninai.io`
 - Authentication: OAuth 2.1 authorization-code flow with PKCE
-- Tools: search, fetch, recall, propose_memory, remember
+- Tools: projects, search, fetch, recall, propose_memory, remember
 
 All tools publish titles and explicit MCP safety annotations. Search, fetch, and
 recall are read-only. Proposal and memory activation are non-destructive write

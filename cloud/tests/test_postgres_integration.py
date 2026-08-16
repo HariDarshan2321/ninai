@@ -188,6 +188,56 @@ class PostgresLifecycleTest(unittest.TestCase):
         with self.assertRaises(AuthorizationError):
             self.store.get_memory(self.principal, created.id)
 
+    def test_granted_projects_and_project_filtered_search(self) -> None:
+        other_project = str(uuid.uuid4())
+        ungranted_project = str(uuid.uuid4())
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute(
+                "INSERT INTO projects(id,workspace_id,name,slug) VALUES(%s,%s,'Orion','orion')",
+                (other_project, self.workspace),
+            )
+            db.execute(
+                "INSERT INTO projects(id,workspace_id,name,slug) VALUES(%s,%s,'Private','private')",
+                (ungranted_project, self.workspace),
+            )
+            db.execute(
+                """INSERT INTO client_scope_grants(id,workspace_id,client_connection_id,scope_kind,scope_id,
+                     can_read,can_propose,can_auto_activate,created_by_user_id)
+                   VALUES(%s,%s,%s,'project',%s,true,true,true,%s)""",
+                (str(uuid.uuid4()), self.workspace, self.client, other_project, self.user),
+            )
+
+        nova = self.store.create_memory(
+            self.principal, content="Shared marker belongs to Nova", memory_type="fact",
+            scope_kind="project", scope_id=self.project, project_id=self.project,
+            source_uri="test://nova", idempotency_key="project-filter-nova", activate=True,
+        )
+        orion = self.store.create_memory(
+            self.principal, content="Shared marker belongs to Orion", memory_type="fact",
+            scope_kind="project", scope_id=other_project, project_id=other_project,
+            source_uri="test://orion", idempotency_key="project-filter-orion", activate=True,
+        )
+
+        projects = self.store.granted_projects(self.principal)
+        self.assertEqual([str(item["id"]) for item in projects],
+                         [self.project, other_project])
+        self.assertEqual(
+            [memory.id for memory in self.store.search(
+                self.principal, "Shared marker", project_id=self.project
+            )],
+            [nova.id],
+        )
+        self.assertEqual(
+            [memory.id for memory in self.store.search(
+                self.principal, "Shared marker", project_id=other_project
+            )],
+            [orion.id],
+        )
+        with self.assertRaises(AuthorizationError):
+            self.store.search(
+                self.principal, "Shared marker", project_id=ungranted_project
+            )
+
     def test_foreign_workspace_and_scope_are_not_visible(self) -> None:
         foreign = Principal(self.user, str(uuid.uuid4()), self.client)
         with self.assertRaises(AuthorizationError):

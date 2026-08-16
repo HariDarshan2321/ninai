@@ -436,7 +436,30 @@ class PostgresStore:
             ).fetchone()
             return self._memory(row) if row else None
 
-    def search(self, principal: Principal, query: str, *, limit: int = 20) -> list[HostedMemory]:
+    def granted_projects(self, principal: Principal) -> list[dict[str, Any]]:
+        """Return live project grants for this client without exposing memory content."""
+        with self._connection() as db:
+            self._validate_principal(db, principal)
+            rows = db.execute(
+                """SELECT p.id,p.name,p.slug,
+                     bool_or(g.can_read) can_read,
+                     bool_or(g.can_propose) can_propose,
+                     bool_or(g.can_auto_activate) can_auto_activate
+                   FROM client_scope_grants g JOIN projects p
+                     ON p.workspace_id=g.workspace_id AND p.id=g.scope_id
+                   WHERE g.workspace_id=%s AND g.client_connection_id=%s
+                     AND g.scope_kind='project' AND g.revoked_at IS NULL
+                     AND (g.expires_at IS NULL OR g.expires_at > now())
+                     AND p.archived_at IS NULL
+                   GROUP BY p.id,p.name,p.slug ORDER BY p.name,p.id""",
+                (principal.workspace_id, principal.client_connection_id),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def search(
+        self, principal: Principal, query: str, *, limit: int = 20,
+        project_id: str | None = None,
+    ) -> list[HostedMemory]:
         limit = max(1, min(100, int(limit)))
         lexemes = re.findall(r"[\w-]+", query.lower())[:20]
         # Candidate retrieval uses OR semantics so natural questions are not
@@ -445,6 +468,11 @@ class PostgresStore:
         terms = " | ".join(lexemes)
         with self._connection() as db:
             self._validate_principal(db, principal)
+            if project_id is not None:
+                project_id = self._validate_scope_target(
+                    db, principal, "project", project_id, project_id
+                )
+                self._grant(db, principal, "project", project_id, "can_read")
             rows = db.execute(
                 """SELECT m.*,s.source_uri FROM memories m
                    JOIN client_scope_grants g ON g.workspace_id=m.workspace_id
@@ -455,10 +483,12 @@ class PostgresStore:
                      AND s.memory_id=m.id ORDER BY s.created_at LIMIT 1) s ON true
                    WHERE m.workspace_id=%s AND m.status='active' AND m.deleted_at IS NULL
                      AND (m.valid_until IS NULL OR m.valid_until > now())
+                     AND (%s::uuid IS NULL OR m.project_id=%s::uuid)
                      AND (%s='' OR to_tsvector('simple',m.normalized_content) @@ to_tsquery('simple',%s))
                    ORDER BY CASE WHEN %s='' THEN 0 ELSE ts_rank(to_tsvector('simple',m.normalized_content),to_tsquery('simple',%s)) END DESC,
                      m.importance DESC,m.updated_at DESC LIMIT %s""",
-                (principal.client_connection_id, principal.workspace_id, terms, terms, terms, terms, limit),
+                (principal.client_connection_id, principal.workspace_id, project_id, project_id,
+                 terms, terms, terms, terms, limit),
             ).fetchall()
             return [self._memory(row) for row in rows]
 

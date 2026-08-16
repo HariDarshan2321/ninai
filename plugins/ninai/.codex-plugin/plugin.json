@@ -1,0 +1,33 @@
+{
+  "name": "ninai",
+  "version": "0.1.0",
+  "description": "Source-backed project continuity across ChatGPT, Claude, and Codex.",
+  "author": {
+    "name": "Ninai",
+    "email": "hello@ninai.io",
+    "url": "https://ninai.io"
+  },
+  "homepage": "https://ninai.io",
+  "repository": "https://github.com/HariDarshan2321/ninai",
+  "license": "MIT",
+  "keywords": ["memory", "context", "continuity", "provenance"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Ninai",
+    "shortDescription": "Continue project work with source-backed memory.",
+    "longDescription": "Recall approved project knowledge before answering and propose durable outcomes for review so work can continue across supported AI clients.",
+    "developerName": "Ninai",
+    "category": "Productivity",
+    "capabilities": ["Search", "Write"],
+    "websiteURL": "https://ninai.io",
+    "privacyPolicyURL": "https://ninai.io/privacy/",
+    "termsOfServiceURL": "https://ninai.io/terms/",
+    "defaultPrompt": [
+      "Continue my project using Ninai memory.",
+      "What decisions have we made about this project?",
+      "Save the durable outcomes from this work to Ninai."
+    ],
+    "brandColor": "#0B302B"
+  },
+  "mcpServers": "./.mcp.json"
+}

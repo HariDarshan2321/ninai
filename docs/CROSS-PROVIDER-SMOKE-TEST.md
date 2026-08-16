@@ -67,7 +67,7 @@ run and is not a durable deployment.
 | Authentication | Fresh explicit PAT-mode staging connections expiring after one day |
 | Discovery | `/health` returned `200`; protected-resource metadata advertised the exact HTTPS `/mcp` resource |
 | Challenge | Unauthenticated MCP initialization returned `401` with matching `resource_metadata` |
-| Tools | `fetch`, `propose_memory`, `recall`, `remember`, and `search` listed over HTTPS |
+| Tools | `projects`, `fetch`, `propose_memory`, `recall`, `remember`, and `search` listed over HTTPS |
 | Round trip | Claude-labelled connection wrote; OpenAI-labelled connection recalled with exact source; OpenAI wrote; Claude recalled with exact source |
 | Revocation | The already-issued OpenAI PAT returned HTTP `401` after its connection was revoked |
 | Continuity | The Claude connection still recalled the OpenAI-authored memory after OpenAI revocation |

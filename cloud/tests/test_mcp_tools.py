@@ -27,7 +27,13 @@ class FakeStore:
         self.memories = [memory(1)]
         self.disclosures: list[dict] = []
         self.creates: list[dict] = []
-    def search(self, principal, query, *, limit=20): return self.memories[:limit]
+        self.searches: list[dict] = []
+    def granted_projects(self, principal):
+        return [{"id": "project", "name": "Nova", "slug": "nova", "can_read": True,
+                 "can_propose": True, "can_auto_activate": False}]
+    def search(self, principal, query, *, limit=20, project_id=None):
+        self.searches.append({"query": query, "project_id": project_id})
+        return self.memories[:limit]
     def get_memory(self, principal, memory_id): return next((x for x in self.memories if x.id == memory_id), None)
     def record_disclosure(self, principal, **event): self.disclosures.append(event); return "log"
     def create_memory(self, principal, **values): self.creates.append(values); return memory(len(self.creates), values["content"])
@@ -53,10 +59,17 @@ class HostedMCPToolsTest(unittest.TestCase):
         self.store = FakeStore()
         self.tools = HostedMCPTools(self.store, lambda: Principal("user", "workspace", "client"))
     def test_search_is_source_backed_and_disclosed(self) -> None:
-        result = self.tools.search("PostgreSQL", "continue project work", limit=999)
+        result = self.tools.search(
+            "PostgreSQL", "continue project work", limit=999, project_id="project"
+        )
         self.assertEqual(result["results"][0]["source"]["uri"], "claude://session/1")
+        self.assertEqual(self.store.searches[0]["project_id"], "project")
         self.assertEqual(self.store.disclosures[0]["tool_name"], "search")
         self.assertEqual(self.store.disclosures[0]["returned_memory_ids"], ["memory-1"])
+    def test_projects_returns_only_granted_project_metadata(self) -> None:
+        result = self.tools.projects()
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["projects"][0]["id"], "project")
     def test_fetch_not_found_is_still_disclosed(self) -> None:
         self.assertFalse(self.tools.fetch("missing", "verify")["found"])
         self.assertEqual(self.store.disclosures[0]["returned_memory_ids"], [])
@@ -131,13 +144,14 @@ class HostedMCPToolsTest(unittest.TestCase):
                             max_request_body_bytes=128)
         tools = asyncio.run(server.list_tools())
         self.assertEqual({tool.name for tool in tools},
-                         {"search", "fetch", "recall", "propose_memory", "remember",
+                         {"projects", "search", "fetch", "recall", "propose_memory", "remember",
                           "capture_session_start", "capture_session_checkpoint",
                           "capture_session_end", "session_context"})
         descriptions = {tool.name: tool.description for tool in tools}
         self.assertIn("before asking for clarification", descriptions["search"])
-        self.assertIn("depends on known prior project work", descriptions["recall"])
+        self.assertIn("continues prior project work", descriptions["recall"])
         self.assertIn("After the current conversation establishes", descriptions["propose_memory"])
+        self.assertIn("After the current conversation establishes", descriptions["remember"])
         paths = {route.path for route in server.streamable_http_app().routes}
         self.assertIn("/health", paths)
         self.assertIn("/ready", paths)
