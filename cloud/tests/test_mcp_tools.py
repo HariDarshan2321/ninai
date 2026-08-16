@@ -1,6 +1,7 @@
 from __future__ import annotations
 import sys
 import unittest
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,6 +31,21 @@ class FakeStore:
     def get_memory(self, principal, memory_id): return next((x for x in self.memories if x.id == memory_id), None)
     def record_disclosure(self, principal, **event): self.disclosures.append(event); return "log"
     def create_memory(self, principal, **values): self.creates.append(values); return memory(len(self.creates), values["content"])
+
+
+class ReadyStore(FakeStore):
+    @contextmanager
+    def _connection(self):
+        class Database:
+            def execute(self, statement):
+                if statement != "SELECT 1":
+                    raise AssertionError(statement)
+                return self
+
+            def fetchone(self):
+                return (1,)
+
+        yield Database()
 
 
 class HostedMCPToolsTest(unittest.TestCase):
@@ -120,6 +136,7 @@ class HostedMCPToolsTest(unittest.TestCase):
                           "capture_session_end", "session_context"})
         paths = {route.path for route in server.streamable_http_app().routes}
         self.assertIn("/health", paths)
+        self.assertIn("/ready", paths)
         self.assertIn("/mcp", paths)
         self.assertIn("/.well-known/oauth-protected-resource/mcp", paths)
 
@@ -128,6 +145,10 @@ class HostedMCPToolsTest(unittest.TestCase):
             health = client.get("/health")
             self.assertEqual(health.status_code, 200)
             self.assertEqual(health.json()["status"], "ok")
+            readiness = client.get("/ready")
+            self.assertEqual(readiness.status_code, 503)
+            self.assertEqual(readiness.json()["status"], "unavailable")
+            self.assertNotIn("error", readiness.text.lower())
             unauthorized = client.post("/mcp", json={})
             self.assertEqual(unauthorized.status_code, 401)
             self.assertIn("resource_metadata=", unauthorized.headers["www-authenticate"])
@@ -135,6 +156,29 @@ class HostedMCPToolsTest(unittest.TestCase):
                                     headers={"content-type": "application/json"})
             self.assertEqual(oversized.status_code, 413)
             self.assertEqual(oversized.json()["error"]["code"], "payload_too_large")
+
+    def test_readiness_checks_the_database(self) -> None:
+        from starlette.testclient import TestClient
+        from ninai_cloud.mcp_server import create_mcp
+
+        class Verifier:
+            async def verify_token(self, token): return None
+
+        server = create_mcp(
+            ReadyStore(),
+            token_verifier=Verifier(),
+            auth=MCPAuthSettings(
+                issuer_url="https://auth.example.test",
+                resource_server_url="https://api.example.test/mcp",
+                required_scopes=[],
+            ),
+            principal_resolver=lambda: Principal("user", "workspace", "client"),
+        )
+        with TestClient(server.streamable_http_app()) as client:
+            response = client.get("/ready")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ready")
+        self.assertEqual(response.headers["cache-control"], "no-store")
 
 
 if __name__ == "__main__": unittest.main()

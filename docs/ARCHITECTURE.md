@@ -21,6 +21,12 @@ Claude, Codex, or an API integration
         -> provenance-backed result + disclosure log
 ```
 
+The hosted process uses a bounded PostgreSQL connection pool (one to ten
+connections by default) for MCP and control-center operations. `/health` is a
+process liveness check; `/ready` executes a minimal database query and is the
+deployment readiness check. This keeps a database outage or exhausted pool
+from being reported as a healthy application.
+
 ## Data flow
 
 ```text
@@ -112,7 +118,7 @@ affect disclosure.
 
 ## Website architecture
 
-The marketing site is a Next.js application under `website/` with `output: "export"`. It uses React only for focused interactions such as the permission/revocation model and copyable install commands; all pages are emitted as static HTML for deployment.
+The marketing site is a Next.js application under `website/` with `output: "export"`. It uses React only for focused interactions such as the permission/revocation model; all pages are emitted as static HTML for deployment. It contains no installer or hosted connection credentials. Account creation, the authenticated installer download, and client setup live in the hosted control center.
 
 - `app/` owns routes, metadata, and the visual system.
 - `components/` contains shared navigation, footer, command, and disclosure components.

@@ -36,7 +36,7 @@ export function SiteHeader() {
           <Link href="/local/" aria-current={currentSection === "/local" ? "page" : undefined}>Local</Link>
           <Link href="/start/" aria-current={currentSection === "/start" ? "page" : undefined}>Hosted</Link>
         </nav>
-        <Link className="button button--compact button--ink" href="/start/">
+        <Link className="button button--compact button--ink" href="/install/">
           Get started
           <span aria-hidden="true">↗</span>
         </Link>
@@ -53,7 +53,7 @@ export function SiteHeader() {
             <Link href="/local/" aria-current={currentSection === "/local" ? "page" : undefined} onClick={closeMobileMenu}>Local</Link>
             <Link href="/start/" aria-current={currentSection === "/start" ? "page" : undefined} onClick={closeMobileMenu}>Hosted</Link>
             <Link className="mobile-nav__install" href="/install/" onClick={closeMobileMenu}>
-              Install local ↗
+              Get Ninai ↗
             </Link>
           </nav>
         </details>

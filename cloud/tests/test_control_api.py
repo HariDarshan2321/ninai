@@ -84,6 +84,8 @@ class FakeService:
     def projects(self, who): return [{"id": "p1", "name": "Shared"}]
     def create_workspace(self, who, data):
         self.calls.append(("create_workspace", who, data)); return {"id": "new-workspace", "name": data["name"]}
+    def record_installer_download(self, who, *, artifact_sha256):
+        self.calls.append(("installer_download", who, artifact_sha256)); return "download-1"
     def create_project(self, who, data):
         self.calls.append(("create_project", who, data)); return {"id": "p1", "name": data["name"]}
     def create_connection(self, who, data):
@@ -111,7 +113,8 @@ class Verifier(TokenVerifier):
             return None
         return AccessToken(token=token, client_id="client-1", scopes=[],
                            claims={"user_id": "user-1", "workspace_id": "workspace-1",
-                                   "email": "owner@example.test", "name": "Owner"})
+                                   "email": "owner@example.test", "name": "Owner",
+                                   "email_verified": True})
 
 
 class ControlAppTest(unittest.TestCase):
@@ -141,9 +144,10 @@ class ControlAppTest(unittest.TestCase):
         self.assertIn('src="https://ninai.io/assets/ninai-wordmark.svg" alt="Ninai"', response.text)
         for native_dialog in ("prompt(", "alert(", "confirm("):
             self.assertNotIn(native_dialog, response.text)
-        for dashboard_copy in ("Finish setup", "Copy MCP address", "Manual beta connection",
+        for dashboard_copy in ("Finish setup", "Open signed-in setup",
+                               "Claude.ai or supported ChatGPT workspace",
                                "Choose a project", "Create your workspace", "Read approved memories",
-                               "Propose new memories", "Check configuration", "#hosted-chat"):
+                               "Propose new memories", "Check configuration"):
             self.assertIn(dashboard_copy, response.text)
         self.assertNotIn("Ninai is ready to use", response.text)
         self.assertNotIn("#hosted-openai", response.text)
@@ -168,6 +172,26 @@ class ControlAppTest(unittest.TestCase):
                 response = self.client.get("/api/control/overview", headers=headers)
                 self.assertEqual(response.status_code, 401)
                 self.assertTrue(response.headers["www-authenticate"].startswith("Bearer"))
+
+    def test_official_installer_requires_account_and_records_minimal_event(self):
+        path = "/api/control/downloads/macos-installer"
+        self.assertEqual(self.client.get(path).status_code, 401)
+        response = self.client.get(path, headers=self.auth)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content.startswith(b"#!/usr/bin/env bash"))
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertEqual(response.headers["content-type"], "text/x-shellscript; charset=utf-8")
+        self.assertIn("attachment", response.headers["content-disposition"])
+        digest = hashlib.sha256(response.content).hexdigest()
+        self.assertEqual(response.headers["x-installer-sha256"], digest)
+        self.assertEqual(self.service.calls[-1], ("installer_download", self.identity, digest))
+
+    def test_signed_in_control_center_contains_concise_mode_choice(self):
+        from ninai_cloud.control_ui import render_control_center
+        page = render_control_center(oauth_enabled=True, signed_in=True)
+        for copy in ("Choose where your vault lives", "Keep it local", "Use a hosted vault",
+                     "Download Mac installer", "--client both"):
+            self.assertIn(copy, page)
 
     def test_dashboard_oauth_login_uses_authorization_code_pkce(self):
         from ninai_cloud.auth import AuthSettings
@@ -267,14 +291,14 @@ class ControlAppTest(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["location"], "/control")
         cookies = response.headers.get_list("set-cookie")
-        session = next(value for value in cookies if value.startswith("ninai_access_token="))
+        session = next(value for value in cookies if value.startswith("__Host-ninai_access_token="))
         self.assertIn("HttpOnly", session)
         self.assertIn("Secure", session)
         self.assertIn("SameSite=lax", session)
 
     def test_dashboard_cookie_auth_requires_origin_for_mutations(self):
         client = self.client
-        client.cookies.set("ninai_access_token", "valid-token")
+        client.cookies.set("__Host-ninai_access_token", "valid-token")
         self.assertEqual(client.get("/api/control/overview").status_code, 200)
         denied = client.post("/api/control/memories/m1/approve", json={})
         self.assertEqual(denied.status_code, 401)
@@ -428,7 +452,7 @@ class ControlAppTest(unittest.TestCase):
             principal_resolver=lambda: None,
         )
         paths = {route.path for route in server.streamable_http_app().routes}
-        self.assertTrue({"/", "/health", "/favicon.svg", "/control", "/control/login", "/control/logout",
+        self.assertTrue({"/", "/health", "/ready", "/favicon.svg", "/control", "/control/login", "/control/logout",
                          "/api/control/{path:path}"}.issubset(paths))
         with TestClient(server.streamable_http_app()) as client:
             root = client.get("/", follow_redirects=False)

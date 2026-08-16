@@ -82,11 +82,13 @@ deletion itself.
 
 ## Health, monitoring, and alerts
 
-In the web service's **Settings**, set the HTTP health-check path to `/health`.
+In the web service's **Settings**, set the HTTP health-check path to `/ready`.
 Render treats a 2xx/3xx response as healthy, prevents an unhealthy new deploy
-from receiving traffic, and can restart an unhealthy running instance. Also run
-an independent HTTPS monitor against `/health` from outside Render; the platform
-probe alone cannot detect a regional or edge-path failure.
+from receiving traffic, and can restart an unhealthy running instance. `/ready`
+checks PostgreSQL through the application pool; `/health` checks only that the
+web process is alive. Also run independent HTTPS monitors against both endpoints
+from outside Render; the platform probe alone cannot detect a regional or edge-path
+failure.
 
 In **Workspace → Integrations → Notifications**, enable at least failure email
 notifications for every on-call release owner. This covers failed deploys,
@@ -114,7 +116,7 @@ These cannot be proven or performed by the repository:
 - select and pay for the database/service plans and confirm the recovery window;
 - ensure service and database use the same selected region and internal URL;
 - populate OAuth and service secrets in Render's secret manager;
-- set `/health`, auto-deploy **After CI Checks Pass**, and notification owners;
+- set `/ready`, auto-deploy **After CI Checks Pass**, and notification owners;
 - configure external uptime/log/metrics destinations and alert thresholds;
 - retain a downloaded logical export in the approved encrypted location and
   complete the isolated, billable restore drill after cost approval;

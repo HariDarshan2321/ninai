@@ -49,8 +49,8 @@ export default function HomePage() {
               decisions once, recall them with sources, and revoke access at any time.
             </p>
             <div className={styles.heroActions}>
-              <Link className={styles.primaryAction} href="/install/#local-install">Install locally <span aria-hidden="true">↗</span></Link>
-              <Link className={styles.secondaryAction} href="/start/">Create hosted account</Link>
+              <Link className={styles.primaryAction} href="/install/">Get Ninai for Mac <span aria-hidden="true">↗</span></Link>
+              <Link className={styles.secondaryAction} href="/start/">Use a hosted vault</Link>
             </div>
             <ul className={styles.proofList} aria-label="MVP properties">
               <li>Automatic Claude Code ↔ Codex handoff</li><li>Project-scoped</li><li>Sources on every recalled fact</li>

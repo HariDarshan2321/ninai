@@ -50,6 +50,7 @@ class HostedStoreUnitTest(unittest.TestCase):
             "0001_hosted_core.sql", "0002_personal_access_tokens.sql",
             "0003_memory_lifecycle.sql", "0004_oauth_identity_mapping.sql",
             "0005_tenant_integrity.sql", "0006_session_archive.sql",
+            "0007_installer_downloads.sql",
         ])
         sql = files[0].read_text(encoding="utf-8")
         for table in (

@@ -15,6 +15,7 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from importlib.resources import files
 from typing import Any, Callable, ContextManager, Mapping
 from urllib.parse import parse_qs, urlencode
 
@@ -25,6 +26,9 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Re
 from .postgres_store import AuthorizationError
 from .auth import AuthSettings
 from .control_ui import render_control_center
+
+
+SESSION_COOKIE = "__Host-ninai_access_token"
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +94,21 @@ class ControlService:
             db.execute("INSERT INTO workspace_members(workspace_id,user_id,role) VALUES(%s,%s,'owner')",
                        (workspace_id, identity.user_id))
             return dict(row)
+
+    def record_installer_download(self, identity: ControlIdentity, *, artifact_sha256: str) -> str:
+        """Record an authenticated official installer download without request metadata."""
+        if identity.workspace_id is None:
+            raise AuthorizationError("Create a workspace before downloading the local installer")
+        event_id = str(uuid.uuid4())
+        with self._connect() as db:
+            self._member(db, identity)
+            db.execute(
+                """INSERT INTO installer_downloads(
+                     id,workspace_id,user_id,platform,artifact_sha256)
+                   VALUES(%s,%s,%s,'macos',%s)""",
+                (event_id, identity.workspace_id, identity.user_id, artifact_sha256),
+            )
+        return event_id
 
     def create_project(self, identity: ControlIdentity, data: Mapping[str, Any]) -> dict[str, Any]:
         name = str(data.get("name", "")).strip()
@@ -370,6 +389,7 @@ class ControlService:
                 ("sessions", "sessions"), ("session_artifacts", "session_artifacts"),
                 ("session_disclosures", "session_disclosure_logs"),
                 ("capture_settings", "workspace_capture_settings"),
+                ("installer_downloads", "installer_downloads"),
             ):
                 rows = db.execute(f"SELECT * FROM {table} WHERE workspace_id=%s ORDER BY created_at", (identity.workspace_id,)).fetchall()
                 exported[key] = [dict(row) for row in rows]
@@ -398,6 +418,8 @@ class ControlApp:
                  oauth_settings: AuthSettings | None = None) -> None:
         self.service, self.token_verifier = service, token_verifier
         self.oauth_settings = oauth_settings
+        self._installer = files("ninai_cloud.assets").joinpath("install-ninai-macos.sh").read_bytes()
+        self._installer_sha256 = hashlib.sha256(self._installer).hexdigest()
 
     @staticmethod
     def _security_headers() -> dict[str, str]:
@@ -412,6 +434,9 @@ class ControlApp:
             "X-Frame-Options": "DENY",
             "Referrer-Policy": "no-referrer",
             "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Cross-Origin-Resource-Policy": "same-origin",
+            "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
         }
 
     async def handle(self, request: Request) -> Response:
@@ -419,7 +444,10 @@ class ControlApp:
         if oauth_response is not None:
             return oauth_response
         try:
-            status, content_type, body = await self._dispatch(request)
+            dispatched = await self._dispatch(request)
+            if isinstance(dispatched, Response):
+                return dispatched
+            status, content_type, body = dispatched
         except AuthenticationError as exc:
             return JSONResponse(
                 {"error": str(exc)}, status_code=401,
@@ -434,7 +462,9 @@ class ControlApp:
             status, content_type, body = 404, "application/json", {"error": str(exc.args[0])}
         headers = self._security_headers()
         if isinstance(body, str):
-            return HTMLResponse(body, status_code=status, headers=headers)
+            if content_type.startswith("text/html"):
+                return HTMLResponse(body, status_code=status, headers=headers)
+            return Response(body, status_code=status, media_type=content_type, headers=headers)
         return Response(json.dumps(body, default=_jsonable), status_code=status,
                         media_type=content_type, headers=headers)
 
@@ -479,6 +509,9 @@ class ControlApp:
             return response
         if path == "/control/logout" and request.method == "GET":
             response = RedirectResponse("/control", status_code=302, headers=self._security_headers())
+            response.delete_cookie(SESSION_COOKIE, path="/", secure=True, samesite="lax")
+            # Clear the pre-hardening name during rollout so an old session
+            # cannot appear signed in after logout.
             response.delete_cookie("ninai_access_token", path="/")
             return response
         if path == "/control" and request.method == "GET" and request.query_params.get("error"):
@@ -527,7 +560,7 @@ class ControlApp:
             return JSONResponse({"error": "OAuth code exchange failed"}, status_code=502,
                                 headers=self._security_headers())
         response = RedirectResponse("/control", status_code=302, headers=self._security_headers())
-        response.set_cookie("ninai_access_token", access_token,
+        response.set_cookie(SESSION_COOKIE, access_token,
                             max_age=max(60, min(int(token_data.get("expires_in", 3600)), 86_400)),
                             httponly=True, secure=True, samesite="lax", path="/")
         response.delete_cookie("ninai_oauth_state", path="/control")
@@ -536,13 +569,13 @@ class ControlApp:
 
     async def _identity(self, request: Request) -> ControlIdentity:
         authorization = request.headers.get("authorization", "")
-        using_cookie = not authorization and bool(request.cookies.get("ninai_access_token"))
+        using_cookie = not authorization and bool(request.cookies.get(SESSION_COOKIE))
         if using_cookie and request.method.upper() != "GET":
             expected = f"{request.url.scheme}://{request.url.netloc}"
             if request.headers.get("origin") != expected:
                 raise AuthenticationError("OAuth browser request failed origin validation")
         scheme, separator, credential = (
-            authorization or f"Bearer {request.cookies.get('ninai_access_token', '')}"
+            authorization or f"Bearer {request.cookies.get(SESSION_COOKIE, '')}"
         ).partition(" ")
         if not separator or scheme.lower() != "bearer" or not credential.strip():
             raise AuthenticationError("A Bearer authorization header is required")
@@ -565,7 +598,7 @@ class ControlApp:
         if path in {"/", "/control"} and method == "GET":
             return 200, "text/html; charset=utf-8", render_control_center(
                 oauth_enabled=self._oauth_ready(),
-                signed_in=bool(request.cookies.get("ninai_access_token")),
+                signed_in=bool(request.cookies.get(SESSION_COOKIE)),
             )
         if not path.startswith("/api/control/"):
             raise KeyError("Route not found")
@@ -575,6 +608,19 @@ class ControlApp:
         data = json.loads(raw or b"{}") if raw else {}
         suffix = path.removeprefix("/api/control")
         if method == "POST" and suffix == "/workspaces": result = self.service.create_workspace(identity, data)
+        elif method == "GET" and suffix == "/downloads/macos-installer":
+            self.service.record_installer_download(
+                identity, artifact_sha256=self._installer_sha256
+            )
+            return Response(
+                self._installer,
+                media_type="text/x-shellscript",
+                headers={
+                    **self._security_headers(),
+                    "Content-Disposition": 'attachment; filename="install-ninai-macos.sh"',
+                    "X-Installer-SHA256": self._installer_sha256,
+                },
+            )
         elif method == "GET" and suffix == "/overview": result = self.service.overview(identity)
         elif method == "GET" and suffix == "/projects": result = {"items": self.service.projects(identity)}
         elif method == "POST" and suffix == "/projects": result = self.service.create_project(identity, data)

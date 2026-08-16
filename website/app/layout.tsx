@@ -97,7 +97,7 @@ const organizationSchema = {
       description:
         "Permissioned, source-backed AI memory for Claude Code and Codex.",
       softwareVersion: "0.1",
-      downloadUrl: `${siteUrl}/download/install-ninai-macos.sh`,
+      downloadUrl: "https://app.ninai.io/control",
       softwareHelp: `${siteUrl}/install/`,
       codeRepository: "https://github.com/HariDarshan2321/ninai",
       isPartOf: { "@id": `${siteUrl}/#website` },

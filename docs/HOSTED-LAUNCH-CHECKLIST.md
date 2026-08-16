@@ -16,10 +16,10 @@ Unchecked items block a truthful public hosted-beta launch.
 
 - [ ] Configure a real OAuth/OIDC issuer, registered redirect URIs, consent, token lifetimes, MFA policy, and signing-key rotation.
 - [ ] Verify JWT `iss`, `aud`, `resource`, `exp`, `sub`, workspace, and client-connection claims in staging.
-- [ ] Serve `/mcp` and `/health` over HTTPS; keep the database off the public network.
+- [ ] Serve `/mcp`, `/health`, and database-backed `/ready` over HTTPS; keep the database off the public network.
 - [ ] Validate protected-resource metadata and, in OAuth mode, issuer metadata from outside the deployment network.
 - [ ] Add rate limits, request/time limits, trusted-host/CORS rules, redacted centralized logs, monitoring, and alerts.
-- [ ] On Render, set `/health`, enable failure notifications, add an external HTTPS monitor, and record database capacity/connection alert thresholds.
+- [ ] On Render, set `/ready`, enable failure notifications, add external HTTPS monitors, and record database capacity/connection alert thresholds.
 
 ## Product controls
 

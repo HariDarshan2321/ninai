@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 const clients = [
-  ["Claude Code", "Local path available", "Local MCP and optional PostToolUse capture are implemented. The hosted OAuth CLI acceptance round trip is still pending."],
+  ["Claude Code", "Local path available", "Local MCP and consent-based lifecycle capture are implemented. The hosted OAuth CLI acceptance round trip is still pending."],
   ["Codex CLI / IDE", "Self-hosted path verified", "A real-host self-hosted round trip passed. The hosted OAuth acceptance round trip is still pending."],
   ["Claude.ai", "Hosted OAuth read verified", "OAuth, tool discovery, and a production read-tool call passed. The full hosted write, provenance, and revocation gate is still pending."],
   ["ChatGPT", "Hosted OAuth read verified", "Developer-mode install, OAuth, tool invocation, and a production read-tool call passed. The full hosted write, provenance, and revocation gate is still pending."],

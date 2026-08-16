@@ -13,6 +13,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.concurrency import run_in_threadpool
 
 from .postgres_store import (AuthorizationError, HostedMemory, HostedSession,
                              IdempotencyConflict, PostgresStore, Principal)
@@ -256,6 +257,11 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
 
     mcp.streamable_http_app = bounded_http_app  # type: ignore[method-assign]
 
+    connect = getattr(store, "_connection", None)
+    if connect is None:  # Allows transport registration with contract-test stores.
+        def connect():
+            raise RuntimeError("The control center requires a PostgreSQL-backed store")
+
     def guarded(operation: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
         try:
             return operation(*args, **kwargs)
@@ -381,6 +387,25 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     async def health(_: Request) -> JSONResponse:
         return JSONResponse({"status": "ok", "service": "ninai-cloud-mcp"})
 
+    @mcp.custom_route("/ready", methods=["GET"])
+    async def ready(_: Request) -> JSONResponse:
+        def check_database() -> None:
+            with connect() as db:
+                db.execute("SELECT 1").fetchone()
+
+        try:
+            await run_in_threadpool(check_database)
+        except Exception:
+            return JSONResponse(
+                {"status": "unavailable", "service": "ninai-cloud-mcp"},
+                status_code=503,
+                headers={"Cache-Control": "no-store"},
+            )
+        return JSONResponse(
+            {"status": "ready", "service": "ninai-cloud-mcp"},
+            headers={"Cache-Control": "no-store"},
+        )
+
     @mcp.custom_route("/", methods=["GET"])
     async def root(_: Request) -> RedirectResponse:
         return RedirectResponse("/control", status_code=307)
@@ -390,10 +415,6 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
         return Response(FAVICON_SVG, media_type="image/svg+xml",
                         headers={"Cache-Control": "public, max-age=86400"})
 
-    connect = getattr(store, "_connection", None)
-    if connect is None:  # Allows transport registration with contract-test stores.
-        def connect():
-            raise RuntimeError("The control center requires a PostgreSQL-backed store")
     control = create_control_app(control_service or ControlService(connect),
                                  control_token_verifier or token_verifier,
                                  control_oauth_settings)
@@ -420,52 +441,67 @@ def main() -> None:
     database_url = os.environ.get("DATABASE_URL", "").strip()
     if not database_url:
         raise SystemExit("DATABASE_URL is required")
+    from psycopg.rows import dict_row
+    from psycopg_pool import ConnectionPool
     from .auth import (AuthSettings, JWTValidator, MCPTokenVerifier, OAuthControlTokenVerifier, OAuthIdentityResolver, PATTokenVerifier,
                        PrincipalResolver as AuthPrincipalResolver, auth_mode)
-    store = PostgresStore(database_url)
+    pool_min_size = int(os.environ.get("NINAI_DATABASE_POOL_MIN_SIZE", "1"))
+    pool_max_size = int(os.environ.get("NINAI_DATABASE_POOL_MAX_SIZE", "10"))
+    if not 1 <= pool_min_size <= pool_max_size <= 50:
+        raise SystemExit("Database pool sizes must satisfy 1 <= min <= max <= 50")
     mode = auth_mode()
-    if mode == "pat":
-        resource = os.environ.get("NINAI_PUBLIC_RESOURCE_URL", "").strip()
-        if not resource:
-            raise SystemExit("NINAI_PUBLIC_RESOURCE_URL is required in PAT mode")
-        verifier = PATTokenVerifier(store._connection, resource)
-        # PAT mode is deliberately self-hosted; no external issuer is contacted.
-        sdk_auth = MCPAuthSettings(issuer_url=resource, resource_server_url=resource,
-                                   service_documentation_url=resource, required_scopes=[])
-        control_verifier = verifier
-    else:
-        settings = AuthSettings.from_env()
-        validator = JWTValidator(settings)
-        verifier = MCPTokenVerifier(validator, AuthPrincipalResolver(store._connection, settings))
-        control_verifier = OAuthControlTokenVerifier(
-            validator, settings, OAuthIdentityResolver(store._connection, settings)
+    with ConnectionPool(
+        conninfo=database_url,
+        min_size=pool_min_size,
+        max_size=pool_max_size,
+        kwargs={"row_factory": dict_row},
+        timeout=5,
+    ) as pool:
+        pool.wait(timeout=10)
+        store = PostgresStore(database_url, connect=pool.connection)
+        if mode == "pat":
+            resource = os.environ.get("NINAI_PUBLIC_RESOURCE_URL", "").strip()
+            if not resource:
+                raise SystemExit("NINAI_PUBLIC_RESOURCE_URL is required in PAT mode")
+            verifier = PATTokenVerifier(store._connection, resource)
+            # PAT mode is deliberately self-hosted; no external issuer is contacted.
+            sdk_auth = MCPAuthSettings(issuer_url=resource, resource_server_url=resource,
+                                       service_documentation_url=resource, required_scopes=[])
+            control_verifier = verifier
+            settings = None
+        else:
+            settings = AuthSettings.from_env()
+            validator = JWTValidator(settings)
+            verifier = MCPTokenVerifier(validator, AuthPrincipalResolver(store._connection, settings))
+            control_verifier = OAuthControlTokenVerifier(
+                validator, settings, OAuthIdentityResolver(store._connection, settings)
+            )
+            sdk_auth = MCPAuthSettings(
+                issuer_url=settings.issuer,
+                resource_server_url=settings.resource,
+                service_documentation_url=settings.resource,
+                # Some MCP hosts (including Codex) currently request only OIDC
+                # identity scopes even when the protected-resource document
+                # advertises API scopes. Requiring those scopes here would reject a
+                # correctly issued, audience-bound token before Ninai can apply its
+                # stricter live database grants. Every read/write still validates
+                # the active workspace/client and an explicit, revocable project
+                # capability in Postgres; new clients start with no grants.
+                required_scopes=[],
+            )
+        control_service = ControlService(
+            store._connection, self_hosted=mode == "pat",
+            public_mcp_url=str(sdk_auth.resource_server_url),
+            oauth_issuer=settings.issuer if settings is not None else None,
         )
-        sdk_auth = MCPAuthSettings(
-            issuer_url=settings.issuer,
-            resource_server_url=settings.resource,
-            service_documentation_url=settings.resource,
-            # Some MCP hosts (including Codex) currently request only OIDC
-            # identity scopes even when the protected-resource document
-            # advertises API scopes. Requiring those scopes here would reject a
-            # correctly issued, audience-bound token before Ninai can apply its
-            # stricter live database grants. Every read/write still validates
-            # the active workspace/client and an explicit, revocable project
-            # capability in Postgres; new clients start with no grants.
-            required_scopes=[],
-        )
-    control_service = ControlService(
-        store._connection, self_hosted=mode == "pat",
-        public_mcp_url=str(sdk_auth.resource_server_url),
-        oauth_issuer=settings.issuer if mode == "oauth" else None,
-    )
-    create_mcp(store, token_verifier=verifier, control_token_verifier=control_verifier,
-               auth=sdk_auth, control_service=control_service,
-               control_oauth_settings=settings if mode == "oauth" else None,
-               host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")),
-               read_calls_per_minute=int(os.environ.get("NINAI_READ_CALLS_PER_MINUTE", DEFAULT_READ_CALLS_PER_MINUTE)),
-               write_calls_per_minute=int(os.environ.get("NINAI_WRITE_CALLS_PER_MINUTE", DEFAULT_WRITE_CALLS_PER_MINUTE)),
-               max_request_body_bytes=int(os.environ.get("NINAI_MAX_REQUEST_BODY_BYTES", MAX_REQUEST_BODY_BYTES))).run(
-                   transport="streamable-http")
+        create_mcp(store, token_verifier=verifier, control_token_verifier=control_verifier,
+                   auth=sdk_auth, control_service=control_service,
+                   control_oauth_settings=settings,
+                   host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")),
+                   read_calls_per_minute=int(os.environ.get("NINAI_READ_CALLS_PER_MINUTE", DEFAULT_READ_CALLS_PER_MINUTE)),
+                   write_calls_per_minute=int(os.environ.get("NINAI_WRITE_CALLS_PER_MINUTE", DEFAULT_WRITE_CALLS_PER_MINUTE)),
+                   max_request_body_bytes=int(os.environ.get("NINAI_MAX_REQUEST_BODY_BYTES", MAX_REQUEST_BODY_BYTES))).run(
+                       transport="streamable-http")
 
 
 __all__ = ["HostedMCPTools", "PrincipalResolver", "RateLimitError", "RequestBodyLimitMiddleware",

@@ -28,8 +28,7 @@ required = [
     "index.html", "install/index.html", "local/index.html", "compatibility/index.html",
     "research/index.html", "privacy/index.html", "terms/index.html", "start/index.html",
     "404.html", "robots.txt", "sitemap.xml", "site.webmanifest", "llms.txt",
-    ".well-known/security.txt", "assets/og-image.png", "assets/ninai-wordmark.svg",
-    "download/install-ninai-macos.sh", "CNAME",
+    ".well-known/security.txt", "assets/og-image.png", "assets/ninai-wordmark.svg", "CNAME",
 ]
 for item in required:
     if not (root / item).exists():
@@ -120,6 +119,19 @@ for html in nonindex_pages:
     text = html.read_text(encoding="utf-8")
     if 'name="robots" content="noindex, follow"' not in text:
         raise SystemExit(f"{html}: expected noindex, follow")
+
+public_install = (root / "install/index.html").read_text(encoding="utf-8")
+for private_setup_marker in (
+    "raw.githubusercontent.com",
+    "/download/install-ninai-macos.sh",
+    "--client both",
+    "https://app.ninai.io/mcp",
+):
+    if private_setup_marker in public_install:
+        raise SystemExit(f"Public install page exposes account-gated setup: {private_setup_marker}")
+for gated_copy in ("Sign in for the Mac installer", "Create account", "Sign in"):
+    if gated_copy not in public_install:
+        raise SystemExit(f"Public install page is missing account gate copy: {gated_copy}")
 
 global_css = (website / "app/globals.css").read_text(encoding="utf-8")
 closed_panel = re.search(r"\.mobile-nav__panel\s*\{[^}]*display:\s*none;", global_css, re.S)

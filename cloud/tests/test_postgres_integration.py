@@ -54,7 +54,7 @@ class PostgresLifecycleTest(unittest.TestCase):
     def tearDown(self) -> None:
         with self.psycopg.connect(DATABASE_URL) as db:
             db.execute("DELETE FROM oauth_identities WHERE user_id=%s", (self.user,))
-            for table in ("session_disclosure_logs", "session_artifacts", "sessions", "workspace_capture_settings",
+            for table in ("installer_downloads", "session_disclosure_logs", "session_artifacts", "sessions", "workspace_capture_settings",
                           "disclosure_logs", "idempotency_keys", "memory_relations", "memory_sources", "memories",
                           "personal_access_tokens",
                           "oauth_client_bindings", "client_scope_grants", "client_connections",
@@ -62,6 +62,30 @@ class PostgresLifecycleTest(unittest.TestCase):
                 db.execute(f"DELETE FROM {table} WHERE workspace_id=%s" if table not in {"users", "workspaces"} else
                            ("DELETE FROM workspaces WHERE id=%s" if table == "workspaces" else "DELETE FROM users WHERE id=%s"),
                            (self.workspace if table != "users" else self.user,))
+
+    def test_installer_download_audit_is_tenant_scoped_and_exported(self) -> None:
+        control = ControlService(self.store._connection)
+        identity = ControlIdentity(self.user, self.workspace)
+        digest = "a" * 64
+        event_id = control.record_installer_download(identity, artifact_sha256=digest)
+        with self.psycopg.connect(DATABASE_URL) as db:
+            row = db.execute(
+                """SELECT workspace_id,user_id,platform,artifact_sha256
+                   FROM installer_downloads WHERE id=%s""",
+                (event_id,),
+            ).fetchone()
+        workspace_id, user_id, platform, artifact_sha256 = row
+        self.assertEqual(str(workspace_id), self.workspace)
+        self.assertEqual(str(user_id), self.user)
+        self.assertEqual(platform, "macos")
+        self.assertEqual(artifact_sha256, digest)
+        exported = control.export(identity)
+        self.assertEqual([str(item["id"]) for item in exported["installer_downloads"]],
+                         [event_id])
+        with self.assertRaises(AuthorizationError):
+            control.record_installer_download(
+                ControlIdentity(self.user, str(uuid.uuid4())), artifact_sha256=digest
+            )
 
     def test_session_archive_consent_idempotency_context_export_and_deletion(self) -> None:
         control = ControlService(self.store._connection)
