@@ -132,6 +132,9 @@ for private_setup_marker in (
 for gated_copy in ("Sign in for the Mac installer", "Create account", "Sign in"):
     if gated_copy not in public_install:
         raise SystemExit(f"Public install page is missing account gate copy: {gated_copy}")
+for local_mvp_copy in ("No cloud choices. No connector forms.", "Cloud-hosted vaults are coming later"):
+    if local_mvp_copy not in public_install:
+        raise SystemExit(f"Public install page is missing local-MVP copy: {local_mvp_copy}")
 
 global_css = (website / "app/globals.css").read_text(encoding="utf-8")
 closed_panel = re.search(r"\.mobile-nav__panel\s*\{[^}]*display:\s*none;", global_css, re.S)

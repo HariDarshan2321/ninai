@@ -5,40 +5,26 @@
 Ninai is a local-first, permissioned memory layer for AI tools. This repository contains:
 
 - `engine/` — an installable Python MCP server with local SQLite memory, scoped permissions, provenance, access logs, and compact context packets.
-- `cloud/` — an explicit opt-in PostgreSQL store, authenticated Streamable HTTP MCP service, and hosted control-center API/UI.
+- `cloud/` — the account, authenticated installer, and private hosted-service code. Public hosted vaults are not part of the MVP.
 - `website/` — a statically exported Next.js launch site for `ninai.io`, including an interactive permission model, sitemap, robots.txt, JSON-LD, Open Graph metadata, privacy page, install guide, and research page.
 - `.claude/` and `.codex/` — merge-safe lifecycle hook examples for local Claude Code ↔ Codex session continuity, plus optional durable MCP-result capture.
 - `docs/` — product architecture, brand guidance, deployment instructions, and the SEO launch checklist.
 
 The MVP intentionally keeps the trust boundary small: memory is stored on the user's machine and only permission-filtered context packets are returned to an AI client.
 
-Local mode is local-first and never uploads or syncs the vault automatically. A separate hosted beta is now implemented in `cloud/` for clients that cannot reach a local MCP server. It is not automatically enabled and does not inspect the local vault. Its local real-host Claude Code → Codex → Claude Code gate passed on 25 July 2026, and its public OAuth/HTTPS beta endpoint is live; external-tester acceptance and remaining operational hardening are still pending. Both modes share the same required permission, provenance, and disclosure-audit invariants.
+The public MVP is local-only on Mac. It never uploads or synchronizes the vault automatically. Cloud-hosted vaults remain private development work until their security and external-acceptance gates are complete.
 
 ## 1. Run the engine locally
 
-Requirements: Python 3.11+. On macOS the default `python3` is often 3.9, which
-is too old and will fail the install with a `requires-python` / build error.
-Check with `python3 --version`; if it is below 3.11, use an explicit interpreter
-(`python3.11`, `python3.12`, or `python3.13`) in the `venv` command below.
+The official customer path is deliberately short:
 
-For the one-command desktop-and-engine installation used by the public setup guide:
+1. Open [ninai.io/install](https://ninai.io/install/).
+2. Create an account or sign in.
+3. Download the authenticated Mac installer and run the one command shown there.
 
-```bash
-# Claude Code + Codex (installs Ninai, grants project scope, registers both
-# local MCP clients, and asks before enabling lifecycle session archive).
-curl -fsSL https://raw.githubusercontent.com/HariDarshan2321/ninai/main/scripts/install-local | \
-  bash -s -- --client both
+The installer checks for a compatible Python version, installs the Ninai app and local SQLite vault, detects Claude Code and Codex, connects every supported agent it finds, asks before enabling automatic session handoff, and opens Ninai. Advanced flags and contributor setup remain documented in [`scripts/install-local`](scripts/install-local).
 
-# Open the local control panel.
-open ~/.ninai-app/Ninai.app
-```
-
-The installer requires Python 3.11+ and selects `python3.13`, `python3.12`, or
-`python3.11` automatically. Set `NINAI_PYTHON` to choose another compatible
-interpreter or `NINAI_INSTALL_DIR` to change the stable installation directory.
-Use `--client claude-code` or `--client codex` for only one client, or run `./scripts/install-local` from a cloned
-repository. Review [`scripts/install-local`](scripts/install-local) before
-running a downloaded script.
+Because this repository is public, developers can inspect and run its source directly. The official download and customer onboarding flow require an account; the open-source code itself is not access-controlled.
 
 In Claude Code, try:
 
@@ -116,55 +102,13 @@ npm run dev
 
 Open `http://localhost:3000`. Production output is generated with `npm run build` in `website/out/`.
 
-## 4b. Run the hosted beta service
+## 4b. Private hosted-service development
 
-Hosted mode requires Python 3.11+ and PostgreSQL. OAuth/OIDC is the default. A separate opaque personal-access-token mode exists for a trusted private self-hosted beta; it must be explicitly enabled.
-
-```bash
-cd cloud
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install .
-cp .env.example .env
-# Export the values from .env with real PostgreSQL and authentication settings.
-python -m ninai_cloud.migrations
-ninai-cloud-mcp
-```
-
-The service exposes `GET /health`, authenticated Streamable HTTP MCP at `/mcp`, and protected-resource metadata. See [hosted client setup and API examples](docs/HOSTED-BETA.md), the [compatibility matrix](docs/COMPATIBILITY.md), and [deployment guide](docs/DEPLOYMENT.md). A running service still needs provisioned users, workspaces, client connections, and grants before a client can access memory.
-
-For the smallest isolated developer stack (PostgreSQL, migrations, and the
-cloud service), use Docker from the repository root:
-
-```bash
-scripts/ninai-cloud-local setup
-scripts/ninai-cloud-local bootstrap --email you@example.com
-scripts/ninai-cloud-local doctor
-```
-
-This explicit hosted stack uses development-only defaults, binds the service to
-localhost, and does not mount, read, or synchronize the local desktop vault.
-See [`cloud/README.md`](cloud/README.md) for overrides and lifecycle commands.
+Hosted storage and remote connectors are not part of the public MVP. Maintainers can use [`cloud/README.md`](cloud/README.md) for private development and testing; customer-facing setup must not direct users to those endpoints.
 
 ## 5. Publish and deploy
 
-```bash
-cd ninai-mvp-starter
-git init
-git add .
-git commit -m "feat: launch Ninai MVP"
-gh repo create HariDarshan2321/ninai --public --source=. --remote=origin --push
-```
-
-The website is deployed from `main` through Vercel with `website/` configured as
-the project root. It provides deployment previews and native Next.js support if
-the site later moves beyond a static export. Cloudflare Pages and GitHub Pages
-remain documented alternatives, but no second deployment workflow runs on pushes.
-
-The public website assumes the repository exists at
-`https://github.com/HariDarshan2321/ninai`; create it before launch so the source links and
-install command resolve. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for verified checks,
-hosting alternatives, and domain setup.
+The website deploys from `main` through Vercel with `website/` as the project root. The account and authenticated installer service deploy from the same branch through Render. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the maintained checks and domain configuration.
 
 ## 6. Important product truth
 
@@ -174,11 +118,11 @@ Ninai does not claim that cloud AI providers never receive context. The full vau
 
 - SQLite + FTS5 retrieval; no vector embeddings yet.
 - Claude Code and Codex lifecycle continuity is automatic only in consented local installs.
-- Claude.ai, ChatGPT, and hosted MCP clients use explicit scoped tools; they do not passively expose full chat transcripts to Ninai.
-- Hosted PostgreSQL and remote MCP are implemented, and the local PAT-backed real-host compatibility gate passed. Production deployment, issuer onboarding, billing, and automated local-to-hosted sync are not implemented. Local mode never uploads automatically.
+- Claude.ai, ChatGPT, and hosted MCP clients are not part of the public MVP.
+- Hosted PostgreSQL and remote MCP remain private development surfaces. Local mode never uploads automatically.
 - Vector search, local-model extraction, consolidation, and richer temporal state remain post-MVP evaluation work. They should be added behind explicit interfaces only when benchmarks justify the extra installation and security surface.
 
-## Hosted beta evidence and release gate
+## Private hosted-service evidence and release gate
 
 - [Hosted setup, Claude Code, Codex, OpenAI, and Anthropic examples](docs/HOSTED-BETA.md)
 - [Compatibility matrix](docs/COMPATIBILITY.md)

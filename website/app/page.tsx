@@ -50,7 +50,7 @@ export default function HomePage() {
             </p>
             <div className={styles.heroActions}>
               <Link className={styles.primaryAction} href="/install/">Get Ninai for Mac <span aria-hidden="true">↗</span></Link>
-              <Link className={styles.secondaryAction} href="/start/">Use a hosted vault</Link>
+              <a className={styles.secondaryAction} href="https://app.ninai.io/control/login">Sign in</a>
             </div>
             <ul className={styles.proofList} aria-label="MVP properties">
               <li>Automatic Claude Code ↔ Codex handoff</li><li>Project-scoped</li><li>Sources on every recalled fact</li>
@@ -103,16 +103,16 @@ export default function HomePage() {
       <section className={styles.setupSection}>
         <div className={`shell ${styles.setupLayout}`}>
           <div className={styles.setupCopy}>
-            <p className={styles.eyebrow}>Choose your vault</p><h2>Invitation beta or local.</h2>
-            <p>Try the hosted invitation beta with supported OAuth clients, or keep an open-source SQLite vault entirely on your machine. Local memory is never uploaded automatically.</p>
-            <Link href="/install/">Open the setup guide →</Link>
+            <p className={styles.eyebrow}>Available now for Mac</p><h2>One local vault. Two supported agents.</h2>
+            <p>Install once. Ninai detects Claude Code and Codex, connects the tools you already use, and keeps the complete vault on your Mac.</p>
+            <Link href="/install/">Get Ninai for Mac →</Link>
           </div>
           <div className={styles.setupDiagram} aria-label="Ninai product flow">
             <div className={styles.toolColumn}><span className={styles.diagramLabel}>Agents</span><div><b>CL</b> Claude Code</div><div><b>OX</b> Codex</div></div>
             <div className={styles.diagramArrow}><span>scoped MCP</span><i /></div>
             <div className={styles.hostColumn}><span className={styles.diagramLabel}>Ninai</span><strong>Remember · recall</strong><small>source · review · revoke</small></div>
-            <div className={`${styles.diagramArrow} ${styles.diagramArrowSignal}`}><span>your choice</span><i /></div>
-            <div className={styles.ninaiColumn}><span className={styles.diagramLabel}>Vault</span><img src="/assets/ninai-app-icon.svg" alt="" width="42" height="42" /><strong>Hosted or local</strong></div>
+            <div className={`${styles.diagramArrow} ${styles.diagramArrowSignal}`}><span>stays here</span><i /></div>
+            <div className={styles.ninaiColumn}><span className={styles.diagramLabel}>Vault</span><img src="/assets/ninai-app-icon.svg" alt="" width="42" height="42" /><strong>On your Mac</strong></div>
           </div>
         </div>
       </section>
@@ -121,7 +121,7 @@ export default function HomePage() {
         <div className={`shell ${styles.finalCtaInner}`}>
           <img src="/assets/ninai-app-icon.svg" alt="" width="62" height="62" />
           <h2>Remember the work.<em>Keep the rest yours.</em></h2>
-          <div><Link className={styles.primaryAction} href="/install/">Set up Ninai ↗</Link><a className={styles.secondaryActionLight} href="https://app.ninai.io/control">Open dashboard</a></div>
+          <div><Link className={styles.primaryAction} href="/install/">Set up Ninai ↗</Link><a className={styles.secondaryActionLight} href="https://app.ninai.io/control/login">Sign in</a></div>
         </div>
       </section>
     </main>

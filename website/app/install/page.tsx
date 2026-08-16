@@ -1,21 +1,19 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-
 export const metadata: Metadata = {
-  title: "Choose local or hosted Ninai AI memory",
+  title: "Install Ninai for Mac",
   description:
-    "Choose a private Mac vault or a hosted Ninai workspace. Sign in to access setup and connect Claude Code or Codex.",
+    "Sign in, download Ninai for Mac, and connect Claude Code and Codex with one guided installer.",
   alternates: { canonical: "/install/" },
   openGraph: {
-    title: "Choose how to use Ninai",
-    description: "Private on your Mac or available through a hosted workspace.",
+    title: "Install Ninai for Mac",
+    description: "One local vault for Claude Code and Codex.",
     url: "/install/",
     images: [
       {
         url: "/assets/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Choose a local or hosted Ninai vault",
+        alt: "Install the Ninai local AI memory vault for Mac",
       },
     ],
   },
@@ -35,8 +33,8 @@ export default function InstallPage() {
           </div>
           <div className="page-hero__aside">
             <p>
-              Ninai gives Claude Code and Codex the same source-backed project memory. Choose
-              where your vault lives, then sign in for the guided setup.
+              Sign in, download, and run one command. Ninai detects supported agents, connects
+              them, and opens your private local vault.
             </p>
             <div className="hero-actions">
               <a className="button button--acid" href={signupUrl}>Create account ↗</a>
@@ -46,39 +44,32 @@ export default function InstallPage() {
         </div>
       </section>
 
-      <section className="install-choice shell" aria-label="Choose where Ninai stores your vault">
+      <section className="install-choice shell" aria-label="Ninai Mac setup">
         <article id="local">
-          <span className="status-pill status-pill--ready">macOS · available</span>
-          <h2>Keep it local</h2>
-          <p>
-            Your vault stays in SQLite on this Mac. Best for Claude Code and Codex running
-            locally. Ninai never uploads this vault automatically.
-          </p>
+          <span className="status-pill status-pill--ready">1 · Sign in</span>
+          <h2>Create your Ninai account</h2>
+          <p>Your account unlocks the official installer and lets us count beta users. Your memory vault is not uploaded.</p>
           <a href={signinUrl}>Sign in for the Mac installer →</a>
         </article>
-        <article id="hosted">
-          <span className="status-pill">Invitation beta</span>
-          <h2>Use a hosted vault</h2>
-          <p>
-            Create a workspace for approved project memory that supported remote AI clients
-            can access through OAuth. Every connection starts with zero project access.
-          </p>
-          <Link href="/start/">See hosted onboarding →</Link>
+        <article>
+          <span className="status-pill status-pill--ready">2 · Install</span>
+          <h2>Run one guided installer</h2>
+          <p>It installs Ninai, detects Claude Code and Codex, connects every detected supported agent, and opens the app.</p>
+          <a href={signinUrl}>Open signed-in setup →</a>
         </article>
       </section>
 
       <section className="beta-trust shell">
         <div>
-          <p className="section-label">One account gate</p>
-          <h2>Understand it here. Set it up after sign-in.</h2>
+          <p className="section-label">The MVP path</p>
+          <h2>No cloud choices. No connector forms.</h2>
         </div>
         <div>
           <p>
-            The public site explains the product and its boundaries. Your Ninai account unlocks
-            the local installer, hosted connection instructions, permissions, and the handoff test
-            in one control center.
+            Ninai supports local Claude Code and Codex today. Cloud-hosted vaults are coming later,
+            after the security and acceptance gates are complete.
           </p>
-          <Link href="/privacy/">See how data moves →</Link>
+          <a href="/privacy/">See how data moves →</a>
         </div>
       </section>
     </main>

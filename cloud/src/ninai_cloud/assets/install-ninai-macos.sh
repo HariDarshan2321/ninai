@@ -161,7 +161,7 @@ if [[ "${session_capture}" == "ask" ]]; then
   if [[ -r /dev/tty ]]; then
     printf '%s\n' \
       'Ninai can automatically archive connected Claude Code/Codex sessions in your local vault.' \
-      'The archive stays on this Mac and can be disabled later with: ninai capture disable'
+      'The archive stays on this Mac and can be disabled later in Ninai settings.'
     printf 'Enable automatic session capture? [Y/n] '
     IFS= read -r answer </dev/tty || answer="n"
     case "${answer}" in
@@ -235,6 +235,8 @@ connect_claude() {
     fi
     "${install_dir}/venv/bin/ninai" permission grant claude-code project
     claude mcp remove ninai-local --scope user >/dev/null 2>&1 || true
+    claude mcp remove ninai --scope user >/dev/null 2>&1 || true
+    claude mcp remove ninai-cloud --scope user >/dev/null 2>&1 || true
     claude mcp add --transport stdio --scope user ninai-local -- "${install_dir}/venv/bin/ninai-mcp"
     merge_hooks "${HOME}/.claude/settings.json" "claude-code" "yes"
 }
@@ -246,6 +248,7 @@ connect_codex() {
     fi
     "${install_dir}/venv/bin/ninai" permission grant codex project
     codex mcp remove ninai-local >/dev/null 2>&1 || true
+    codex mcp remove ninai-cloud >/dev/null 2>&1 || true
     codex mcp add ninai-local --env NINAI_CLIENT_ID=codex -- "${install_dir}/venv/bin/ninai-mcp"
     merge_hooks "${HOME}/.codex/hooks.json" "codex" "no"
 }
@@ -264,8 +267,8 @@ case "${client}" in
 esac
 
 printf '\nNinai is ready.\n'
-printf 'Open the local app:\n  %s\n' "${install_dir}/venv/bin/ninai-app"
-printf 'Or open the branded Mac app:\n  open %s\n' "${app_bundle}"
+open "${app_bundle}" >/dev/null 2>&1 || true
+printf '%s\n' 'The Ninai app is opening now.'
 if [[ "${client}" == "none" ]]; then
   printf 'No supported AI client was detected. Rerun with --client after installing Claude Code or Codex.\n'
 else
@@ -274,5 +277,5 @@ fi
 if [[ "${session_capture}" == "on" ]]; then
   printf '%s\n' 'Automatic local session capture: enabled'
 else
-  printf '%s\n' 'Automatic local session capture: disabled (enable with: ninai capture enable)'
+  printf '%s\n' 'Automatic local session capture: disabled (enable it later in Ninai settings)'
 fi

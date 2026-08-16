@@ -133,13 +133,13 @@ class ControlAppTest(unittest.TestCase):
     def test_control_page_is_dependency_free_and_does_not_cache(self):
         response = self.client.get("/control")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Ninai Control Center", response.text)
+        self.assertIn("Set up Ninai for Mac", response.text)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIn("sessionStorage", response.text)
         for label in ("Memories", "Permissions", "Download workspace export", "Delete workspace"):
             self.assertIn(label, response.text)
         for brand_copy in ("#0b302b", "#f4efe5", "#ff6846", "#dcef7b",
-                           "Switch agents. Keep the project."):
+                           "Sign in. Install. Keep going."):
             self.assertIn(brand_copy, response.text)
         self.assertIn('src="https://ninai.io/assets/ninai-wordmark.svg" alt="Ninai"', response.text)
         for native_dialog in ("prompt(", "alert(", "confirm("):
@@ -186,11 +186,12 @@ class ControlAppTest(unittest.TestCase):
         self.assertEqual(response.headers["x-installer-sha256"], digest)
         self.assertEqual(self.service.calls[-1], ("installer_download", self.identity, digest))
 
-    def test_signed_in_control_center_contains_concise_mode_choice(self):
+    def test_signed_in_control_center_contains_concise_local_setup(self):
         from ninai_cloud.control_ui import render_control_center
         page = render_control_center(oauth_enabled=True, signed_in=True)
-        for copy in ("Choose where your vault lives", "Keep it local", "Use a hosted vault",
-                     "Download Mac installer", "--client both"):
+        for copy in ("Install Ninai in two minutes", "Download Ninai for Mac",
+                     "bash ~/Downloads/install-ninai-macos.sh", "Cloud is coming later.",
+                     "prepareLocalSetup"):
             self.assertIn(copy, page)
 
     def test_dashboard_oauth_login_uses_authorization_code_pkce(self):
@@ -209,8 +210,8 @@ class ControlAppTest(unittest.TestCase):
         ]))
         landing = client.get("/control").text
         self.assertIn("const oauthEnabled=true", landing)
-        for copy in ("Ninai hosted · invitation beta", "Switch agents. Keep the project.",
-                     "Create your workspace", "Every connection starts with zero memory access."):
+        for copy in ("Ninai for Mac", "Sign in. Install. Keep going.",
+                     "Cloud-hosted vaults are coming later."):
             self.assertIn(copy, landing)
         self.assertIn('href="/control/login?screen_hint=signup"', landing)
         self.assertIn('href="/control/login"', landing)
@@ -464,7 +465,7 @@ class ControlAppTest(unittest.TestCase):
             self.assertIn('fill="#0B0B0C"', icon.text)
             self.assertIn('aria-label="ninai app icon — the return"', icon.text)
             self.assertEqual(client.get("/health").json()["status"], "ok")
-            self.assertIn("Ninai Control Center", client.get("/control").text)
+            self.assertIn("Set up Ninai for Mac", client.get("/control").text)
             response = client.get("/api/control/overview", headers=self.auth)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["workspace"]["id"], "workspace-1")

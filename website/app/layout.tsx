@@ -63,7 +63,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   themeColor: "#10120f",
-  colorScheme: "light dark",
+  colorScheme: "light",
 };
 
 const organizationSchema = {

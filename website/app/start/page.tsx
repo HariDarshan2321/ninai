@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 export const metadata: Metadata = {
-  title: "Start with Ninai hosted AI memory",
-  description: "Sign in to create a Ninai hosted workspace, connect a supported AI client, and grant one project.",
+  title: "Ninai cloud is coming later",
+  description: "Ninai is focused on a simple, private Mac experience for Claude Code and Codex. Hosted vaults are coming later.",
   alternates: { canonical: "/start/" },
   openGraph: {
-    title: "Start with Ninai",
-    description: "Create a workspace, connect an AI, and choose what it can remember.",
+    title: "Ninai cloud is coming later",
+    description: "Use the local Mac MVP today.",
     url: "/start/",
     images: [{ url: "/assets/og-image.png", width: 1200, height: 630, alt: "Start with Ninai" }],
   },
@@ -16,16 +16,15 @@ export default function StartPage() {
     <main id="main-content">
       <section className="page-hero page-hero--install">
         <div className="shell page-hero__grid">
-          <div><p className="section-label">Hosted invitation beta</p><h1>One workspace. One project. Your rules.</h1></div>
-          <div className="page-hero__aside"><p>Sign in before setup. Each OAuth connection begins with no project access; you choose what it may read or propose.</p><div className="hero-actions"><a className="button button--acid" href="https://app.ninai.io/control/login?screen_hint=signup">Create account ↗</a><a className="button button--ink" href="https://app.ninai.io/control/login">Sign in</a></div></div>
+          <div><p className="section-label">Cloud vault</p><h1>Coming later.</h1></div>
+          <div className="page-hero__aside"><p>We are focusing the MVP on one excellent Mac setup. Hosted storage will return after security review and real customer acceptance.</p><div className="hero-actions"><a className="button button--acid" href="/install/">Get Ninai for Mac ↗</a></div></div>
         </div>
       </section>
-      <section className="install-choice onboarding-steps shell" aria-label="Hosted onboarding steps">
-        <article><span className="status-pill status-pill--ready">Account</span><h2>1. Name one project</h2><p>Create a workspace and the project boundary your AI tools may share.</p></article>
-        <article><span className="status-pill">Connection</span><h2>2. Add a supported AI</h2><p>Follow the signed-in guide for Claude Code, Codex, or a supported remote MCP surface.</p></article>
-        <article><span className="status-pill">Permission</span><h2>3. Grant, then verify</h2><p>Choose read or propose access, run one safe handoff, and inspect the disclosure receipt.</p></article>
+      <section className="install-choice onboarding-steps shell" aria-label="Available Ninai experience">
+        <article><span className="status-pill status-pill--ready">Available</span><h2>Private Mac vault</h2><p>Your memory stays on your Mac and works with detected Claude Code and Codex installations.</p></article>
+        <article><span className="status-pill">Later</span><h2>Hosted vault</h2><p>No public cloud onboarding or remote connector setup is offered in this MVP.</p></article>
       </section>
-      <section className="privacy-cta"><div className="shell"><h2>Prefer a private Mac vault?</h2><p>Your signed-in control center also provides the macOS installer. The local vault stays on your Mac after installation.</p><div><a className="button button--acid" href="https://app.ninai.io/control/login">Sign in for local setup ↗</a><a className="button button--dark-line" href="/privacy/">Read privacy details</a></div></div></section>
+      <section className="privacy-cta"><div className="shell"><h2>Use the working MVP today.</h2><p>Sign in, download, and let the guided installer connect your supported local agents.</p><div><a className="button button--acid" href="https://app.ninai.io/control/login">Sign in for Mac setup ↗</a><a className="button button--dark-line" href="/privacy/">Read privacy details</a></div></div></section>
     </main>
   );
 }

@@ -1,6 +1,6 @@
 # Ninai
 
-Ninai is permissioned, source-backed AI memory for Claude Code and Codex. Its open-source local engine is available now; its separate hosted service is an operator-assisted invitation beta.
+Ninai is permissioned, source-backed local AI memory for Claude Code and Codex on Mac. Cloud-hosted vaults are planned for later and are not part of the public MVP.
 
 ## Canonical pages
 - Home: https://ninai.io/

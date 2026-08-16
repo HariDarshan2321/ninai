@@ -10,16 +10,16 @@ export const metadata: Metadata = {
 };
 
 const clients = [
-  ["Claude Code", "Local path available", "Local MCP and consent-based lifecycle capture are implemented. The hosted OAuth CLI acceptance round trip is still pending."],
-  ["Codex CLI / IDE", "Self-hosted path verified", "A real-host self-hosted round trip passed. The hosted OAuth acceptance round trip is still pending."],
-  ["Claude.ai", "Hosted OAuth read verified", "OAuth, tool discovery, and a production read-tool call passed. The full hosted write, provenance, and revocation gate is still pending."],
-  ["ChatGPT", "Hosted OAuth read verified", "Developer-mode install, OAuth, tool invocation, and a production read-tool call passed. The full hosted write, provenance, and revocation gate is still pending."],
+  ["Claude Code", "Available on Mac", "The installer detects Claude Code, connects Ninai, and adds consent-based session handoff."],
+  ["Codex CLI / IDE", "Available on Mac", "The installer detects Codex, connects Ninai, and adds consent-based session handoff."],
+  ["Claude.ai", "Cloud coming later", "Remote browser-chat integration is not part of the local MVP."],
+  ["ChatGPT", "Cloud coming later", "Remote workspace integration is not part of the local MVP."],
   ["Claude Desktop / Cowork", "Host acceptance pending", "Availability and authentication depend on the selected host surface, plan, and account policy."],
   ["Anthropic API", "Planned", "A client application must explicitly call Ninai tools; Ninai cannot observe unrelated conversations."],
   ["OpenAI Responses API", "Planned", "A client application must explicitly connect and invoke Ninai."],
 ];
 
 export default function CompatibilityPage() {
-  return <main id="main-content"><section className="page-hero"><div className="shell page-hero__grid"><div><p className="section-label">Compatibility · current status</p><h1>Tested means tested.</h1></div><div className="page-hero__aside"><p>This matrix separates verified read-path evidence from the remaining full acceptance gate. Hosted mode remains an invitation beta until write, recall, provenance, and revocation pass together on the release deployment.</p></div></div></section>
-  <section className="compat-section shell"><div className="compat-table" role="table" aria-label="Ninai client compatibility"><div className="compat-row compat-row--head" role="row"><strong role="columnheader">Client</strong><strong role="columnheader">Status</strong><strong role="columnheader">What that means</strong></div>{clients.map(([client,status,note]) => <div className="compat-row" role="row" key={client}><strong role="cell">{client}</strong><span role="cell">{status}</span><p role="cell">{note}</p></div>)}</div><div className="notice"><strong>Invitation-beta boundary</strong><p>Claude.ai and ChatGPT have each completed OAuth and a hosted read-tool call. That does not yet prove the full write, recall, provenance, and revocation release gate. MCP is a tool connection, not a universal conversation listener.</p></div><p className="install-next">Want the working path? <Link href="/local/">Use the local engine</Link>. Want invitation-beta access? <a href="mailto:hello@ninai.io?subject=Ninai%20hosted%20invitation%20beta">Contact the founder</a>.</p></section></main>;
+  return <main id="main-content"><section className="page-hero"><div className="shell page-hero__grid"><div><p className="section-label">Compatibility · current status</p><h1>Tested means tested.</h1></div><div className="page-hero__aside"><p>The MVP supports local Claude Code and Codex on Mac. Cloud-hosted connections are coming later.</p></div></div></section>
+  <section className="compat-section shell"><div className="compat-table" role="table" aria-label="Ninai client compatibility"><div className="compat-row compat-row--head" role="row"><strong role="columnheader">Client</strong><strong role="columnheader">Status</strong><strong role="columnheader">What that means</strong></div>{clients.map(([client,status,note]) => <div className="compat-row" role="row" key={client}><strong role="cell">{client}</strong><span role="cell">{status}</span><p role="cell">{note}</p></div>)}</div><div className="notice"><strong>MVP boundary</strong><p>Ninai connects supported tools installed on the same Mac. It does not passively read browser chats.</p></div><p className="install-next">Want the working path? <Link href="/install/">Get Ninai for Mac</Link>.</p></section></main>;
 }
