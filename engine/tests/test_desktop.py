@@ -92,6 +92,7 @@ class DesktopApiTest(unittest.TestCase):
         today = self.api.today()["data"]
         self.assertEqual(len(today["commitments"]), 1)
         self.assertEqual(len(today["decisions"]), 1)
+        self.assertEqual(len(today["recent_memories"]), 3)
 
     def test_sources_group_by_scheme(self) -> None:
         self.api.add_memory("a", scope="project", source_uri="gmail://t/1")

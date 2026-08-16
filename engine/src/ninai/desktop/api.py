@@ -143,12 +143,21 @@ class DesktopApi:
     def today(self) -> dict[str, Any]:
         try:
             memories = self.store.list_memories(limit=1000)
+            recent = sorted(
+                memories, key=lambda memory: str(memory["updated_at"]), reverse=True
+            )[:10]
             commitments = [m for m in memories if m["memory_type"] == "commitment"]
             decisions = [m for m in memories if m["memory_type"] == "decision"]
             rank = lambda m: (float(m["importance"]), str(m["updated_at"]))
             commitments.sort(key=rank, reverse=True)
             decisions.sort(key=rank, reverse=True)
-            return _ok({"commitments": commitments, "decisions": decisions[:10]})
+            return _ok(
+                {
+                    "recent_memories": recent,
+                    "commitments": commitments,
+                    "decisions": decisions[:10],
+                }
+            )
         except Exception as error:
             return _err(str(error))
 

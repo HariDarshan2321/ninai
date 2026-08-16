@@ -273,7 +273,7 @@
     LOADERS[name]();
   }
 
-  /* ---- Today ------------------------------------------------------------ */
+  /* ---- Home ------------------------------------------------------------- */
 
   function todayItem(mem, kind) {
     return h("article", { class: "today-item" + (kind === "decision" ? " today-item--decision" : "") },
@@ -301,26 +301,53 @@
     return group;
   }
 
+  function recentSessionsGroup(sessions) {
+    var group = h("section", { class: "today-group" });
+    group.appendChild(h("div", { class: "today-group__head" },
+      h("h2", { text: "Recent agent sessions" }),
+      h("span", { class: "today-group__count", text: String(sessions.length) })
+    ));
+    if (!sessions.length) {
+      group.appendChild(h("p", { class: "state__body", style: "padding:10px 2px;color:var(--text-faint)", text: "Start Claude Code or Codex in a project to see automatic activity here." }));
+    } else {
+      var list = h("div", { class: "today-list" });
+      sessions.forEach(function (session) {
+        list.appendChild(h("article", { class: "today-item" },
+          h("p", { class: "today-item__content", text: session.title }),
+          h("div", { class: "today-item__meta" },
+            h("span", { class: "badge badge--type", text: session.provider }),
+            h("span", { class: "badge badge--scope", text: session.project_name }),
+            h("span", { class: "badge", text: session.capture_status }),
+            formatRelative(session.updated_at)
+          )
+        ));
+      });
+      group.appendChild(list);
+    }
+    return group;
+  }
+
   async function loadToday() {
     var body = $("#today-body");
     clear(body);
     body.appendChild(loadingBlock());
     try {
-      var data = await B.today();
-      var commitments = data.commitments || [];
-      var decisions = data.decisions || [];
-      setCount("today", commitments.length + decisions.length);
+      var result = await Promise.all([B.today(), B.listSessions(5)]);
+      var data = result[0];
+      var sessions = result[1] || [];
+      var memories = data.recent_memories || [];
+      setCount("today", memories.length + sessions.length);
       clear(body);
-      if (!commitments.length && !decisions.length) {
+      if (!memories.length && !sessions.length) {
         body.appendChild(stateBlock({
           title: "Ninai is ready",
-          body: "Start a project in Claude Code or Codex. Useful decisions will appear here after your session."
+          body: "Start Claude Code or Codex in a project. Ninai will show automatic session activity here."
         }));
         return;
       }
       var cols = h("div", { class: "today-cols" });
-      cols.appendChild(todayGroup("Open commitments", commitments, "commitment"));
-      cols.appendChild(todayGroup("Recent decisions", decisions, "decision"));
+      cols.appendChild(todayGroup("Recent memories", memories, "memory"));
+      cols.appendChild(recentSessionsGroup(sessions));
       body.appendChild(cols);
     } catch (err) {
       showError(body, err);
@@ -870,8 +897,8 @@
   }
 
   function refreshCounts() {
-    B.today().then(function (d) {
-      setCount("today", (d.commitments || []).length + (d.decisions || []).length);
+    Promise.all([B.today(), B.listSessions(5)]).then(function (result) {
+      setCount("today", (result[0].recent_memories || []).length + (result[1] || []).length);
     }).catch(function () {});
     B.listMemories(1000).then(function (l) { setCount("memories", (l || []).length); }).catch(function () {});
     B.sources().then(function (l) { setCount("sources", (l || []).length); }).catch(function () {});
