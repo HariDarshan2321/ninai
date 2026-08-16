@@ -191,6 +191,8 @@ class ControlAppTest(unittest.TestCase):
         page = render_control_center(oauth_enabled=True, signed_in=True)
         for copy in ("Install Ninai in two minutes", "Download Ninai for Mac",
                      "bash ~/Downloads/install-ninai-macos.sh", "Cloud is coming later.",
+                     "Shared connector preview", "Manage shared connections",
+                     "It never uploads or synchronizes the local Mac vault",
                      "prepareLocalSetup"):
             self.assertIn(copy, page)
 
