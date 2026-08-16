@@ -151,6 +151,16 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(access.claims["workspace_id"], self.workspace_id)
         self.assertEqual(access.scopes, ["ninai:read", "ninai:propose"])
 
+    def test_mcp_verifier_accepts_audience_token_without_custom_scopes(self):
+        """Authorization is enforced by live Ninai project grants, not host scope support."""
+        resolver, _ = self.resolver()
+        claims = {**self.claims, "exp": 2_000_000_000, "scope": "openid profile email"}
+        verifier = MCPTokenVerifier(FakeValidator(claims), resolver)
+        access = asyncio.run(verifier.verify_token("signed.jwt"))
+        self.assertIsNotNone(access)
+        self.assertEqual(access.client_connection_id, "client-1")
+        self.assertEqual(access.scopes, ["openid", "profile", "email"])
+
     def test_mcp_verifier_returns_none_for_revoked_client(self):
         resolver, _ = self.resolver(None)
         verifier = MCPTokenVerifier(FakeValidator({**self.claims, "exp": 2_000_000_000}), resolver)

@@ -444,7 +444,14 @@ def main() -> None:
             issuer_url=settings.issuer,
             resource_server_url=settings.resource,
             service_documentation_url=settings.resource,
-            required_scopes=["ninai:read", "ninai:propose", "ninai:remember"],
+            # Some MCP hosts (including Codex) currently request only OIDC
+            # identity scopes even when the protected-resource document
+            # advertises API scopes. Requiring those scopes here would reject a
+            # correctly issued, audience-bound token before Ninai can apply its
+            # stricter live database grants. Every read/write still validates
+            # the active workspace/client and an explicit, revocable project
+            # capability in Postgres; new clients start with no grants.
+            required_scopes=[],
         )
     control_service = ControlService(
         store._connection, self_hosted=mode == "pat",
