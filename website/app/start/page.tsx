@@ -3,6 +3,7 @@ export const metadata: Metadata = {
   title: "Ninai cloud is coming later",
   description: "Ninai is focused on a simple, private Mac experience for Claude Code and Codex. Hosted vaults are coming later.",
   alternates: { canonical: "/start/" },
+  robots: { index: false, follow: true },
   openGraph: {
     title: "Ninai cloud is coming later",
     description: "Use the local Mac MVP today.",

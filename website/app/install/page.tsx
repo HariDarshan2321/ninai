@@ -45,29 +45,31 @@ export default function InstallPage() {
       </section>
 
       <section className="install-choice shell" aria-label="Ninai Mac setup">
-        <article id="local">
+        <article>
           <span className="status-pill status-pill--ready">1 · Sign in</span>
-          <h2>Create your Ninai account</h2>
-          <p>Your account unlocks the official installer and lets us count beta users. Your memory vault is not uploaded.</p>
-          <a href={signinUrl}>Sign in for the Mac installer →</a>
+          <h2>Create an account</h2>
+          <p>This unlocks the official installer. Your local vault is not uploaded.</p>
         </article>
         <article>
-          <span className="status-pill status-pill--ready">2 · Install</span>
-          <h2>Run one guided installer</h2>
-          <p>It installs Ninai, detects Claude Code and Codex, connects every detected supported agent, and opens the app.</p>
-          <a href={signinUrl}>Open signed-in setup →</a>
+          <span className="status-pill status-pill--ready">2 · Download</span>
+          <h2>Get Ninai for Mac</h2>
+          <p>Your signed-in setup page gives you the installer and one command.</p>
+        </article>
+        <article>
+          <span className="status-pill status-pill--ready">3 · Continue</span>
+          <h2>Open Ninai</h2>
+          <p>The installer finds Claude Code and Codex, connects them, and opens your vault.</p>
         </article>
       </section>
 
       <section className="beta-trust shell">
         <div>
           <p className="section-label">The MVP path</p>
-          <h2>No cloud choices. No connector forms.</h2>
+          <h2>That is the whole setup.</h2>
         </div>
         <div>
           <p>
-            Ninai supports local Claude Code and Codex today. Cloud-hosted vaults are coming later,
-            after the security and acceptance gates are complete.
+            The MVP supports Claude Code and Codex on Mac. Cloud-hosted vaults are coming later.
           </p>
           <a href="/privacy/">See how data moves →</a>
         </div>

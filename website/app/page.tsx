@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { ContextAperture } from "@/components/context-aperture";
-
 import styles from "./home.module.css";
 
 export const metadata: Metadata = {
@@ -12,53 +10,31 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-const outcomes = [
-  {
-    name: "Remember once",
-    prompt: "“Keep migrations reversible.”",
-    title: "Stop re-explaining decisions.",
-    copy: "Save the durable result of the work—not the whole transcript.",
-    proof: "Every memory keeps its source.",
-  },
-  {
-    name: "Switch agents",
-    prompt: "“What did Claude decide?”",
-    title: "Start the next session informed.",
-    copy: "Claude and Codex recall the same permitted project context.",
-    proof: "Packets stay small and scoped.",
-  },
-  {
-    name: "Stay in control",
-    prompt: "“What was disclosed?”",
-    title: "Review, audit, and revoke.",
-    copy: "Grant one project, inspect every recall, and cut off access immediately.",
-    proof: "Permission is checked before retrieval.",
-  },
-];
-
 export default function HomePage() {
   return (
     <main id="main-content" className={styles.page}>
       <section className={styles.hero} id="product">
         <div className={`shell ${styles.heroInner}`}>
           <div className={styles.heroCopy}>
-            <p className={styles.kicker}><span /> Permissioned shared memory for Claude and Codex</p>
-            <h1 className={styles.heroTitle}>Your agents should remember the project.<em>Not your whole life.</em></h1>
+            <p className={styles.kicker}><span /> Local memory for Claude Code and Codex</p>
+            <h1 className={styles.heroTitle}>Switch agents.<em>Keep the project.</em></h1>
             <p className={styles.heroLead}>
-              Ninai is permissioned shared memory for Claude Code and Codex. Remember project
-              decisions once, recall them with sources, and revoke access at any time.
+              Ninai keeps useful project decisions available when you move between Claude Code
+              and Codex. The complete vault stays on your Mac.
             </p>
             <div className={styles.heroActions}>
               <Link className={styles.primaryAction} href="/install/">Get Ninai for Mac <span aria-hidden="true">↗</span></Link>
               <a className={styles.secondaryAction} href="https://app.ninai.io/control/login">Sign in</a>
             </div>
-            <ul className={styles.proofList} aria-label="MVP properties">
-              <li>Automatic Claude Code ↔ Codex handoff</li><li>Project-scoped</li><li>Sources on every recalled fact</li>
-            </ul>
+            <p className={styles.heroNote}>Mac MVP · local vault · you choose what each agent can read</p>
           </div>
           <div className={styles.heroProduct}>
-            <p className={styles.productCaption}>The permission boundary <span>Try the switch</span></p>
-            <ContextAperture />
+            <p className={styles.productCaption}>Setup <span>About two minutes</span></p>
+            <ol className={styles.quickStart}>
+              <li><span>1</span><div><strong>Sign in</strong><p>Unlock the official Mac installer.</p></div></li>
+              <li><span>2</span><div><strong>Run one command</strong><p>Ninai finds Claude Code and Codex.</p></div></li>
+              <li><span>3</span><div><strong>Keep working</strong><p>Ninai opens with your local vault ready.</p></div></li>
+            </ol>
           </div>
         </div>
       </section>
@@ -86,41 +62,10 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className={styles.personaSection}>
-        <div className="shell">
-          <div className={styles.sectionHeading}><p className={styles.eyebrow}>What you get</p><h2>Continuity without context sprawl.</h2></div>
-          <div className={styles.personaGrid}>
-            {outcomes.map((item, index) => (
-              <article className={styles.personaCard} key={item.name}>
-                <div className={styles.personaTopline}><span>0{index + 1}</span><strong>{item.name}</strong></div>
-                <p className={styles.personaPrompt}>{item.prompt}</p><h3>{item.title}</h3><p>{item.copy}</p><small>{item.proof}</small>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className={styles.setupSection}>
-        <div className={`shell ${styles.setupLayout}`}>
-          <div className={styles.setupCopy}>
-            <p className={styles.eyebrow}>Available now for Mac</p><h2>One local vault. Two supported agents.</h2>
-            <p>Install once. Ninai detects Claude Code and Codex, connects the tools you already use, and keeps the complete vault on your Mac.</p>
-            <Link href="/install/">Get Ninai for Mac →</Link>
-          </div>
-          <div className={styles.setupDiagram} aria-label="Ninai product flow">
-            <div className={styles.toolColumn}><span className={styles.diagramLabel}>Agents</span><div><b>CL</b> Claude Code</div><div><b>OX</b> Codex</div></div>
-            <div className={styles.diagramArrow}><span>scoped MCP</span><i /></div>
-            <div className={styles.hostColumn}><span className={styles.diagramLabel}>Ninai</span><strong>Remember · recall</strong><small>source · review · revoke</small></div>
-            <div className={`${styles.diagramArrow} ${styles.diagramArrowSignal}`}><span>stays here</span><i /></div>
-            <div className={styles.ninaiColumn}><span className={styles.diagramLabel}>Vault</span><img src="/assets/ninai-app-icon.svg" alt="" width="42" height="42" /><strong>On your Mac</strong></div>
-          </div>
-        </div>
-      </section>
-
       <section className={styles.finalCta}>
         <div className={`shell ${styles.finalCtaInner}`}>
           <img src="/assets/ninai-app-icon.svg" alt="" width="62" height="62" />
-          <h2>Remember the work.<em>Keep the rest yours.</em></h2>
+          <h2>Ready in one install.<em>Private on your Mac.</em></h2>
           <div><Link className={styles.primaryAction} href="/install/">Set up Ninai ↗</Link><a className={styles.secondaryActionLight} href="https://app.ninai.io/control/login">Sign in</a></div>
         </div>
       </section>

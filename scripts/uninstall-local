@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+install_dir="${NINAI_INSTALL_DIR:-${HOME}/.ninai-app}"
+data_dir="${NINAI_DATA_DIR:-${HOME}/.ninai}"
+
+for target in "${install_dir}" "${data_dir}"; do
+  case "${target}" in
+    /*) ;;
+    *) printf 'Refusing non-absolute uninstall target: %s\n' "${target}" >&2; exit 2 ;;
+  esac
+  if [[ "${target}" == "/" || "${target}" == "${HOME}" ]]; then
+    printf 'Refusing broad uninstall target: %s\n' "${target}" >&2
+    exit 2
+  fi
+done
+
+printf '%s\n' 'Removing Ninai connections and hooks…'
+pkill -f "${install_dir}/Ninai.app/Contents/MacOS/Ninai" >/dev/null 2>&1 || true
+
+if command -v claude >/dev/null 2>&1; then
+  claude mcp remove ninai-local --scope user >/dev/null 2>&1 || true
+  claude mcp remove ninai --scope user >/dev/null 2>&1 || true
+fi
+if command -v codex >/dev/null 2>&1; then
+  codex mcp remove ninai-local >/dev/null 2>&1 || true
+fi
+
+python_cmd=""
+if [[ -x "${install_dir}/venv/bin/python" ]]; then
+  python_cmd="${install_dir}/venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  python_cmd="$(command -v python3)"
+fi
+
+if [[ -n "${python_cmd}" ]]; then
+  NINAI_INSTALL_DIR="${install_dir}" "${python_cmd}" - <<'PY'
+import json
+import os
+import stat
+from pathlib import Path
+
+install_dir = os.environ["NINAI_INSTALL_DIR"]
+targets = (Path.home() / ".claude" / "settings.json", Path.home() / ".codex" / "hooks.json")
+
+for path in targets:
+    if not path.exists():
+        continue
+    try:
+        original = path.read_text()
+        data = json.loads(original)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Kept {path} unchanged because it could not be safely read: {exc}")
+        continue
+    hooks = data.get("hooks")
+    if not isinstance(hooks, dict):
+        continue
+    changed = False
+    for event in list(hooks):
+        groups = hooks[event]
+        if not isinstance(groups, list):
+            continue
+        kept_groups = []
+        for group in groups:
+            if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+                kept_groups.append(group)
+                continue
+            kept_hooks = []
+            for item in group["hooks"]:
+                command = str(item.get("command", "")) if isinstance(item, dict) else ""
+                is_ninai = command.startswith(install_dir + "/venv/bin/ninai")
+                if is_ninai:
+                    changed = True
+                else:
+                    kept_hooks.append(item)
+            if kept_hooks:
+                updated = dict(group)
+                updated["hooks"] = kept_hooks
+                kept_groups.append(updated)
+            elif group["hooks"]:
+                changed = True
+        if kept_groups:
+            hooks[event] = kept_groups
+        else:
+            del hooks[event]
+    if changed:
+        mode = stat.S_IMODE(path.stat().st_mode)
+        temporary = path.with_name(path.name + ".ninai-uninstall.tmp")
+        temporary.write_text(json.dumps(data, indent=2) + "\n")
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+PY
+fi
+
+timestamp="$(date +%Y%m%d-%H%M%S)"
+trash_root="${HOME}/.Trash/Ninai-uninstall-${timestamp}"
+mkdir -m 700 -p "${trash_root}"
+
+moved=0
+if [[ -d "${install_dir}" ]]; then
+  mv "${install_dir}" "${trash_root}/ninai-app"
+  moved=1
+fi
+if [[ -d "${data_dir}" ]]; then
+  mv "${data_dir}" "${trash_root}/ninai-data"
+  moved=1
+fi
+
+if [[ "${moved}" -eq 1 ]]; then
+  printf 'Ninai was uninstalled. A recoverable copy is in:\n  %s\n' "${trash_root}"
+else
+  rmdir "${trash_root}" 2>/dev/null || true
+  printf '%s\n' 'Ninai was already uninstalled.'
+fi

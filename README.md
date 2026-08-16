@@ -24,6 +24,8 @@ The official customer path is deliberately short:
 
 The installer checks for a compatible Python version, installs the Ninai app and local SQLite vault, detects Claude Code and Codex, connects every supported agent it finds, asks before enabling automatic session handoff, and opens Ninai. Advanced flags and contributor setup remain documented in [`scripts/install-local`](scripts/install-local).
 
+To remove only Ninai, its local connectors, and its lifecycle hooks while keeping a recoverable copy in the Mac Trash, run [`scripts/uninstall-local`](scripts/uninstall-local) from a clone.
+
 Because this repository is public, developers can inspect and run its source directly. The official download and customer onboarding flow require an account; the open-source code itself is not access-controlled.
 
 In Claude Code, try:

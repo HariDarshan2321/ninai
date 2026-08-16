@@ -207,6 +207,7 @@ class ControlAppTest(unittest.TestCase):
         client = TestClient(Starlette(routes=[
             Route("/control", endpoint, methods=["GET"]),
             Route("/control/login", endpoint, methods=["GET"]),
+            Route("/control/logout", endpoint, methods=["GET"]),
         ]))
         landing = client.get("/control").text
         self.assertIn("const oauthEnabled=true", landing)
@@ -225,6 +226,14 @@ class ControlAppTest(unittest.TestCase):
         self.assertIn("ninai_oauth_state=", response.headers["set-cookie"])
         self.assertIn("HttpOnly", response.headers["set-cookie"])
         self.assertIn("Secure", response.headers["set-cookie"])
+        logout = client.get("/control/logout", follow_redirects=False)
+        self.assertEqual(logout.status_code, 302)
+        self.assertEqual(
+            logout.headers["location"],
+            "https://tenant.auth0.com/v2/logout?client_id=dashboard-client&returnTo=https%3A%2F%2Fapi.example%2Fcontrol",
+        )
+        self.assertIn("__Host-ninai_access_token", logout.headers["set-cookie"])
+        self.assertIn("Max-Age=0", logout.headers["set-cookie"])
 
     def test_dashboard_oauth_callback_rejects_bad_state(self):
         from ninai_cloud.auth import AuthSettings

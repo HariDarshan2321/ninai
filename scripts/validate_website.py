@@ -129,10 +129,10 @@ for private_setup_marker in (
 ):
     if private_setup_marker in public_install:
         raise SystemExit(f"Public install page exposes account-gated setup: {private_setup_marker}")
-for gated_copy in ("Sign in for the Mac installer", "Create account", "Sign in"):
+for gated_copy in ("official installer", "Create account", "Sign in"):
     if gated_copy not in public_install:
         raise SystemExit(f"Public install page is missing account gate copy: {gated_copy}")
-for local_mvp_copy in ("No cloud choices. No connector forms.", "Cloud-hosted vaults are coming later"):
+for local_mvp_copy in ("That is the whole setup.", "Cloud-hosted vaults are coming later"):
     if local_mvp_copy not in public_install:
         raise SystemExit(f"Public install page is missing local-MVP copy: {local_mvp_copy}")
 

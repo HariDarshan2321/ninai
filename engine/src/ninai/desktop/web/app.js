@@ -313,8 +313,8 @@
       clear(body);
       if (!commitments.length && !decisions.length) {
         body.appendChild(stateBlock({
-          title: "Nothing needs your attention yet",
-          body: "As you work, commitments and decisions worth keeping will return here — each with a source you can trace."
+          title: "Ninai is ready",
+          body: "Start a project in Claude Code or Codex. Useful decisions will appear here after your session."
         }));
         return;
       }

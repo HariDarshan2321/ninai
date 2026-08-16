@@ -65,12 +65,12 @@
         </button>
         <button class="nav__item" type="button" data-screen="permissions">
           <span class="nav__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.2-2.9 7.4-7 8.5-4.1-1.1-7-4.3-7-8.5V6l7-3Z"/><path d="M9.2 12l2 2 3.6-3.7"/></svg></span>
-          <span class="nav__name">Permissions</span>
+          <span class="nav__name">Access</span>
           <span class="nav__count" data-count="permissions" hidden></span>
         </button>
         <button class="nav__item" type="button" data-screen="activity">
           <span class="nav__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7H21"/></svg></span>
-          <span class="nav__name">Activity</span>
+          <span class="nav__name">History</span>
           <span class="nav__count" data-count="activity" hidden></span>
         </button>
       </nav>
@@ -78,13 +78,14 @@
       <div class="sidebar__foot">
         <p class="foot-label">Vault</p>
         <p class="foot-value" id="vault-path">local</p>
+        <a class="foot-link" href="mailto:hello@ninai.io?subject=Ninai%20MVP%20feedback" target="_blank" rel="noreferrer">Help &amp; feedback</a>
       </div>
     </aside>
 
     <!-- ===================== Main ===================== -->
     <main class="main">
       <!-- Today -->
-      <section class="screen is-active" id="screen-today" role="tabpanel" aria-labelledby="today-title" tabindex="-1">
+      <section class="screen is-active" id="screen-today" role="region" aria-labelledby="today-title" tabindex="-1">
         <header class="screen__head">
           <div>
             <p class="screen__eyebrow">The work that survived the session</p>
@@ -95,7 +96,7 @@
       </section>
 
       <!-- Memories -->
-      <section class="screen" id="screen-memories" role="tabpanel" aria-labelledby="memories-title" tabindex="-1">
+      <section class="screen" id="screen-memories" role="region" aria-labelledby="memories-title" tabindex="-1">
         <header class="screen__head">
           <div>
             <p class="screen__eyebrow">The complete local vault</p>
@@ -126,7 +127,7 @@
       </section>
 
       <!-- Sources -->
-      <section class="screen" id="screen-sources" role="tabpanel" aria-labelledby="sources-title" tabindex="-1">
+      <section class="screen" id="screen-sources" role="region" aria-labelledby="sources-title" tabindex="-1">
         <header class="screen__head">
           <div>
             <p class="screen__eyebrow">Where captured memory came from</p>
@@ -136,31 +137,31 @@
         <div id="sources-body"></div>
       </section>
 
-      <!-- Permissions -->
-      <section class="screen" id="screen-sessions" role="tabpanel" aria-labelledby="sessions-title" tabindex="-1">
-        <header class="screen__head"><div><p class="screen__eyebrow">Connected-agent history kept on this Mac</p><h1 class="screen__title" id="sessions-title">Sessions</h1><p class="screen__sub">Automatic archiving is consent-based. Project context is disclosed only to clients with project access.</p></div></header>
+        <!-- Sessions -->
+      <section class="screen" id="screen-sessions" role="region" aria-labelledby="sessions-title" tabindex="-1">
+        <header class="screen__head"><div><p class="screen__eyebrow">Saved on this Mac</p><h1 class="screen__title" id="sessions-title">Sessions</h1><p class="screen__sub">Choose whether Ninai saves completed Claude Code and Codex sessions for local handoff.</p></div></header>
         <div id="sessions-body"></div>
       </section>
 
       <!-- Permissions -->
-      <section class="screen" id="screen-permissions" role="tabpanel" aria-labelledby="permissions-title" tabindex="-1">
+      <section class="screen" id="screen-permissions" role="region" aria-labelledby="permissions-title" tabindex="-1">
         <header class="screen__head">
           <div>
-            <p class="screen__eyebrow">What each assistant may read, by scope</p>
-            <h1 class="screen__title" id="permissions-title">Permissions</h1>
-            <p class="screen__sub">Access is granted per scope. Revoke a scope and the memory stays put &mdash; the assistant simply stops receiving it.</p>
+            <p class="screen__eyebrow">What each agent can read</p>
+            <h1 class="screen__title" id="permissions-title">Access</h1>
+            <p class="screen__sub">Turn access off and the memory stays in your vault; that agent simply stops receiving it.</p>
           </div>
         </header>
         <div id="permissions-body"></div>
       </section>
 
       <!-- Activity -->
-      <section class="screen" id="screen-activity" role="tabpanel" aria-labelledby="activity-title" tabindex="-1">
+      <section class="screen" id="screen-activity" role="region" aria-labelledby="activity-title" tabindex="-1">
         <header class="screen__head">
           <div>
-            <p class="screen__eyebrow">Every packet that left the vault</p>
-            <h1 class="screen__title" id="activity-title">Activity</h1>
-            <p class="screen__sub">A read-only record. Each entry names the assistant, its purpose, the scopes it used, and the facts released.</p>
+            <p class="screen__eyebrow">What Ninai shared</p>
+            <h1 class="screen__title" id="activity-title">History</h1>
+            <p class="screen__sub">See which agent asked, why it asked, and which facts Ninai released.</p>
           </div>
         </header>
         <div id="activity-body"></div>
@@ -205,12 +206,12 @@
           </div>
           <div class="form__row">
             <div class="form__field">
-              <label class="form__label" for="add-sensitivity">Sensitivity</label>
+              <label class="form__label" for="add-sensitivity">Privacy level</label>
               <select class="form__control" id="add-sensitivity" name="sensitivity"></select>
             </div>
             <div class="form__field">
-              <label class="form__label" for="add-source">Source</label>
-              <input class="form__control mono" id="add-source" name="source_uri" placeholder="app://manual" autocomplete="off" spellcheck="false">
+              <label class="form__label" for="add-source">Source (optional)</label>
+              <input class="form__control mono" id="add-source" name="source_uri" placeholder="Where did this come from?" autocomplete="off" spellcheck="false">
             </div>
           </div>
         </form>

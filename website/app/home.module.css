@@ -221,6 +221,51 @@
   background: var(--permit);
 }
 
+.heroNote {
+  margin: 24px 0 0;
+  color: var(--moss);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.quickStart {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(244, 239, 229, 0.24);
+  border-radius: 28px 28px 7px 28px;
+  background: rgba(7, 37, 31, 0.72);
+  list-style: none;
+}
+
+.quickStart li {
+  min-height: 112px;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 18px;
+  align-items: center;
+  border-bottom: 1px solid rgba(244, 239, 229, 0.16);
+  padding: 20px;
+}
+
+.quickStart li:last-child { border-bottom: 0; }
+
+.quickStart li > span {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--ink);
+  background: var(--permit);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.quickStart strong { font-size: 1.05rem; }
+.quickStart p { margin: 5px 0 0; color: var(--moss); line-height: 1.45; }
+
 .heroProduct {
   min-width: 0;
 }
@@ -241,12 +286,12 @@
 .returnSection,
 .personaSection,
 .faqSection {
-  padding-block: clamp(100px, 11vw, 165px);
+  padding-block: clamp(76px, 8vw, 112px);
 }
 
 .sectionHeading {
   max-width: 900px;
-  margin-bottom: clamp(55px, 7vw, 90px);
+  margin-bottom: clamp(38px, 5vw, 62px);
 }
 
 .eyebrow {
@@ -270,7 +315,7 @@
 .installCopy h2,
 .faqLayout h2 {
   margin: 0;
-  font-size: clamp(3rem, 5.6vw, 6.2rem);
+  font-size: clamp(2.7rem, 4.8vw, 5.2rem);
   font-weight: 620;
   letter-spacing: -0.07em;
   line-height: 0.94;
@@ -295,7 +340,7 @@
 }
 
 .sessionCard {
-  min-height: 430px;
+  min-height: 360px;
   display: flex;
   flex-direction: column;
   border: 1px solid rgba(17, 21, 18, 0.24);
@@ -321,7 +366,7 @@
 }
 
 .userPrompt {
-  margin: 70px 0 36px;
+  margin: 48px 0 28px;
   font-family: var(--font-serif);
   font-size: clamp(1.65rem, 2.5vw, 2.55rem);
   font-style: italic;
@@ -1290,7 +1335,7 @@
   }
 
   .sessionCard {
-    min-height: 400px;
+    min-height: 320px;
     border-radius: 26px 26px 6px 26px;
   }
 
@@ -1318,7 +1363,7 @@
   }
 
   .finalCtaInner {
-    min-height: 600px;
+    min-height: 420px;
   }
 }
 

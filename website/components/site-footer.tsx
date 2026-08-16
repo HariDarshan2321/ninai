@@ -18,8 +18,7 @@ export function SiteFooter() {
           <div>
             <p className="footer-label">Product</p>
             <Link href="/install/">Get Ninai</Link>
-            <Link href="/local/">Local Claude Code + Codex</Link>
-            <Link href="/start/">Cloud · coming later</Link>
+            <Link href="/local/">Why local</Link>
             <Link href="/privacy/">Privacy</Link>
             <Link href="/terms/">Terms</Link>
           </div>
@@ -33,7 +32,7 @@ export function SiteFooter() {
       </div>
       <div className="shell site-footer__bottom">
         <span>© 2026 Ninai</span>
-        <span>Mac MVP available · Cloud coming later</span>
+        <span>Local Mac MVP</span>
       </div>
     </footer>
   );

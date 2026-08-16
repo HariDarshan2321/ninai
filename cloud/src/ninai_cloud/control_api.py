@@ -508,7 +508,15 @@ class ControlApp:
                                 secure=True, samesite="lax", path="/control")
             return response
         if path == "/control/logout" and request.method == "GET":
-            response = RedirectResponse("/control", status_code=302, headers=self._security_headers())
+            destination = "/control"
+            if self._oauth_ready():
+                assert self.oauth_settings and self.oauth_settings.control_client_id
+                assert self.oauth_settings.control_base_url
+                destination = self.oauth_settings.issuer.rstrip("/") + "/v2/logout?" + urlencode({
+                    "client_id": self.oauth_settings.control_client_id,
+                    "returnTo": self.oauth_settings.control_base_url.rstrip("/") + "/control",
+                })
+            response = RedirectResponse(destination, status_code=302, headers=self._security_headers())
             response.delete_cookie(SESSION_COOKIE, path="/", secure=True, samesite="lax")
             # Clear the pre-hardening name during rollout so an old session
             # cannot appear signed in after logout.

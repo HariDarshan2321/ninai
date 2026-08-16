@@ -305,6 +305,16 @@ a {
   opacity: 0.82;
 }
 
+.foot-link {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--sidebar-muted);
+  font-size: 0.72rem;
+  text-underline-offset: 3px;
+}
+
+.foot-link:hover { color: var(--sidebar-text); }
+
 /* ---- Main --------------------------------------------------------------- */
 
 .main {
