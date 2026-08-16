@@ -43,12 +43,16 @@ Restart Claude Code, open `/mcp`, and verify `ninai` is connected and exposes
 ### Codex CLI and IDE
 
 ```bash
-codex mcp add ninai --url https://app.ninai.io/mcp
-codex mcp login ninai --scopes ninai:read,ninai:propose,ninai:remember
+codex mcp add ninai --url https://app.ninai.io/mcp \
+  --oauth-resource https://app.ninai.io/mcp
 codex mcp list
 ```
 
-Complete the browser login, then open the new connection in the control center
+Current Codex versions start OAuth during `mcp add`; do not immediately run a
+second `mcp login`, because that can create a duplicate dynamically registered
+Auth0 application. Run `codex mcp login ninai` only if `mcp add` finishes and
+Codex still explicitly reports that authentication is required. Complete the
+browser login, then open the new connection in the control center
 and add least-privilege project grants. Restart Codex after saving the grant.
 `codex mcp list` should report `ninai` as enabled with OAuth.
 
@@ -137,8 +141,8 @@ Official reference: [Claude Code MCP setup and remote OAuth](https://docs.anthro
 For an issuer that supports MCP OAuth discovery:
 
 ```bash
-codex mcp add ninai --url https://<host>/mcp
-codex mcp login ninai
+codex mcp add ninai --url https://<host>/mcp \
+  --oauth-resource https://<host>/mcp
 codex mcp list
 ```
 
