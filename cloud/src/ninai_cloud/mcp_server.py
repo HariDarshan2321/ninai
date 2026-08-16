@@ -237,9 +237,16 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     """Build the authenticated, stateless hosted MCP application."""
     mcp = FastMCP(
         "Ninai Hosted",
-        instructions=("Use approved, source-backed Ninai memory across AI clients. Search or recall with a "
-                      "clear purpose. Use propose_memory for review-first writes. Use remember only when this "
-                      "client was explicitly granted auto-activation. Never send credentials."),
+        instructions=(
+            "Use approved, source-backed Ninai memory across AI clients. Before asking the user to "
+            "restate an unfamiliar project-specific name, acronym, task, incident, decision, or other "
+            "reference to prior work, search Ninai using the user's exact phrase. Also search when the "
+            "user asks whether you know or remember something from earlier work. Do not search for "
+            "ordinary general-knowledge questions. After the conversation establishes a durable project "
+            "fact, decision, commitment, or procedure, use propose_memory once for review-first saving. "
+            "Never save small talk, speculative content, raw transcripts, or credentials. Use remember "
+            "only when this client was explicitly granted auto-activation."
+        ),
         token_verifier=token_verifier, auth=auth, host=host, port=port, streamable_http_path="/mcp",
         stateless_http=True, json_response=True,
     )
@@ -276,7 +283,11 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
 
     @mcp.tool(
         title="Search Ninai memory",
-        description="Search active memories in this client's granted scopes. Results include provenance.",
+        description=(
+            "Search active, permission-filtered Ninai memories with provenance. Call this before asking "
+            "for clarification when a user mentions an unfamiliar project-specific name, acronym, task, "
+            "incident, decision, or says 'do you know/remember'. Search with the user's exact phrase."
+        ),
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True,
                                     openWorldHint=False),
         structured_output=True,
@@ -296,7 +307,10 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
 
     @mcp.tool(
         title="Recall from Ninai",
-        description="Return a compact, token-bounded context packet with provenance and disclosure audit.",
+        description=(
+            "Load a compact, token-bounded Ninai context packet before answering a question that depends "
+            "on known prior project work. Results include provenance and a disclosure audit."
+        ),
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True,
                                     openWorldHint=False),
         structured_output=True,
@@ -306,7 +320,11 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
 
     @mcp.tool(
         title="Propose Ninai memory",
-        description="Propose source-backed durable memory for review; proposed items are not recalled.",
+        description=(
+            "After the current conversation establishes a durable project fact, decision, commitment, or "
+            "procedure, propose one compact source-backed memory for user review. Never propose small talk, "
+            "speculation, credentials, or a raw transcript. Proposed items are not recalled until approved."
+        ),
         annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
                                     openWorldHint=False),
         structured_output=True,

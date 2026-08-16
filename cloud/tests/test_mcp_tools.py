@@ -134,6 +134,10 @@ class HostedMCPToolsTest(unittest.TestCase):
                          {"search", "fetch", "recall", "propose_memory", "remember",
                           "capture_session_start", "capture_session_checkpoint",
                           "capture_session_end", "session_context"})
+        descriptions = {tool.name: tool.description for tool in tools}
+        self.assertIn("before asking for clarification", descriptions["search"])
+        self.assertIn("depends on known prior project work", descriptions["recall"])
+        self.assertIn("After the current conversation establishes", descriptions["propose_memory"])
         paths = {route.path for route in server.streamable_http_app().routes}
         self.assertIn("/health", paths)
         self.assertIn("/ready", paths)
