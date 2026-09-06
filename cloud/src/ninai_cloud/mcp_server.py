@@ -486,6 +486,10 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     async def control_login(request: Request):
         return await control.handle(request)
 
+    @mcp.custom_route("/control/admin", methods=["GET"])
+    async def platform_admin_page(request: Request):
+        return await control.handle(request)
+
     @mcp.custom_route("/control/logout", methods=["GET"])
     async def control_logout(request: Request):
         return await control.handle(request)

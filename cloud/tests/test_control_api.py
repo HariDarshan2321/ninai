@@ -73,6 +73,12 @@ class FakeService:
     def __init__(self) -> None:
         self.calls = []
 
+    def record_login(self, who):
+        self.calls.append(("login", who))
+
+    def is_platform_admin(self, who):
+        return False
+
     def overview(self, who):
         self.calls.append(("overview", who))
         return {"workspace": {"id": who.workspace_id}, "counts": {"active_memories": 1}}
@@ -111,7 +117,7 @@ class Verifier(TokenVerifier):
     async def verify_token(self, token):
         if token != "valid-token":
             return None
-        return AccessToken(token=token, client_id="client-1", scopes=[],
+        return AccessToken(token=token, client_id="dashboard-client", scopes=[],
                            claims={"user_id": "user-1", "workspace_id": "workspace-1",
                                    "email": "owner@example.test", "name": "Owner",
                                    "email_verified": True})
@@ -307,6 +313,7 @@ class ControlAppTest(unittest.TestCase):
         self.assertIn("HttpOnly", session)
         self.assertIn("Secure", session)
         self.assertIn("SameSite=lax", session)
+        self.assertIn(("login", self.identity), self.service.calls)
 
     def test_dashboard_cookie_auth_requires_origin_for_mutations(self):
         client = self.client
