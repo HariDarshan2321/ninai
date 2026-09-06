@@ -22,7 +22,7 @@ The official customer path is deliberately short:
 2. Create an account or sign in.
 3. Download the authenticated Mac installer and run the one command shown there.
 
-The installer checks for a compatible Python version, installs the Ninai app and local SQLite vault, detects Claude Code and Codex, connects every supported agent it finds, asks before enabling automatic session handoff, and opens Ninai. Advanced flags and contributor setup remain documented in [`scripts/install-local`](scripts/install-local).
+The installer checks for a compatible Python version, installs the Ninai app and local SQLite vault, detects Claude Code, Codex, and Gemini CLI, connects supported agents it finds, asks before enabling automatic Claude/Codex session handoff, and opens Ninai. Other local stdio MCP hosts can connect manually with their own explicitly granted client identity. Advanced flags and contributor setup remain documented in [`scripts/install-local`](scripts/install-local).
 
 To remove only Ninai, its local connectors, and its lifecycle hooks while keeping a recoverable copy in the Mac Trash, run [`scripts/uninstall-local`](scripts/uninstall-local) from a clone.
 

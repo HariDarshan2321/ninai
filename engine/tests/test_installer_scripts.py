@@ -30,6 +30,12 @@ class InstallerScriptsTest(unittest.TestCase):
                     {"type": "command", "command": "/usr/bin/other-hook"},
                 ]}
             ]}}))
+            gemini_settings = home / ".gemini" / "settings.json"
+            gemini_settings.parent.mkdir()
+            gemini_settings.write_text(json.dumps({"mcpServers": {
+                "ninai-local": {"command": str(install / "venv/bin/ninai-mcp")},
+                "keep-me": {"command": "/usr/bin/other-mcp"},
+            }}))
 
             env = {**os.environ, "HOME": str(home), "NINAI_INSTALL_DIR": str(install),
                    "NINAI_DATA_DIR": str(data), "PATH": "/usr/bin:/bin"}
@@ -47,7 +53,18 @@ class InstallerScriptsTest(unittest.TestCase):
             remaining = claude_settings.read_text()
             self.assertNotIn("session-hook", remaining)
             self.assertIn("/usr/bin/other-hook", remaining)
+            gemini_config = json.loads(gemini_settings.read_text())
+            self.assertNotIn("ninai-local", gemini_config["mcpServers"])
+            self.assertEqual(gemini_config["mcpServers"]["keep-me"]["command"], "/usr/bin/other-mcp")
             self.assertIn("recoverable copy", result.stdout)
+
+    def test_installer_configures_gemini_as_an_untrusted_scoped_mcp_client(self) -> None:
+        installer = (ROOT / "scripts" / "install-local").read_text()
+        self.assertIn('permission grant gemini project', installer)
+        self.assertIn('"NINAI_CLIENT_ID": "gemini"', installer)
+        self.assertIn('"trust": False', installer)
+        self.assertIn('servers["ninai-local"]', installer)
+        self.assertNotIn('session-hook --provider gemini', installer)
 
 
 if __name__ == "__main__":

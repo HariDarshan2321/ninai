@@ -7,6 +7,8 @@ Status is deliberately evidence-based. “Implemented” means the repository co
 | Claude Code, local | stdio MCP | Implemented and locally tested | Available path |
 | Claude Code 2.1.219, self-hosted | Streamable HTTP MCP + PAT | Implemented | Verified 2026-07-25: write, read, provenance, continuity after peer revocation |
 | Codex CLI 0.145.0, self-hosted | Streamable HTTP MCP + PAT | Implemented | Verified 2026-07-25: read, write, provenance, immediate denial after revocation |
+| Gemini CLI, local | stdio MCP | Installer/configuration implemented and protocol tested | Real Gemini model invocation pending |
+| Other local/open-weight MCP hosts | stdio MCP | Manual configuration supported | Host-by-host acceptance required |
 | Claude Code / Codex, hosted OAuth beta | Streamable HTTP MCP + OAuth | Implemented and deployed | Login, PKCE, and DCR live; authenticated CLI external-tester round trip pending |
 | OpenAI Responses API | Remote MCP tool | Example documented | Acceptance run pending |
 | Anthropic Messages API | MCP connector beta | Example documented | Acceptance run pending |
@@ -17,6 +19,12 @@ Status is deliberately evidence-based. “Implemented” means the repository co
 | Hosted control center | WSGI UI/API over PostgreSQL | Implemented and unit tested | Deployed with Auth0 login; full external tester acceptance pending |
 
 MCP gives a host access to named tools; it is not a universal conversation listener. Ninai cannot silently read Claude, ChatGPT, Codex, or API conversations. The host or integrating application decides when to call Ninai.
+
+Gemini CLI receives a separate `gemini` client identity and only the explicitly
+granted project scope. Its MCP connection is not marked trusted, so Gemini keeps
+its normal tool confirmation behavior. Automatic lifecycle capture is currently
+verified only for Claude Code and Codex; Gemini and generic MCP hosts can call
+Ninai's `remember`, `recall`, `explain`, `forget`, and `status` tools directly.
 
 ChatGPT and Claude.ai use the hosted PostgreSQL vault. They cannot install,
 connect to, or read a customer's private macOS SQLite vault. The macOS app and

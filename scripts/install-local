@@ -22,7 +22,7 @@ usage() {
   cat <<'EOF'
 Install Ninai's local engine and optional MCP client connection.
 
-Usage: install-local [--client both|claude-code|codex|none] [--session-capture ask|on|off]
+Usage: install-local [--client all|both|claude-code|codex|gemini|none] [--session-capture ask|on|off]
 
 Environment:
   NINAI_INSTALL_DIR  Installation directory (default: ~/.ninai-app)
@@ -31,6 +31,7 @@ Environment:
 
 Examples:
   ./scripts/install-local --client claude-code
+  ./scripts/install-local --client gemini
   curl -fsSL https://raw.githubusercontent.com/HariDarshan2321/ninai/main/scripts/install-local | bash -s -- --client codex
 EOF
 }
@@ -60,8 +61,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${client}" in
-  auto|both|claude-code|codex|none) ;;
-  *) printf '%s\n' '--client must be both, claude-code, codex, or none.' >&2; exit 2 ;;
+  auto|all|both|claude-code|codex|gemini|none) ;;
+  *) printf '%s\n' '--client must be all, both, claude-code, codex, gemini, or none.' >&2; exit 2 ;;
 esac
 case "${session_capture}" in
   ask|on|off) ;;
@@ -216,18 +217,6 @@ path.write_text(json.dumps(data, indent=2) + "\n")
 PY
 }
 
-if [[ "${client}" == "auto" ]]; then
-  if command -v claude >/dev/null 2>&1 && command -v codex >/dev/null 2>&1; then
-    client="both"
-  elif command -v claude >/dev/null 2>&1; then
-    client="claude-code"
-  elif command -v codex >/dev/null 2>&1; then
-    client="codex"
-  else
-    client="none"
-  fi
-fi
-
 connect_claude() {
     if ! command -v claude >/dev/null 2>&1; then
       printf '%s\n' 'Ninai installed, but Claude Code was not found. Install Claude Code and rerun with --client claude-code.' >&2
@@ -253,7 +242,58 @@ connect_codex() {
     merge_hooks "${HOME}/.codex/hooks.json" "codex" "no"
 }
 
+connect_gemini() {
+    if ! command -v gemini >/dev/null 2>&1; then
+      printf '%s\n' 'Ninai installed, but Gemini CLI was not found. Install Gemini CLI and rerun with --client gemini.' >&2
+      exit 1
+    fi
+    "${install_dir}/venv/bin/ninai" permission grant gemini project
+    settings_path="${HOME}/.gemini/settings.json"
+    mkdir -p "$(dirname "${settings_path}")"
+    NINAI_GEMINI_SETTINGS="${settings_path}" NINAI_MCP_COMMAND="${install_dir}/venv/bin/ninai-mcp" \
+      "${python_cmd}" - <<'PY'
+import json
+import os
+import stat
+from pathlib import Path
+
+path = Path(os.environ["NINAI_GEMINI_SETTINGS"])
+try:
+    data = json.loads(path.read_text()) if path.exists() else {}
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"Cannot safely merge Ninai into {path}: {exc}")
+if not isinstance(data, dict):
+    raise SystemExit(f"Cannot safely merge Ninai into {path}: root must be an object")
+servers = data.setdefault("mcpServers", {})
+if not isinstance(servers, dict):
+    raise SystemExit(f"Cannot safely merge Ninai into {path}: mcpServers must be an object")
+servers["ninai-local"] = {
+    "command": os.environ["NINAI_MCP_COMMAND"],
+    "env": {"NINAI_CLIENT_ID": "gemini"},
+    "trust": False,
+    "description": "Permissioned local Ninai memory",
+}
+mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o600
+temporary = path.with_name(path.name + ".ninai-install.tmp")
+temporary.write_text(json.dumps(data, indent=2) + "\n")
+os.chmod(temporary, mode)
+os.replace(temporary, path)
+PY
+}
+
 case "${client}" in
+  auto)
+    detected_clients=()
+    if command -v claude >/dev/null 2>&1; then connect_claude; detected_clients+=("claude-code"); fi
+    if command -v codex >/dev/null 2>&1; then connect_codex; detected_clients+=("codex"); fi
+    if command -v gemini >/dev/null 2>&1; then connect_gemini; detected_clients+=("gemini"); fi
+    if [[ ${#detected_clients[@]} -eq 0 ]]; then client="none"; else client="${detected_clients[*]}"; fi
+    ;;
+  all)
+    connect_claude
+    connect_codex
+    connect_gemini
+    ;;
   both)
     connect_claude
     connect_codex
@@ -264,13 +304,16 @@ case "${client}" in
   codex)
     connect_codex
     ;;
+  gemini)
+    connect_gemini
+    ;;
 esac
 
 printf '\nNinai is ready.\n'
 open "${app_bundle}" >/dev/null 2>&1 || true
 printf '%s\n' 'The Ninai app is opening now.'
 if [[ "${client}" == "none" ]]; then
-  printf 'No supported AI client was detected. Rerun with --client after installing Claude Code or Codex.\n'
+  printf 'No supported AI client was detected. Rerun with --client after installing Claude Code, Codex, or Gemini CLI.\n'
 else
   printf 'Connected client: %s (project scope only)\n' "${client}"
 fi

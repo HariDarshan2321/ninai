@@ -41,6 +41,21 @@ import stat
 from pathlib import Path
 
 install_dir = os.environ["NINAI_INSTALL_DIR"]
+gemini_settings = Path.home() / ".gemini" / "settings.json"
+if gemini_settings.exists():
+    try:
+        data = json.loads(gemini_settings.read_text())
+        servers = data.get("mcpServers") if isinstance(data, dict) else None
+        if isinstance(servers, dict) and "ninai-local" in servers:
+            del servers["ninai-local"]
+            mode = stat.S_IMODE(gemini_settings.stat().st_mode)
+            temporary = gemini_settings.with_name(gemini_settings.name + ".ninai-uninstall.tmp")
+            temporary.write_text(json.dumps(data, indent=2) + "\n")
+            os.chmod(temporary, mode)
+            os.replace(temporary, gemini_settings)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Kept {gemini_settings} unchanged because it could not be safely read: {exc}")
+
 targets = (Path.home() / ".claude" / "settings.json", Path.home() / ".codex" / "hooks.json")
 
 for path in targets:
