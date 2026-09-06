@@ -33,7 +33,7 @@ export default function InstallPage() {
           </div>
           <div className="page-hero__aside">
             <p>
-              Sign in, download, and run one command. Ninai detects supported agents, connects
+              Sign in, download, and run one command. Ninai detects supported MCP agents, connects
               them, and opens your private local vault.
             </p>
             <div className="hero-actions">
@@ -58,7 +58,7 @@ export default function InstallPage() {
         <article>
           <span className="status-pill status-pill--ready">3 · Continue</span>
           <h2>Open Ninai</h2>
-          <p>The installer finds Claude Code and Codex, connects them, and opens your vault.</p>
+          <p>The installer finds Claude Code, Codex, and Gemini CLI, connects them with separate permissions, and opens your vault.</p>
         </article>
       </section>
 
@@ -69,7 +69,7 @@ export default function InstallPage() {
         </div>
         <div>
           <p>
-            The MVP supports Claude Code and Codex on Mac. Cloud-hosted vaults are coming later.
+            The MVP supports Claude Code and Codex on Mac, with Gemini CLI available as an MCP beta. Cloud-hosted vaults are coming later.
           </p>
           <a href="/privacy/">See how data moves →</a>
         </div>
