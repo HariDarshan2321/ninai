@@ -12,6 +12,7 @@ import base64
 import html
 import re
 import secrets
+import os
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -26,6 +27,7 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Re
 from .postgres_store import AuthorizationError
 from .auth import AuthSettings
 from .control_ui import render_control_center
+from .admin_ui import ADMIN_HTML
 
 
 SESSION_COOKIE = "__Host-ninai_access_token"
@@ -49,11 +51,101 @@ def _jsonable(value: Any) -> Any:
 
 class ControlService:
     def __init__(self, connect: Callable[[], ContextManager[Any]], *, self_hosted: bool = False,
-                 public_mcp_url: str = "/mcp", oauth_issuer: str | None = None) -> None:
+                 public_mcp_url: str = "/mcp", oauth_issuer: str | None = None,
+                 platform_admin_user_ids: frozenset[str] | None = None) -> None:
         self._connect = connect
         self.self_hosted = self_hosted
         self.public_mcp_url = public_mcp_url
         self.oauth_issuer = oauth_issuer
+        # Stable internal UUIDs only: never trust an email, workspace role, or browser claim.
+        configured = (os.environ.get("NINAI_PLATFORM_ADMIN_USER_IDS", "").split(",")
+                      if platform_admin_user_ids is None else platform_admin_user_ids)
+        self.platform_admin_user_ids = frozenset(str(uuid.UUID(value.strip()))
+                                                for value in configured if value.strip())
+
+    def is_platform_admin(self, identity: ControlIdentity) -> bool:
+        if identity.user_id not in self.platform_admin_user_ids:
+            return False
+        with self._connect() as db:
+            return bool(db.execute("SELECT id FROM users WHERE id=%s AND deleted_at IS NULL",
+                                   (identity.user_id,)).fetchone())
+
+    def require_platform_admin(self, identity: ControlIdentity) -> None:
+        if not self.is_platform_admin(identity):
+            raise AuthorizationError("Platform administrator access required")
+
+    def record_login(self, identity: ControlIdentity) -> None:
+        """Count completed, verified browser sign-ins; never persist the credential."""
+        with self._connect() as db:
+            row = db.execute("""UPDATE users SET last_login_at=now(),login_count=login_count+1,
+                              profile_email=COALESCE(%s,profile_email),profile_name=COALESCE(%s,profile_name)
+                              WHERE id=%s AND deleted_at IS NULL RETURNING id""",
+                             (identity.email, identity.display_name, identity.user_id)).fetchone()
+            if not row:
+                raise AuthorizationError("Active account required")
+
+    def admin_overview(self, identity: ControlIdentity) -> dict[str, Any]:
+        self.require_platform_admin(identity)
+        with self._connect() as db:
+            row = db.execute("""SELECT
+                (SELECT count(*) FROM users WHERE deleted_at IS NULL) AS users,
+                (SELECT count(*) FROM users WHERE deleted_at IS NULL
+                  AND created_at >= now()-interval '7 days') AS signups_7d,
+                (SELECT count(*) FROM users WHERE deleted_at IS NULL
+                  AND last_login_at >= now()-interval '7 days') AS signed_in_7d,
+                (SELECT count(DISTINCT d.user_id) FROM installer_downloads d
+                  JOIN users u ON u.id=d.user_id WHERE u.deleted_at IS NULL) AS downloaders,
+                (SELECT count(*) FROM installer_downloads) AS downloads,
+                (SELECT count(*) FROM workspaces WHERE deleted_at IS NULL) AS workspaces,
+                (SELECT count(*) FROM client_connections c JOIN workspaces w ON w.id=c.workspace_id
+                  WHERE c.status='active' AND c.revoked_at IS NULL AND w.deleted_at IS NULL) AS connections
+            """).fetchone()
+            return dict(row)
+
+    def admin_users(self, identity: ControlIdentity, *, search: str = "",
+                    limit: Any = 25, offset: Any = 0) -> dict[str, Any]:
+        self.require_platform_admin(identity)
+        limit, offset = max(1, min(int(limit), 100)), max(0, int(offset))
+        search = search.strip()[:200]
+        # strpos is literal, so '%' and '_' in names do not expand the search.
+        condition = "(%s='' OR strpos(lower(COALESCE(u.profile_email,u.email) || ' ' || COALESCE(u.profile_name,u.display_name) || ' ' || u.id::text),lower(%s))>0)"
+        with self._connect() as db:
+            total = db.execute("SELECT count(*) AS n FROM users u WHERE " + condition,
+                               (search, search)).fetchone()["n"]
+            rows = db.execute("""SELECT u.id,COALESCE(u.profile_email,u.email) AS email,
+                COALESCE(u.profile_name,u.display_name) AS display_name,u.created_at,u.deleted_at,
+                u.last_login_at,u.login_count,
+                (SELECT count(*) FROM installer_downloads d WHERE d.user_id=u.id) AS downloads,
+                (SELECT max(created_at) FROM installer_downloads d WHERE d.user_id=u.id) AS last_download_at,
+                (SELECT count(*) FROM workspace_members m JOIN workspaces w ON w.id=m.workspace_id
+                  WHERE m.user_id=u.id AND m.revoked_at IS NULL AND w.deleted_at IS NULL) AS workspaces,
+                (SELECT count(*) FROM client_connections c JOIN workspaces w ON w.id=c.workspace_id
+                  WHERE c.user_id=u.id AND c.status='active' AND c.revoked_at IS NULL
+                  AND w.deleted_at IS NULL) AS connections
+                FROM users u WHERE """ + condition + " ORDER BY u.created_at DESC,u.id LIMIT %s OFFSET %s",
+                (search, search, limit, offset)).fetchall()
+            return {"items": [dict(row) for row in rows], "total": total, "limit": limit, "offset": offset}
+
+    def admin_user(self, identity: ControlIdentity, user_id: str) -> dict[str, Any]:
+        self.require_platform_admin(identity)
+        user_id = str(uuid.UUID(user_id))
+        with self._connect() as db:
+            user = db.execute("""SELECT id,COALESCE(profile_email,email) AS email,
+                                 COALESCE(profile_name,display_name) AS display_name,
+                                 created_at,deleted_at,last_login_at,login_count
+                                 FROM users WHERE id=%s""", (user_id,)).fetchone()
+            if not user:
+                raise KeyError("Account not found")
+            workspaces = db.execute("""SELECT w.id,w.name,w.plan,w.created_at,w.deleted_at,m.role,m.revoked_at
+                FROM workspaces w JOIN workspace_members m ON m.workspace_id=w.id
+                WHERE m.user_id=%s ORDER BY w.created_at DESC LIMIT 100""", (user_id,)).fetchall()
+            connections = db.execute("""SELECT id,workspace_id,provider,client_type,display_name,status,
+                created_at,last_seen_at,revoked_at FROM client_connections
+                WHERE user_id=%s ORDER BY created_at DESC LIMIT 100""", (user_id,)).fetchall()
+            downloads = db.execute("""SELECT platform,artifact_sha256,created_at FROM installer_downloads
+                WHERE user_id=%s ORDER BY created_at DESC LIMIT 100""", (user_id,)).fetchall()
+            return {"user": dict(user), "workspaces": [dict(r) for r in workspaces],
+                    "connections": [dict(r) for r in connections], "downloads": [dict(r) for r in downloads]}
 
     @staticmethod
     def _slug(value: str) -> str:
@@ -568,7 +660,37 @@ class ControlApp:
         except Exception:
             return JSONResponse({"error": "OAuth code exchange failed"}, status_code=502,
                                 headers=self._security_headers())
-        response = RedirectResponse("/control", status_code=302, headers=self._security_headers())
+        # Verify and persist the account before accepting a successful login.
+        token = await self.token_verifier.verify_token(access_token)
+        if token is None or token.client_id != settings.control_client_id:
+            return JSONResponse({"error": "Sign-in token validation failed"}, status_code=401,
+                                headers=self._security_headers())
+        try:
+            identity = self._token_identity(token)
+            # Auth0 API access tokens normally omit profile/email. Fetch only
+            # from the configured issuer and bind the profile to the verified sub.
+            if token.subject:
+                try:
+                    async with httpx.AsyncClient(timeout=5, follow_redirects=False) as client:
+                        profile_response = await client.get(settings.issuer.rstrip("/") + "/userinfo",
+                            headers={"Authorization": "Bearer " + access_token})
+                    profile_response.raise_for_status()
+                    profile = profile_response.json()
+                except (httpx.HTTPError, ValueError):
+                    profile = None  # Profile lookup must not prevent a valid sign-in.
+                if isinstance(profile, dict):
+                    if profile.get("sub") != token.subject:
+                        raise AuthorizationError("Profile subject mismatch")
+                    email, name = profile.get("email"), profile.get("name")
+                    identity = ControlIdentity(identity.user_id, identity.workspace_id,
+                        email=email[:320] if isinstance(email, str) and email.strip() else identity.email,
+                        display_name=name[:200] if isinstance(name, str) and name.strip() else identity.display_name)
+            self.service.record_login(identity)
+            destination = "/control/admin" if self.service.is_platform_admin(identity) else "/control"
+        except AuthorizationError:
+            return JSONResponse({"error": "Active account required"}, status_code=403,
+                                headers=self._security_headers())
+        response = RedirectResponse(destination, status_code=302, headers=self._security_headers())
         response.set_cookie(SESSION_COOKIE, access_token,
                             max_age=max(60, min(int(token_data.get("expires_in", 3600)), 86_400)),
                             httponly=True, secure=True, samesite="lax", path="/")
@@ -576,7 +698,7 @@ class ControlApp:
         response.delete_cookie("ninai_pkce_verifier", path="/control")
         return response
 
-    async def _identity(self, request: Request) -> ControlIdentity:
+    async def _identity(self, request: Request, *, platform_admin: bool = False) -> ControlIdentity:
         authorization = request.headers.get("authorization", "")
         using_cookie = not authorization and bool(request.cookies.get(SESSION_COOKIE))
         if using_cookie and request.method.upper() != "GET":
@@ -591,6 +713,12 @@ class ControlApp:
         token = await self.token_verifier.verify_token(credential.strip())
         if token is None:
             raise AuthenticationError("Bearer token validation failed")
+        if platform_admin and self.oauth_settings and token.client_id != self.oauth_settings.control_client_id:
+            raise AuthorizationError("Platform administration requires a dashboard sign-in")
+        return self._token_identity(token)
+
+    @staticmethod
+    def _token_identity(token: Any) -> ControlIdentity:
         claims = token.claims or {}
         user_id = getattr(token, "user_id", None) or claims.get("user_id")
         workspace_id = getattr(token, "workspace_id", None) or claims.get("workspace_id")
@@ -604,6 +732,10 @@ class ControlApp:
 
     async def _dispatch(self, request: Request):
         path, method = request.url.path, request.method.upper()
+        if path == "/control/admin" and method == "GET":
+            identity = await self._identity(request, platform_admin=True)
+            self.service.require_platform_admin(identity)
+            return 200, "text/html; charset=utf-8", ADMIN_HTML
         if path in {"/", "/control"} and method == "GET":
             return 200, "text/html; charset=utf-8", render_control_center(
                 oauth_enabled=self._oauth_ready(),
@@ -611,12 +743,20 @@ class ControlApp:
             )
         if not path.startswith("/api/control/"):
             raise KeyError("Route not found")
-        identity = await self._identity(request)
+        identity = await self._identity(request, platform_admin=path.startswith("/api/control/admin/"))
         query = parse_qs(request.url.query)
         raw = await request.body()
         data = json.loads(raw or b"{}") if raw else {}
         suffix = path.removeprefix("/api/control")
-        if method == "POST" and suffix == "/workspaces": result = self.service.create_workspace(identity, data)
+        if method == "GET" and suffix == "/account":
+            result = {"user_id": identity.user_id, "platform_admin": self.service.is_platform_admin(identity)}
+        elif method == "GET" and suffix == "/admin/overview": result = self.service.admin_overview(identity)
+        elif method == "GET" and suffix == "/admin/users":
+            result = self.service.admin_users(identity, search=query.get("q", [""])[0],
+                limit=query.get("limit", [25])[0], offset=query.get("offset", [0])[0])
+        elif method == "GET" and (m := re.fullmatch(r"/admin/users/([^/]+)", suffix)):
+            result = self.service.admin_user(identity, m[1])
+        elif method == "POST" and suffix == "/workspaces": result = self.service.create_workspace(identity, data)
         elif method == "GET" and suffix == "/downloads/macos-installer":
             self.service.record_installer_download(
                 identity, artifact_sha256=self._installer_sha256

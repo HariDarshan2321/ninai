@@ -87,6 +87,36 @@ class PostgresLifecycleTest(unittest.TestCase):
                 ControlIdentity(self.user, str(uuid.uuid4())), artifact_sha256=digest
             )
 
+    def test_platform_admin_account_activity_and_live_revocation(self) -> None:
+        control = ControlService(self.store._connection,
+                                 platform_admin_user_ids=frozenset({self.user}))
+        identity = ControlIdentity(self.user, self.workspace, 'profile@example.test', 'Profile Name')
+        before = control.admin_overview(identity)
+        control.record_login(identity)
+        control.record_login(identity)
+        control.record_installer_download(identity, artifact_sha256='a' * 64)
+        after = control.admin_overview(identity)
+        self.assertEqual(after['downloads'], before['downloads'] + 1)
+        result = control.admin_users(identity, search=self.user, limit=1)
+        self.assertEqual(result['total'], 1)
+        row = result['items'][0]
+        self.assertEqual(row['email'], 'profile@example.test')
+        self.assertEqual(row['display_name'], 'Profile Name')
+        self.assertEqual(row['login_count'], 2)
+        self.assertIsNotNone(row['last_login_at'])
+        self.assertEqual(row['downloads'], 1)
+        self.assertEqual(row['connections'], 1)
+        self.assertEqual(row['workspaces'], 1)
+        self.assertEqual(control.admin_users(identity, search=self.user, offset=1)['items'], [])
+        detail = control.admin_user(identity, self.user)
+        self.assertEqual(len(detail['downloads']), 1)
+        self.assertEqual(len(detail['workspaces']), 1)
+        self.assertEqual(len(detail['connections']), 1)
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute('UPDATE users SET deleted_at=now() WHERE id=%s', (self.user,))
+        with self.assertRaises(AuthorizationError):
+            control.admin_users(identity)
+
     def test_session_archive_consent_idempotency_context_export_and_deletion(self) -> None:
         control = ControlService(self.store._connection)
         identity = ControlIdentity(self.user, self.workspace)

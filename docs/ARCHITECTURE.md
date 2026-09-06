@@ -168,3 +168,13 @@ Jarvis was reviewed as prior product research. Ninai does not copy or rename its
 6. FastAPI/HTMX local memory browser.
 
 Any accepted capability must sit behind Ninai's permission and disclosure boundary, preserve local provenance, keep derived indexes rebuildable, and demonstrate measurable value before adding runtime dependencies.
+
+## Platform account administration
+
+The account service exposes a read-only operator dashboard at `/control/admin`.
+Access requires a server-configured internal user UUID, an active account, and
+(in OAuth mode) a dashboard-client token. Workspace roles do not authorize
+cross-account access. The API returns account/profile data, successful browser
+login counters, installer receipts, and hosted connection metadata, never vault
+contents or credentials. Local mode remains unchanged. See
+[PLATFORM-ADMIN.md](PLATFORM-ADMIN.md) for rollout and verification.

@@ -26,7 +26,7 @@ export function SiteFooter() {
             <p className="footer-label">Connect</p>
             <a href="https://github.com/HariDarshan2321/ninai">GitHub</a>
             <a href="mailto:hello@ninai.io">hello@ninai.io</a>
-            <a href="mailto:security@ninai.io">Security</a>
+            <a href="mailto:hello@ninai.io">Security</a>
           </div>
         </div>
       </div>
