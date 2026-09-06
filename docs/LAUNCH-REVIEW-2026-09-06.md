@@ -2,8 +2,8 @@
 
 ## Result
 
-The requested platform admin dashboard is implemented in this change. It is
-not deployed. This review started from public repository commit `d8c9554`.
+The requested platform admin dashboard is implemented and deployed from merge
+commit `3fa7b13`. This review started from public repository commit `d8c9554`.
 The public launch scope remains the local Mac MVP for Claude Code and Codex;
 the shared hosted connector remains an invited preview.
 
@@ -39,18 +39,32 @@ the shared hosted connector remains an invited preview.
   An older search-engine snapshot of `/install` was stale; it was not treated
   as the current source.
 
-## Required before declaring this release live
+## Required before declaring unrestricted public launch validation complete
 
-1. Publish the review branch through authenticated GitHub access. This session's
-   read-only clone succeeded; push dry-run failed because GitHub credentials
-   were unavailable. No remote branch, PR, or deployment was created.
-2. Deploy the account service and privacy-page change. Enable only Darshan's
-   verified internal account UUID with `NINAI_PLATFORM_ADMIN_USER_IDS`.
-3. Test real Auth0 signup/sign-in, profile display, installer receipt, admin
+1. Resolve the owner identity: production currently allowlists internal UUID
+   `cbce38e7-23a4-4a3d-9049-bd0574ad1588`, whose verified profile displays
+   `darshan.t.mn@gmail.com`; the separate `darshan@ninai.io` account has not
+   completed a dashboard login. Never substitute email matching for UUID verification.
+2. Test real Auth0 signup/sign-in, profile display, installer receipt, admin
    routing, and ordinary-user denial against that deployment.
-4. Complete a fresh Mac installation and Claude Code → Codex handoff with
+3. Complete an unrelated tester's fresh Mac installation and Claude Code → Codex handoff with
    provenance and revocation. Existing automated engine tests do not replace
    this release-specific external-user acceptance check.
+
+## Deployment and launch-audit update
+
+- PR 1 was merged; Vercel and Render deployed `3fa7b13` successfully.
+- Production `/ready` returns 200 and anonymous admin/download access returns 401.
+- A signed-in founder session reached `/control/admin`, and an authenticated
+  installer request was recorded.
+- A fresh isolated macOS installation completed with Python 3.13, built and
+  ad-hoc signed the app, created a local vault, and passed `ninai doctor`.
+- The installed application environment occupied approximately 166 MB; the
+  empty SQLite vault occupied approximately 106 KB.
+- The full cloud suite passed 101 tests against disposable PostgreSQL with zero
+  skips, and all 12 cross-provider service-semantic checks passed.
+- See [`../report-source.md`](../report-source.md) for the complete launch and
+  competitive architecture assessment.
 
 Full operator steps: [PLATFORM-ADMIN.md](PLATFORM-ADMIN.md). The hosted public
 launch checklist remains a separate gate; this change does not assert its

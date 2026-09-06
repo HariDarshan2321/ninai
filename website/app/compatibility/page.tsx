@@ -12,6 +12,8 @@ export const metadata: Metadata = {
 const clients = [
   ["Claude Code", "Available on Mac", "The installer detects Claude Code, connects Ninai, and adds consent-based session handoff."],
   ["Codex CLI / IDE", "Available on Mac", "The installer detects Codex, connects Ninai, and adds consent-based session handoff."],
+  ["Gemini CLI", "MCP beta on Mac", "The installer can connect Gemini to the same local vault with its own permission identity. Real-model acceptance is still in progress."],
+  ["Other MCP clients", "Manual setup", "Any local host that supports stdio MCP can call Ninai tools after receiving an explicit scope grant; automatic capture is host-dependent."],
   ["Claude.ai", "Cloud coming later", "Remote browser-chat integration is not part of the local MVP."],
   ["ChatGPT", "Cloud coming later", "Remote workspace integration is not part of the local MVP."],
   ["Claude Desktop / Cowork", "Host acceptance pending", "Availability and authentication depend on the selected host surface, plan, and account policy."],

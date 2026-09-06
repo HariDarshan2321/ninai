@@ -13,7 +13,7 @@ from ..store import MemoryStore
 
 # Default clients shown on the Permissions screen even before they appear in the
 # vault, so the owner can pre-authorize the assistants Ninai targets first.
-DEFAULT_CLIENTS = ["claude-code", "codex", "claude-desktop"]
+DEFAULT_CLIENTS = ["claude-code", "codex", "gemini", "claude-desktop"]
 
 
 def _ok(data: Any) -> dict[str, Any]:
