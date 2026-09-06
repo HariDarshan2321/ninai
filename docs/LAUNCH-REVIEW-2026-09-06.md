@@ -63,6 +63,11 @@ the shared hosted connector remains an invited preview.
   empty SQLite vault occupied approximately 106 KB.
 - The full cloud suite passed 101 tests against disposable PostgreSQL with zero
   skips, and all 12 cross-provider service-semantic checks passed.
+- A fresh operator-run isolated local-vault test passed in both directions
+  between Claude Code `2.1.261` and Codex CLI `0.145.0`. It also passed personal
+  scope non-disclosure, token budgeting, disclosure logging, immediate Codex
+  revocation, and continued Claude access. The engine suite then passed all 56
+  tests. This does not substitute for the unrelated tester gate above.
 - See [`../report-source.md`](../report-source.md) for the complete launch and
   competitive architecture assessment.
 

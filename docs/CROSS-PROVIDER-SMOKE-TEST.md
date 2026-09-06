@@ -1,5 +1,45 @@
 # Cross-provider release-gate report
 
+## Recorded isolated local-vault host run — 6 September 2026
+
+A fresh run against the installed Claude Code and Codex CLI hosts passed using
+an isolated temporary local vault. The run used synthetic marker memories and
+per-invocation MCP configuration; it did not configure a hosted connector or
+upload the local vault.
+
+| Field | Evidence |
+| --- | --- |
+| Date/time (UTC) | 2026-09-06 12:23–12:28 |
+| Git commit | `43a25a8` |
+| Claude host | Claude Code `2.1.261` |
+| OpenAI host | Codex CLI `0.145.0`, ChatGPT-authenticated, `gpt-5.6-sol` |
+| Vault | Isolated SQLite vault under `/private/tmp/ninai-real-host.Svfswi/vault` |
+| Operator | Darshan / Codex implementation run |
+
+Recorded evidence:
+
+- Claude wrote project memory `c6e12240-5626-4620-b27d-7f3a6d6987bb` with
+  source `claude-code://acceptance/2026-09-06/SVFSWI`; Codex recalled the exact
+  marker, project scope, and source within a 120-token request budget.
+- Codex wrote project memory `db36a091-331a-4bf4-b7ff-7672a0e77208` with source
+  `codex://acceptance/2026-09-06/SVFSWI`; Claude recalled the exact marker,
+  project scope, and source within the same budget.
+- Claude wrote personal memory `275c3a28-acd7-4751-8030-844f943a3ddd` after an
+  explicit personal grant. Claude recalled one matching fact. Codex, which had
+  only a project grant, recalled zero facts for that marker.
+- The Codex project grant was revoked. Its next recall reported no scopes and
+  zero facts. Claude remained authorized and recalled the Codex-authored
+  project memory with its original source intact.
+- The isolated vault contained three memories and six disclosure records. The
+  successful reads recorded returned memory IDs and token estimates; denied
+  reads recorded empty memory-ID lists and zero estimated tokens.
+- The engine suite passed all 56 tests immediately after the host run.
+
+**Fresh local Claude Code ↔ Codex host, scope-isolation, provenance, budget,
+audit, and revocation gate: PASS.** This is operator-run local-MVP evidence. It
+does not replace the unrelated tester or production hosted OAuth acceptance
+gates.
+
 ## Recorded local host run — 25 July 2026
 
 The core cross-provider and revocation gate passed against the real installed
