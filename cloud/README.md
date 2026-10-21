@@ -69,6 +69,27 @@ workspace revocation takes effect on the next request. Use a different token for
 Claude and Codex, keep them out of source control, and terminate TLS at the server
 or a trusted reverse proxy.
 
+### Machine clients (PAT in OAuth mode)
+
+Clients that cannot complete OAuth, such as Claude Code cloud routines, can use a
+personal access token against an OAuth-mode server. Set `NINAI_OAUTH_ALLOW_PAT=true`
+(default `false`); tokens starting with `ninai_pat_` are then verified as PATs and
+everything else as OAuth JWTs. The control plane stays OAuth-only.
+
+Mint a token as a workspace owner/admin for an existing, active connection:
+
+```bash
+curl -X POST https://app.ninai.io/api/control/connections/<connection_id>/tokens \
+  -H "Authorization: Bearer <control OAuth token>" -d '{"label":"claude-routine"}'
+```
+
+The response contains `personal_access_token` exactly once and expires in 90 days.
+Store it as a Claude cloud network secret for host `app.ninai.io`, so the proxy
+injects `Authorization: Bearer ninai_pat_...`. The token acts as the connection: it
+is read, propose and remember by scope, but project grants on the connection are
+still required for any memory access, and the usual rate limits apply. Revoking the
+connection revokes its tokens.
+
 Run tests (integration tests require a disposable database):
 
 ```bash

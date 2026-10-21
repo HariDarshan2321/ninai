@@ -506,7 +506,7 @@ def main() -> None:
         raise SystemExit("DATABASE_URL is required")
     from psycopg.rows import dict_row
     from psycopg_pool import ConnectionPool
-    from .auth import (AuthSettings, JWTValidator, MCPTokenVerifier, OAuthControlTokenVerifier, OAuthIdentityResolver, PATTokenVerifier,
+    from .auth import (AuthSettings, DualTokenVerifier, JWTValidator, MCPTokenVerifier, OAuthControlTokenVerifier, OAuthIdentityResolver, PATTokenVerifier,
                        PrincipalResolver as AuthPrincipalResolver, auth_mode)
     pool_min_size = int(os.environ.get("NINAI_DATABASE_POOL_MIN_SIZE", "1"))
     pool_max_size = int(os.environ.get("NINAI_DATABASE_POOL_MAX_SIZE", "10"))
@@ -536,6 +536,8 @@ def main() -> None:
             settings = AuthSettings.from_env()
             validator = JWTValidator(settings)
             verifier = MCPTokenVerifier(validator, AuthPrincipalResolver(store._connection, settings))
+            if os.environ.get("NINAI_OAUTH_ALLOW_PAT", "").strip().lower() in {"1", "true", "yes"}:
+                verifier = DualTokenVerifier(PATTokenVerifier(store._connection, settings.resource), verifier)
             control_verifier = OAuthControlTokenVerifier(
                 validator, settings, OAuthIdentityResolver(store._connection, settings)
             )
