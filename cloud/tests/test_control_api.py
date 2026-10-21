@@ -16,6 +16,7 @@ from starlette.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from ninai_cloud.postgres_store import AuthorizationError
 from ninai_cloud.control_api import ControlApp, ControlIdentity, ControlService
 
 
@@ -416,6 +417,39 @@ class ControlAppTest(unittest.TestCase):
                             if "INSERT INTO personal_access_tokens" in sql)
         self.assertEqual(token_insert[4], hashlib.sha256(token.encode()).hexdigest())
         self.assertNotIn(token, token_insert)
+
+    def test_connection_token_is_minted_for_connection_owner_in_oauth_mode(self):
+        class TokenDB(RecordingDB):
+            def fetchone(self):
+                if "FROM client_connections" in self.sql:
+                    return {"user_id": "owner-2", "display_name": "Routine"}
+                return super().fetchone()
+        db = TokenDB()
+        service = ControlService(lambda: recording_connection(db), self_hosted=False,
+                                 oauth_issuer="https://tenant.auth0.com/")
+        result = service.create_connection_token(self.identity, "c1", {})
+        token = result["personal_access_token"]
+        self.assertTrue(token.startswith("ninai_pat_"))
+        insert = next(p for sql, p in db.calls if "INSERT INTO personal_access_tokens" in sql)
+        self.assertEqual((insert[1], insert[2], insert[3], insert[5]),
+                         ("workspace-1", "owner-2", "c1", "Routine"))
+        self.assertEqual(insert[4], hashlib.sha256(token.encode()).hexdigest())
+
+    def test_connection_token_requires_active_connection_and_admin(self):
+        db = RecordingDB()
+        service = ControlService(lambda: recording_connection(db))
+        with self.assertRaises(KeyError):
+            service.create_connection_token(self.identity, "missing", {})
+        self.assertFalse(any("INSERT INTO personal_access_tokens" in sql for sql, _ in db.calls))
+
+        class MemberDB(RecordingDB):
+            def fetchone(self):
+                return None if "SELECT w.id" in self.sql else super().fetchone()
+        member_db = MemberDB()
+        with self.assertRaises(AuthorizationError):
+            ControlService(lambda: recording_connection(member_db)).create_connection_token(
+                self.identity, "c1", {})
+        self.assertIn("m.role IN ('owner','admin')", member_db.calls[0][0])
 
     def test_first_workspace_creation_is_idempotent_across_retries(self):
         db = WorkspaceCreationDB()

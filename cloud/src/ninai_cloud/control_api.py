@@ -261,6 +261,26 @@ class ControlService:
             result["token_expires_at"] = expires_at
         return result
 
+    def create_connection_token(self, identity: ControlIdentity, connection_id: str,
+                                data: Mapping[str, Any]) -> dict[str, Any]:
+        raw_token = "ninai_pat_" + secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=90)
+        with self._connect() as db:
+            self._member(db, identity, admin=True)
+            conn = db.execute("""SELECT user_id,display_name FROM client_connections
+              WHERE workspace_id=%s AND id=%s AND status='active' AND revoked_at IS NULL""",
+              (identity.workspace_id, connection_id)).fetchone()
+            if not conn:
+                raise KeyError("Connection not found")
+            label = str(data.get("label", "")).strip() or conn["display_name"]
+            # The PAT verifier joins on the connection owner, so the token must carry that user.
+            db.execute("""INSERT INTO personal_access_tokens
+              (id,workspace_id,user_id,client_connection_id,token_hash,label,expires_at)
+              VALUES(%s,%s,%s,%s,%s,%s,%s)""", (str(uuid.uuid4()), identity.workspace_id,
+              conn["user_id"], connection_id, hashlib.sha256(raw_token.encode()).hexdigest(),
+              label, expires_at))
+        return {"personal_access_token": raw_token, "token_expires_at": expires_at}
+
     def test_connection(self, identity: ControlIdentity, connection_id: str) -> dict[str, Any]:
         checked_at = datetime.now(timezone.utc)
         with self._connect() as db:
@@ -786,6 +806,7 @@ class ControlApp:
         elif method == "POST" and (m := re.fullmatch(r"/memories/([^/]+)/(approve|reject)", suffix)): result = self.service.review(identity, m[1], approve=m[2] == "approve")
         elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/grants", suffix)): result = self.service.create_grant(identity, m[1], data)
         elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/revoke", suffix)): result = {"revoked": self.service.revoke_connection(identity, m[1])}
+        elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/tokens", suffix)): result = self.service.create_connection_token(identity, m[1], data)
         elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/test", suffix)): result = self.service.test_connection(identity, m[1])
         elif method == "POST" and (m := re.fullmatch(r"/grants/([^/]+)/revoke", suffix)): result = {"revoked": self.service.revoke_grant(identity, m[1])}
         elif method == "POST" and suffix == "/delete-workspace": result = {"deleted": self.service.delete_workspace(identity, data.get("confirmation", ""))}

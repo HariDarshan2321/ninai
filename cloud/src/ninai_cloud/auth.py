@@ -435,6 +435,22 @@ class PATTokenVerifier(TokenVerifier):
         )
 
 
+class DualTokenVerifier(TokenVerifier):
+    """Route opaque PATs and OAuth JWTs to their own verifier; never try both."""
+
+    PAT_PREFIX = "ninai_pat_"
+
+    def __init__(self, pat_verifier: TokenVerifier, jwt_verifier: TokenVerifier) -> None:
+        self.pat_verifier = pat_verifier
+        self.jwt_verifier = jwt_verifier
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        if not token or len(token) > MAX_BEARER_TOKEN_CHARS:
+            return None
+        verifier = self.pat_verifier if token.startswith(self.PAT_PREFIX) else self.jwt_verifier
+        return await verifier.verify_token(token)
+
+
 def auth_mode(env: Mapping[str, str] | None = None) -> str:
     """Return the explicitly configured authentication mode."""
     mode = (os.environ if env is None else env).get("NINAI_AUTH_MODE", "oauth").strip().lower()

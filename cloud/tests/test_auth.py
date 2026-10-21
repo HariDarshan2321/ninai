@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from ninai_cloud.auth import (
     AuthSettings, AuthenticationError, BearerAuthenticator, JWTValidator, MCPTokenVerifier,
     OAuthControlTokenVerifier, OAuthIdentityResolver, PrincipalResolver,
-    PATTokenVerifier, auth_mode,
+    PATTokenVerifier, DualTokenVerifier, auth_mode,
 )
 
 
@@ -280,6 +280,30 @@ class AuthTest(unittest.TestCase):
         self.assertIsNone(asyncio.run(PATTokenVerifier(connect, "https://ninai.test/mcp")
                                       .verify_token("x" * 513)))
         self.assertEqual(db.calls, [])
+
+
+class RecordingVerifier:
+    def __init__(self): self.seen = []
+    async def verify_token(self, token): self.seen.append(token); return None
+
+
+class DualTokenVerifierTest(unittest.TestCase):
+    def setUp(self):
+        self.pat, self.jwt = RecordingVerifier(), RecordingVerifier()
+        self.dual = DualTokenVerifier(self.pat, self.jwt)
+
+    def test_pat_prefix_goes_only_to_pat_verifier(self):
+        asyncio.run(self.dual.verify_token("ninai_pat_abc"))
+        self.assertEqual((self.pat.seen, self.jwt.seen), (["ninai_pat_abc"], []))
+
+    def test_other_tokens_go_only_to_jwt_verifier(self):
+        asyncio.run(self.dual.verify_token("eyJhbGciOi.payload.sig"))
+        self.assertEqual((self.pat.seen, self.jwt.seen), ([], ["eyJhbGciOi.payload.sig"]))
+
+    def test_empty_and_oversized_tokens_reach_no_verifier(self):
+        for token in ("", "ninai_pat_" + "x" * 9_000, "x" * 9_000):
+            self.assertIsNone(asyncio.run(self.dual.verify_token(token)))
+        self.assertEqual((self.pat.seen, self.jwt.seen), ([], []))
 
 
 if __name__ == "__main__":
