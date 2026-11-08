@@ -19,6 +19,10 @@ macos-build = [
   "pywebview>=5.0",
   "pyinstaller>=6.0",
 ]
+windows-build = [
+  "pywebview>=5.0",
+  "pyinstaller>=6.0",
+]
 
 [project.scripts]
 ninai = "ninai.cli:main"

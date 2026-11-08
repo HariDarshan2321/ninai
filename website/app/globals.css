@@ -306,6 +306,18 @@ a:focus-visible {
 .install-choice article { border: 1px solid var(--line); border-radius: 24px; padding: 26px; background: var(--paper-soft); }
 .install-choice h2 { margin: 18px 0 8px; }
 .install-choice a { font-weight: 760; }
+.install-note { margin-top: 18px; max-width: 54ch; font-size: .9rem; opacity: .78; }
+.platform-choice { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 42px; padding-block: 72px 42px; }
+.platform-choice__intro h2 { margin: 10px 0 14px; }
+.platform-choice__intro p:last-child { max-width: 44ch; }
+.platform-choice__items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.platform-choice__items article { border: 1px solid var(--line); border-radius: 24px; padding: 26px; background: var(--paper-soft); }
+.platform-choice__items .platform-choice__future { background: transparent; border-style: dashed; }
+.platform-choice__items h3 { margin: 18px 0 8px; font-size: clamp(1.4rem, 2vw, 2rem); }
+.text-link { display: inline-block; margin-top: 12px; font-weight: 760; }
+.install-video { display: grid; grid-template-columns: minmax(0, .72fr) minmax(0, 1.28fr); align-items: center; gap: 48px; padding-block: 84px; }
+.install-video h2 { margin: 10px 0 14px; }
+.install-video video { width: 100%; border: 1px solid var(--line); border-radius: 24px; background: #0b0b0c; box-shadow: 0 24px 70px rgba(12, 24, 21, .14); }
 .compat-table { border-top: 1px solid var(--ink); }
 .compat-row { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 24px; align-items: start; border-bottom: 1px solid var(--line); padding: 24px 10px; }
 .compat-row p { margin: 0; color: var(--muted); }
@@ -317,6 +329,8 @@ a:focus-visible {
 }
 
 @media (max-width: 760px) {
+  .platform-choice, .install-video { grid-template-columns: 1fr; gap: 28px; padding-block: 52px; }
+  .platform-choice__items { grid-template-columns: 1fr; }
   .mode-grid, .install-choice, .beta-trust { grid-template-columns: 1fr; }
   .lifecycle-grid { grid-template-columns: 1fr 1fr; }
   .compat-row { grid-template-columns: 1fr; gap: 8px; }

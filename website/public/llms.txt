@@ -1,6 +1,6 @@
 # Ninai
 
-Ninai is permissioned, source-backed local AI memory for Claude Code and Codex on Mac. Cloud-hosted vaults are planned for later and are not part of the public MVP.
+Ninai gives Claude Code and Codex shared project memory on Mac while the user controls what each assistant may receive. Hosted storage is planned for later and is not available today.
 
 ## Canonical pages
 - Home: https://ninai.io/
@@ -9,13 +9,13 @@ Ninai is permissioned, source-backed local AI memory for Claude Code and Codex o
 - Privacy: https://ninai.io/privacy/
 
 ## Core product facts
-- The MVP stores memory in a local SQLite database.
-- It exposes memory through MCP.
-- Recall is filtered by explicit per-client scopes.
-- Returned context packets include provenance and a token budget.
-- The full vault stays local, but released context is sent to the selected AI provider.
+- Ninai stores the complete memory in a local SQLite database.
+- Supported assistants connect through a local tool interface.
+- Each assistant receives only the memory areas the user allows.
+- Returned context includes its source and a bounded amount of text.
+- The complete memory stays local, but selected context is sent to the chosen AI provider.
 - Automatic capture currently targets Claude Code PostToolUse hooks.
 - Hosted Claude/Codex onboarding is invitation-only and operator-assisted.
-- MCP does not give Ninai silent access to all ChatGPT or Claude conversations.
-- Local vaults are never uploaded or synchronized automatically.
-- The MVP is not production encrypted or independently audited.
+- Connecting Ninai does not give it silent access to unrelated ChatGPT or Claude conversations.
+- Local memory is never uploaded or synchronized automatically.
+- Ninai has not completed an independent security audit and does not yet ship a signed desktop package.

@@ -29,9 +29,14 @@ class DesktopApiTest(unittest.TestCase):
         web = Path(__file__).resolve().parents[1] / "src" / "ninai" / "desktop" / "web"
         css = (web / "app.css").read_text(encoding="utf-8").lower()
         script = (web / "app.js").read_text(encoding="utf-8")
+        markup = (web / "index.html").read_text(encoding="utf-8")
         for color in ("#0b302b", "#f4efe5", "#ff6846", "#dcef7b"):
             self.assertIn(color, css)
-        self.assertIn("open Permissions and grant only the scope", script)
+        self.assertIn("Your first private handoff", script)
+        self.assertIn("Review connected assistants", script)
+        self.assertIn("What should your assistants remember?", markup)
+        self.assertIn('<details class="advanced-fields"', markup)
+        self.assertIn("This label does not grant access.", markup)
 
     def test_add_get_and_search_memory(self) -> None:
         added = self.api.add_memory(

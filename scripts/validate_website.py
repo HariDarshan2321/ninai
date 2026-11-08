@@ -129,12 +129,12 @@ for private_setup_marker in (
 ):
     if private_setup_marker in public_install:
         raise SystemExit(f"Public install page exposes account-gated setup: {private_setup_marker}")
-for gated_copy in ("official installer", "Create account", "Sign in"):
+for gated_copy in ("official installer", "I already have an account", "screen_hint=signup"):
     if gated_copy not in public_install:
         raise SystemExit(f"Public install page is missing account gate copy: {gated_copy}")
-for local_mvp_copy in ("That is the whole setup.", "Cloud-hosted vaults are coming later"):
-    if local_mvp_copy not in public_install:
-        raise SystemExit(f"Public install page is missing local-MVP copy: {local_mvp_copy}")
+for current_release_copy in ("Preview the planned setup", "Your complete memory stays on your computer"):
+    if current_release_copy not in public_install:
+        raise SystemExit(f"Public install page is missing current-release copy: {current_release_copy}")
 
 global_css = (website / "app/globals.css").read_text(encoding="utf-8")
 closed_panel = re.search(r"\.mobile-nav__panel\s*\{[^}]*display:\s*none;", global_css, re.S)

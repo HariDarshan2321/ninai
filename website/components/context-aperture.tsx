@@ -6,7 +6,7 @@ import { useState } from "react";
 import styles from "./context-aperture.module.css";
 
 const hiddenMemories = [
-  "Project scope",
+  "Project decisions",
   "Personal preference",
   "Meeting notes",
   "Private draft",
@@ -26,7 +26,7 @@ export function ContextAperture() {
         <div className={styles.identity}>
           <img src="/assets/ninai-app-icon.svg" alt="" width="30" height="30" />
           <div>
-            <strong>Example local vault</strong>
+            <strong>Example private memory</strong>
             <span>37 illustrative memories</span>
           </div>
         </div>

@@ -66,6 +66,16 @@ class InstallerScriptsTest(unittest.TestCase):
         self.assertIn('servers["ninai-local"]', installer)
         self.assertNotIn('session-hook --provider gemini', installer)
 
+    def test_windows_preview_installer_is_user_scoped_and_connects_supported_clients(self) -> None:
+        installer = (ROOT / "scripts" / "install-windows.ps1").read_text()
+        self.assertIn('$env:LOCALAPPDATA\\Ninai', installer)
+        self.assertIn('InstallDir must be inside LOCALAPPDATA', installer)
+        self.assertIn('permission grant claude-code project', installer)
+        self.assertIn('permission grant codex project', installer)
+        self.assertIn('permission grant gemini project', installer)
+        self.assertIn('trust = $false', installer)
+        self.assertNotIn('Start-Process powershell -Verb RunAs', installer)
+
 
 if __name__ == "__main__":
     unittest.main()

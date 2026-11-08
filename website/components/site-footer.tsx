@@ -32,7 +32,7 @@ export function SiteFooter() {
       </div>
       <div className="shell site-footer__bottom">
         <span>© 2026 Ninai</span>
-        <span>Local Mac MVP</span>
+        <span>Private memory for Mac</span>
       </div>
     </footer>
   );

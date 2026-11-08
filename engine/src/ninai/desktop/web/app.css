@@ -560,6 +560,23 @@ a.source-tag:hover {
   gap: clamp(24px, 3vw, 44px);
 }
 
+.first-run {
+  margin-top: 22px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 28px;
+  background: var(--surface);
+}
+
+.first-run__head h2 { margin: 4px 0 22px; }
+.first-run__steps { display: grid; gap: 14px; margin: 0 0 24px; padding-left: 24px; }
+.first-run__steps li { padding-left: 8px; }
+.first-run__steps strong, .first-run__steps span { display: block; }
+.first-run__steps span { margin-top: 3px; color: var(--text-muted); line-height: 1.45; }
+.permission-help { max-width: 760px; margin-bottom: 20px; padding: 22px 24px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); }
+.permission-help h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.permission-help p { margin: 0; color: var(--text-muted); line-height: 1.5; }
+
 .today-group__head {
   display: flex;
   align-items: baseline;
@@ -1298,6 +1315,42 @@ a.source-tag:hover {
   font-size: 0.64rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.form__hint {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.advanced-fields {
+  padding-top: 2px;
+  border-top: 1px solid var(--line);
+}
+
+.advanced-fields summary {
+  width: fit-content;
+  padding: 14px 0 2px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.advanced-fields[open] summary {
+  margin-bottom: 10px;
+}
+
+.advanced-fields__intro {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.advanced-fields > .form__field {
+  margin-top: 14px;
 }
 
 .form__control {

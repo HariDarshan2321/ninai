@@ -60,6 +60,16 @@
     health: "Health and wellbeing information."
   };
 
+  var SCOPE_LABEL = {
+    public: "Public information",
+    work: "General work memories",
+    project: "This project",
+    preference: "Working preferences",
+    personal: "Personal memories",
+    finance: "Financial memories",
+    health: "Health memories"
+  };
+
   function scopeDescription(scope) {
     return SCOPE_DESC[scope] || ("Context filed under the " + scope + " scope.");
   }
@@ -340,9 +350,22 @@
       clear(body);
       if (!memories.length && !sessions.length) {
         body.appendChild(stateBlock({
-          title: "Ninai is ready",
-          body: "Start Claude Code or Codex in a project. Ninai will show automatic session activity here."
+          title: "Your private memory is ready",
+          body: "Complete the three steps below to connect an assistant and test your first memory."
         }));
+        var guide = h("section", { class: "first-run", "aria-label": "Getting started" },
+          h("div", { class: "first-run__head" },
+            h("p", { class: "screen__eyebrow", text: "Getting started" }),
+            h("h2", { text: "Your first private handoff" })
+          ),
+          h("ol", { class: "first-run__steps" },
+            h("li", {}, h("strong", { text: "Choose an assistant" }), h("span", { text: "Open Connected assistants and check which tools may use project memories." })),
+            h("li", {}, h("strong", { text: "Save one decision" }), h("span", { text: "Add a short project decision, such as “Keep every database change reversible.”" })),
+            h("li", {}, h("strong", { text: "Test the handoff" }), h("span", { text: "Open a connected assistant in this project and ask what it should remember." }))
+          ),
+          h("button", { class: "btn btn--primary", type: "button", text: "Review connected assistants", onclick: function () { navTo("permissions"); } })
+        );
+        body.appendChild(guide);
         return;
       }
       var cols = h("div", { class: "today-cols" });
@@ -399,7 +422,7 @@
         title: filtering ? "No memories match" : "Your vault is empty",
         body: filtering
           ? "Try a different search term or clear the filters."
-          : "Add one durable decision here. Then open Permissions and grant only the scope your AI needs."
+          : "Add one useful decision here. Then open Connected assistants and choose who may use it."
       }));
       return;
     }
@@ -625,7 +648,7 @@
 
       var banner = h("div", { class: "banner" });
       banner.appendChild(markSvg("banner__mark"));
-      banner.appendChild(h("p", {}, "Live connectors (Gmail, Calendar) aren't available yet. These are the origins of memories already captured in the vault — grouped by where they came from."));
+      banner.appendChild(h("p", {}, "This page groups memories by where Ninai received them. Only sources already present on this computer appear here."));
       body.appendChild(banner);
 
       if (!list.length) {
@@ -652,7 +675,7 @@
   function updateGrantedLabel(card) {
     var total = $$(".switch", card).length;
     var label = $(".client-card__granted", card);
-    if (label) label.textContent = grantedCount(card) + " / " + total + " scopes";
+    if (label) label.textContent = grantedCount(card) + " of " + total + " memory areas allowed";
   }
 
   function scopeSwitch(clientId, scope, allowed) {
@@ -695,7 +718,7 @@
       var allowed = !!perms[scope];
       card.appendChild(h("div", { class: "scope-row" },
         h("div", { class: "scope-row__text" },
-          h("div", { class: "scope-row__name", text: scope }),
+          h("div", { class: "scope-row__name", text: SCOPE_LABEL[scope] || scope }),
           h("div", { class: "scope-row__desc", text: scopeDescription(scope) })
         ),
         scopeSwitch(clientId, scope, allowed)
@@ -734,8 +757,13 @@
       }
       addBtn.addEventListener("click", addClient);
       input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); addClient(); } });
+      var intro = h("section", { class: "permission-help" },
+        h("h2", { text: "You stay in control" }),
+        h("p", { text: "Ninai keeps the complete memory on this computer. A connected assistant receives only the memory areas switched on below. Turning an area off takes effect on its next request." })
+      );
+      body.appendChild(intro);
       var bar = h("div", { class: "perm-addbar" },
-        h("label", { for: "new-client" }, "Pre-authorize an assistant by id:"),
+        h("label", { for: "new-client" }, "Add another assistant by its technical id:"),
         input, addBtn
       );
       body.appendChild(bar);
@@ -841,6 +869,7 @@
     modal.classList.remove("is-open");
     setTimeout(function () { modal.hidden = true; }, 200);
     $("#add-form").reset();
+    $("#add-advanced").open = false;
     setFormDefaults();
     if (state.lastFocus && state.lastFocus.focus) state.lastFocus.focus();
   }
@@ -874,7 +903,7 @@
         $("#add-sensitivity").value
       );
       closeModal();
-      toast("Memory added to the vault.");
+      toast("Memory saved.");
       if (state.screen === "memories") loadMemories();
       refreshCounts();
     } catch (err) {
@@ -916,8 +945,14 @@
     values.forEach(function (v) { sel.appendChild(h("option", { value: v }, v)); });
   }
 
-  function fillFormSelect(sel, values) {
-    values.forEach(function (v) { sel.appendChild(h("option", { value: v }, v)); });
+  function humanize(value) {
+    return String(value).replace(/[_-]+/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  function fillFormSelect(sel, values, labels) {
+    values.forEach(function (v) {
+      sel.appendChild(h("option", { value: v }, (labels && labels[v]) || humanize(v)));
+    });
   }
 
   function applyMeta(meta) {
@@ -927,7 +962,7 @@
     fillFilter($("#filter-scope"), meta.scopes);
     fillFilter($("#filter-type"), meta.memory_types);
     fillFormSelect($("#add-type"), meta.memory_types);
-    fillFormSelect($("#add-scope"), meta.scopes);
+    fillFormSelect($("#add-scope"), meta.scopes, SCOPE_LABEL);
     fillFormSelect($("#add-sensitivity"), meta.sensitivities);
     setFormDefaults();
   }

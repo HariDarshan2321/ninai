@@ -55,22 +55,22 @@
         </button>
         <button class="nav__item" type="button" data-screen="sources">
           <span class="nav__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.6 3.1 3 7 3s7-1.4 7-3V6"/><path d="M5 12c0 1.6 3.1 3 7 3s7-1.4 7-3"/></svg></span>
-          <span class="nav__name">Sources</span>
+          <span class="nav__name">Origins</span>
           <span class="nav__count" data-count="sources" hidden></span>
         </button>
         <button class="nav__item" type="button" data-screen="sessions">
           <span class="nav__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span>
-          <span class="nav__name">Sessions</span>
+          <span class="nav__name">Agent sessions</span>
           <span class="nav__count" data-count="sessions" hidden></span>
         </button>
         <button class="nav__item" type="button" data-screen="permissions">
           <span class="nav__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.2-2.9 7.4-7 8.5-4.1-1.1-7-4.3-7-8.5V6l7-3Z"/><path d="M9.2 12l2 2 3.6-3.7"/></svg></span>
-          <span class="nav__name">Access</span>
+          <span class="nav__name">Assistants</span>
           <span class="nav__count" data-count="permissions" hidden></span>
         </button>
         <button class="nav__item" type="button" data-screen="activity">
           <span class="nav__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2.5-7 4 14 2.5-7H21"/></svg></span>
-          <span class="nav__name">History</span>
+          <span class="nav__name">Sharing history</span>
           <span class="nav__count" data-count="activity" hidden></span>
         </button>
       </nav>
@@ -131,7 +131,7 @@
         <header class="screen__head">
           <div>
             <p class="screen__eyebrow">Where captured memory came from</p>
-            <h1 class="screen__title" id="sources-title">Sources</h1>
+            <h1 class="screen__title" id="sources-title">Where memories came from</h1>
           </div>
         </header>
         <div id="sources-body"></div>
@@ -139,7 +139,7 @@
 
         <!-- Sessions -->
       <section class="screen" id="screen-sessions" role="region" aria-labelledby="sessions-title" tabindex="-1">
-        <header class="screen__head"><div><p class="screen__eyebrow">Saved on this Mac</p><h1 class="screen__title" id="sessions-title">Sessions</h1><p class="screen__sub">Choose whether Ninai saves completed Claude Code and Codex sessions for local handoff.</p></div></header>
+        <header class="screen__head"><div><p class="screen__eyebrow">Saved on this computer</p><h1 class="screen__title" id="sessions-title">Agent sessions</h1><p class="screen__sub">Choose whether Ninai saves completed Claude Code and Codex sessions so another assistant can continue the work.</p></div></header>
         <div id="sessions-body"></div>
       </section>
 
@@ -147,9 +147,9 @@
       <section class="screen" id="screen-permissions" role="region" aria-labelledby="permissions-title" tabindex="-1">
         <header class="screen__head">
           <div>
-            <p class="screen__eyebrow">What each agent can read</p>
-            <h1 class="screen__title" id="permissions-title">Access</h1>
-            <p class="screen__sub">Turn access off and the memory stays in your vault; that agent simply stops receiving it.</p>
+            <p class="screen__eyebrow">What each assistant can use</p>
+            <h1 class="screen__title" id="permissions-title">Connected assistants</h1>
+            <p class="screen__sub">Turn access off and the memory stays on your computer. That assistant stops receiving it immediately.</p>
           </div>
         </header>
         <div id="permissions-body"></div>
@@ -160,8 +160,8 @@
         <header class="screen__head">
           <div>
             <p class="screen__eyebrow">What Ninai shared</p>
-            <h1 class="screen__title" id="activity-title">History</h1>
-            <p class="screen__sub">See which agent asked, why it asked, and which facts Ninai released.</p>
+            <h1 class="screen__title" id="activity-title">Sharing history</h1>
+            <p class="screen__sub">See which assistant asked, why it asked, and which memories Ninai shared.</p>
           </div>
         </header>
         <div id="activity-body"></div>
@@ -191,29 +191,33 @@
         <form class="form" id="add-form" novalidate>
           <div class="form__error" id="add-error" role="alert"></div>
           <div class="form__field">
-            <label class="form__label" for="add-content">Content</label>
-            <textarea class="form__control" id="add-content" name="content" placeholder="A durable outcome, decision, or fact worth keeping&hellip;" required></textarea>
+            <label class="form__label" for="add-content">What should your assistants remember?</label>
+            <textarea class="form__control" id="add-content" name="content" placeholder="For example: We chose weekly releases so customer feedback arrives sooner." required></textarea>
           </div>
-          <div class="form__row">
-            <div class="form__field">
-              <label class="form__label" for="add-type">Type</label>
-              <select class="form__control" id="add-type" name="memory_type"></select>
-            </div>
-            <div class="form__field">
-              <label class="form__label" for="add-scope">Scope</label>
-              <select class="form__control" id="add-scope" name="scope"></select>
-            </div>
+          <div class="form__field">
+            <label class="form__label" for="add-scope">Who may use it?</label>
+            <select class="form__control" id="add-scope" name="scope"></select>
+            <p class="form__hint">You can change this later. Access for each assistant is managed separately.</p>
           </div>
-          <div class="form__row">
-            <div class="form__field">
-              <label class="form__label" for="add-sensitivity">Privacy level</label>
-              <select class="form__control" id="add-sensitivity" name="sensitivity"></select>
+          <details class="advanced-fields" id="add-advanced">
+            <summary>Optional details</summary>
+            <p class="advanced-fields__intro">Use these only when you need to classify a memory or record where it came from.</p>
+            <div class="form__row">
+              <div class="form__field">
+                <label class="form__label" for="add-type">Memory type</label>
+                <select class="form__control" id="add-type" name="memory_type"></select>
+              </div>
+              <div class="form__field">
+                <label class="form__label" for="add-sensitivity">Reference label</label>
+                <select class="form__control" id="add-sensitivity" name="sensitivity"></select>
+                <p class="form__hint">For your reference only. This label does not grant access.</p>
+              </div>
             </div>
             <div class="form__field">
-              <label class="form__label" for="add-source">Source (optional)</label>
-              <input class="form__control mono" id="add-source" name="source_uri" placeholder="Where did this come from?" autocomplete="off" spellcheck="false">
+              <label class="form__label" for="add-source">Where did this come from?</label>
+              <input class="form__control" id="add-source" name="source_uri" placeholder="For example: project meeting" autocomplete="off">
             </div>
-          </div>
+          </details>
         </form>
       </div>
       <footer class="modal__foot">
