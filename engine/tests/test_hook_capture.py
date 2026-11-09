@@ -5,10 +5,33 @@ import unittest
 from pathlib import Path
 
 from ninai.hook_capture import capture, event_to_memory
+from ninai.session_capture import _project_identity
 from ninai.store import MemoryStore
 
 
 class HookCaptureTest(unittest.TestCase):
+    def test_new_outcomes_use_project_identity_and_require_exact_project_grant(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = MemoryStore(Path(directory) / "test.sqlite3")
+            event = {
+                "cwd": directory, "session_id": "isolated", "tool_use_id": "outcome",
+                "tool_name": "mcp__linear__update_issue",
+                "tool_input": {"issue": "SYNTHETIC-42"},
+                "tool_response": {"status": "resolved", "decision": "Keep project boundaries"},
+            }
+            memory_id = capture(event, store)
+            memory = store.explain(str(memory_id))
+            name, binding, root = _project_identity(directory)
+            project = store.ensure_project(name=name, binding_key=binding, cwd_or_repo=root)
+            self.assertEqual(memory["project_id"], project["id"])
+            store.grant("claude-code", "project")
+            self.assertEqual(store.recall("SYNTHETIC-42", client_id="claude-code", purpose="broad grant")["facts"], [])
+            project_id = str(project["id"])
+            self.assertEqual(store.recall("SYNTHETIC-42", client_id="claude-code", purpose="no project grant", project_id=project_id)["facts"], [])
+            store.grant_project("claude-code", project_id)
+            packet = store.recall("SYNTHETIC-42", client_id="claude-code", purpose="exact grant", project_id=project_id)
+            self.assertEqual([fact["id"] for fact in packet["facts"]], [memory_id])
+
     def test_ignores_temporary_tool_output(self) -> None:
         event = {
             "tool_name": "Bash",

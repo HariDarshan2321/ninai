@@ -64,14 +64,25 @@
     listMemories: function (limit) { return call("list_memories", limit == null ? 200 : limit); },
     search: function (query) { return call("search", query); },
     getMemory: function (id) { return call("get_memory", id); },
-    addMemory: function (content, type, scope, source, sensitivity) {
-      return call("add_memory", content, type, scope, source, sensitivity);
+    addMemory: function (content, type, scope, source, sensitivity, projectId) {
+      return call("add_memory", content, type, scope, source, sensitivity, projectId || null);
     },
     updateMemory: function (id, changes) { return call("update_memory", id, changes); },
     deleteMemory: function (id) { return call("delete_memory", id); },
     today: function () { return call("today"); },
     sources: function () { return call("sources"); },
     listClients: function () { return call("list_clients"); },
+    assistantStatuses: function () { return call("assistant_statuses"); },
+    listProjects: function () { return call("list_projects"); },
+    createProject: function (name) { return call("create_project", name); },
+    getProjectPermissions: function (id) { return call("get_project_permissions", id); },
+    setProjectPermission: function (id, project, action, allowed) {
+      return call("set_project_permission", id, project, action, allowed);
+    },
+    getCapabilities: function (id) { return call("get_capabilities", id); },
+    setCapability: function (id, scope, action, allowed) {
+      return call("set_capability", id, scope, action, allowed);
+    },
     getPermissions: function (clientId) { return call("get_permissions", clientId); },
     setPermission: function (clientId, scope, allowed) {
       return call("set_permission", clientId, scope, allowed);

@@ -13,6 +13,8 @@ mcp = FastMCP(
         "Ninai is a local-first memory service. Store only durable facts, decisions, "
         "commitments, procedures, and preferences. Never store credentials or raw temporary output. "
         "Use recall with a clear purpose. Returned facts are permission-filtered and include provenance."
+        " Use list_projects to find explicitly granted projects, then pass the selected project_id "
+        "to remember and recall. Never mix client projects."
     ),
 )
 _store: MemoryStore | None = None
@@ -33,8 +35,13 @@ def remember(
     source_uri: str = "conversation://current",
     importance: float = 0.6,
     confidence: float = 1.0,
+    project_id: str | None = None,
 ) -> str:
-    """Store one compact durable memory with a scope and source reference."""
+    """Store a compact memory with an explicit write grant and source.
+
+    Select project_id for isolated project memory; existing category grants
+    never grant access to an individual project automatically.
+    """
     try:
         memory = get_store().remember(
             content,
@@ -43,6 +50,8 @@ def remember(
             source_uri=source_uri,
             importance=importance,
             confidence=confidence,
+            project_id=project_id,
+            client_id=configured_client_id(),
         )
         return json.dumps(
             {
@@ -50,9 +59,10 @@ def remember(
                 "id": memory.id,
                 "scope": memory.scope,
                 "source_uri": memory.source_uri,
+                "project_id": memory.project_id,
             }
         )
-    except ValueError as error:
+    except (ValueError, PermissionError) as error:
         return json.dumps({"stored": False, "error": str(error)})
 
 
@@ -62,6 +72,7 @@ def recall(
     purpose: str,
     max_items: int = 6,
     max_tokens: int = 600,
+    project_id: str | None = None,
 ) -> str:
     """Return the smallest useful permission-filtered context packet for this client."""
     packet = get_store().recall(
@@ -70,6 +81,7 @@ def recall(
         purpose=purpose,
         max_items=max(1, min(max_items, 12)),
         max_tokens=max(100, min(max_tokens, 2000)),
+        project_id=project_id,
     )
     return json.dumps(packet, ensure_ascii=False)
 
@@ -86,9 +98,24 @@ def explain(memory_id: str) -> str:
 
 @mcp.tool()
 def forget(memory_id: str) -> str:
-    """Soft-delete a memory from the local vault (only within granted scopes)."""
+    """Soft-delete a memory only with an explicit delete grant."""
     forgotten = get_store().forget(memory_id, client_id=configured_client_id())
     return json.dumps({"forgotten": forgotten})
+
+
+@mcp.tool()
+def list_projects() -> str:
+    """List only projects explicitly granted to this assistant and its allowed actions."""
+    store = get_store()
+    client = configured_client_id()
+    granted: dict[str, list[str]] = {}
+    for permission in store.project_permissions(client):
+        if permission["allowed"]:
+            granted.setdefault(str(permission["project_id"]), []).append(str(permission["action"]))
+    return json.dumps({"projects": [
+        {"id": project["id"], "name": project["name"], "actions": granted[str(project["id"])]}
+        for project in store.list_projects() if str(project["id"]) in granted
+    ]}, ensure_ascii=False)
 
 
 @mcp.tool()

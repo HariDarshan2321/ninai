@@ -149,7 +149,7 @@
           <div>
             <p class="screen__eyebrow">What each assistant can use</p>
             <h1 class="screen__title" id="permissions-title">Connected assistants</h1>
-            <p class="screen__sub">Turn access off and the memory stays on your computer. That assistant stops receiving it immediately.</p>
+            <p class="screen__sub">Choose what each assistant can read, save, or delete. Turning access off blocks future requests.</p>
           </div>
         </header>
         <div id="permissions-body"></div>
@@ -195,9 +195,22 @@
             <textarea class="form__control" id="add-content" name="content" placeholder="For example: We chose weekly releases so customer feedback arrives sooner." required></textarea>
           </div>
           <div class="form__field">
-            <label class="form__label" for="add-scope">Who may use it?</label>
+            <label class="form__label" for="add-scope">Memory area</label>
             <select class="form__control" id="add-scope" name="scope"></select>
             <p class="form__hint">You can change this later. Access for each assistant is managed separately.</p>
+          </div>
+          <div class="form__field" id="add-project-field">
+            <label class="form__label" for="add-project">Which project?</label>
+            <select class="form__control" id="add-project"><option value="">Unassigned project memories</option></select>
+            <p class="form__hint">Choose a named project to control access separately. Unassigned memories share the general project permission.</p>
+            <details class="advanced-fields">
+              <summary>Create a project</summary>
+              <div class="project-create">
+                <label class="visually-hidden" for="new-project-name">Project name</label>
+                <input class="form__control" id="new-project-name" placeholder="For example: Client website" maxlength="160">
+                <button class="btn btn--ghost btn--sm" type="button" id="create-project">Create project</button>
+              </div>
+            </details>
           </div>
           <details class="advanced-fields" id="add-advanced">
             <summary>Optional details</summary>

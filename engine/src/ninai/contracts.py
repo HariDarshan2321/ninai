@@ -36,6 +36,8 @@ class CreateMemoryRequest:
     importance: float = 0.6
     confidence: float = 1.0
     sensitivity: str = "normal"
+    project_id: str | None = None
+    client_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +45,8 @@ class SearchRequest:
     query: str
     scopes: frozenset[str]
     limit: int = 20
+    project_id: str | None = None
+    client_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

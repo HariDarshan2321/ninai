@@ -40,6 +40,7 @@ class SessionCaptureTest(unittest.TestCase):
         sessions = self.store.list_sessions()
         self.assertEqual(len(sessions), 1)
         self.assertEqual(sessions[0]["capture_status"], "completed")
+        self.store.grant_project("codex", str(sessions[0]["project_id"]))
         packet = handle_lifecycle_event(self.event("SessionStart", "codex-1"), provider="codex", store=self.store)
         self.assertIn("NINAI-ORANGE-41", packet["hookSpecificOutput"]["additionalContext"])
         self.assertIn("session://claude-code/claude-1", packet["hookSpecificOutput"]["additionalContext"])
@@ -49,7 +50,9 @@ class SessionCaptureTest(unittest.TestCase):
         transcript = self.root / "session.jsonl"
         transcript.write_text("private project marker")
         handle_lifecycle_event(self.event("SessionEnd", "one", transcript), provider="claude-code", store=self.store)
-        self.store.revoke("codex", "project")
+        project_id = str(self.store.list_sessions()[0]["project_id"])
+        self.store.grant_project("codex", project_id)
+        self.store.revoke_project("codex", project_id)
         self.assertIsNone(handle_lifecycle_event(self.event("SessionStart", "two"), provider="codex", store=self.store))
 
     def test_transcript_secrets_are_redacted(self) -> None:
@@ -58,6 +61,7 @@ class SessionCaptureTest(unittest.TestCase):
         transcript.write_text("Bearer abcdefghijklmnopqrstuvwxyz012345")
         handle_lifecycle_event(self.event("SessionEnd", "secret", transcript), provider="claude-code", store=self.store)
         project_id = str(self.store.list_sessions()[0]["project_id"])
+        self.store.grant_project("claude-code", project_id)
         packet = self.store.session_context(project_id=project_id, client_id="claude-code")
         self.assertNotIn("abcdefghijklmnopqrstuvwxyz012345", str(packet))
         self.assertIn("[REDACTED_SECRET]", str(packet))
@@ -82,6 +86,9 @@ class SessionCaptureTest(unittest.TestCase):
         packet = self.store.session_context(
             project_id=str(project["id"]), client_id="codex", max_tokens=600
         )
+        self.assertEqual(packet["sessions"], [])
+        self.store.grant_project("codex", str(project["id"]))
+        packet = self.store.session_context(project_id=str(project["id"]), client_id="codex")
         self.assertIn("untrusted historical data", str(packet))
 
     def test_session_identity_cannot_move_projects(self) -> None:

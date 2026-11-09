@@ -881,7 +881,7 @@ a.source-tag:hover {
 
 .client-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
   gap: 20px;
 }
 
@@ -894,6 +894,7 @@ a.source-tag:hover {
 
 .client-card__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 16px 20px;
@@ -905,6 +906,56 @@ a.source-tag:hover {
   font-family: var(--font-mono);
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+.connection-state {
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface-sunk);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.connection-state.is-connected {
+  color: var(--vault);
+  background: color-mix(in srgb, var(--permit) 62%, white);
+}
+
+.connection-state.is-needs_attention {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--signal) 35%, white);
+}
+
+.client-card__status-copy {
+  margin: 0;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.perm-advanced {
+  margin-bottom: 18px;
+}
+
+.perm-advanced summary {
+  width: fit-content;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.perm-advanced .perm-addbar {
+  margin: 12px 0 0;
+}
+
+.connection-refresh {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 18px;
 }
 
 .client-card__granted {
@@ -927,6 +978,7 @@ a.source-tag:hover {
 }
 
 .scope-row__text {
+  flex: 1;
   min-width: 0;
 }
 
@@ -1653,6 +1705,17 @@ select.form__control {
 }
 
 /* ---- Motion preferences ------------------------------------------------- */
+
+.permission-section-title { font-size: 0.95rem; margin: 20px 20px 10px; }
+.project-permission { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line, #d6d8ce); }
+.client-card > .perm-advanced { padding: 14px 20px; }
+.client-card > .perm-advanced .project-permission { padding-left: 0; padding-right: 0; }
+.project-permission > strong, .project-permission > span { overflow-wrap: anywhere; min-width: 0; }
+.permission-actions { display: flex; flex-wrap: wrap; gap: 14px; }
+.permission-action { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
+.permission-action input { width: 18px; height: 18px; accent-color: #0b302b; }
+.project-create { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 12px; }
+.project-create input { flex: 1 1 180px; min-width: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   *,

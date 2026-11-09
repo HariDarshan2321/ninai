@@ -86,6 +86,8 @@ def compose_context(
             "updated_at": item["updated_at"],
             "score": round(float(item["score"]), 4),
         }
+        if item.get("project_id") is not None:
+            fact["project_id"] = item["project_id"]
         # Estimate from the full serialized fact so source_uri and metadata are
         # counted against the budget, not just the content string. This keeps
         # the returned packet within the requested token budget.

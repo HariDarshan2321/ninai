@@ -53,7 +53,7 @@
   var SCOPE_DESC = {
     public: "Shareable with anyone. Nothing private lives here.",
     work: "General working context — your role, team, and how you operate.",
-    project: "A specific project's state, decisions, and open threads.",
+    project: "Older or unassigned memories share this permission. Named projects use separate access controls.",
     preference: "How you like things done — tools, defaults, working style.",
     personal: "Personal life details kept outside of work context.",
     finance: "Money matters — budgets, costs, and accounts.",
@@ -63,7 +63,7 @@
   var SCOPE_LABEL = {
     public: "Public information",
     work: "General work memories",
-    project: "This project",
+    project: "Unassigned project memories",
     preference: "Working preferences",
     personal: "Personal memories",
     finance: "Financial memories",
@@ -675,7 +675,7 @@
   function updateGrantedLabel(card) {
     var total = $$(".switch", card).length;
     var label = $(".client-card__granted", card);
-    if (label) label.textContent = grantedCount(card) + " of " + total + " memory areas allowed";
+    if (label) label.textContent = grantedCount(card) + " of " + total + " other areas readable";
   }
 
   function scopeSwitch(clientId, scope, allowed) {
@@ -706,14 +706,48 @@
     return sw;
   }
 
-  function clientCard(clientId, perms) {
+  function permissionToggle(clientId, name, action, allowed, save) {
+    var input = h("input", { type: "checkbox", "aria-label": action + " " + name + " for " + clientId });
+    input.checked = !!allowed;
+    input.addEventListener("change", async function () {
+      var next = input.checked;
+      input.disabled = true;
+      try { await save(next); toast("Permission updated. Applies to future requests."); }
+      catch (err) { input.checked = !next; toast(err.message || String(err), "error"); }
+      finally { input.disabled = false; }
+    });
+    return h("label", { class: "permission-action" }, input, action);
+  }
+
+  function clientCard(clientId, perms, assistantStatus, projects, projectPermissions, capabilities) {
     var card = h("article", { class: "client-card" });
+    var stateName = assistantStatus ? assistantStatus.status : "custom";
+    var stateLabel = assistantStatus
+      ? ({ connected: "Connected", needs_attention: "Needs attention", not_installed: "Not installed" }[stateName] || "Check status")
+      : "Custom";
     var head = h("div", { class: "client-card__head" },
       markSvg("nav__glyph"),
-      h("span", { class: "client-card__id", text: clientId }),
+      h("span", { class: "client-card__id", text: assistantStatus ? assistantStatus.name : clientId }),
+      h("span", { class: "connection-state is-" + stateName, text: stateLabel }),
       h("span", { class: "client-card__granted" })
     );
     card.appendChild(head);
+    if (assistantStatus) {
+      card.appendChild(h("p", { class: "client-card__status-copy", text: assistantStatus.message }));
+    }
+    card.appendChild(h("h3", { class: "permission-section-title", text: "Named projects" }));
+    if (!projects.length) card.appendChild(h("p", { class: "client-card__status-copy", text: "Create a project when adding a memory to control its access separately." }));
+    projects.forEach(function (project) {
+      var grant = projectPermissions.filter(function (g) { return g.project_id === project.id; })[0] || {};
+      var actions = h("div", { class: "permission-actions" });
+      [["Read", "read"], ["Save", "write"], ["Delete", "delete"]].forEach(function (item) {
+        actions.appendChild(permissionToggle(clientId, project.name, item[0], grant["can_" + item[1]], function (allowed) {
+          return B.setProjectPermission(clientId, project.id, item[1], allowed);
+        }));
+      });
+      card.appendChild(h("div", { class: "project-permission" }, h("strong", { text: project.name }), actions));
+    });
+    card.appendChild(h("h3", { class: "permission-section-title", text: "Read other memory areas" }));
     state.meta.scopes.forEach(function (scope) {
       var allowed = !!perms[scope];
       card.appendChild(h("div", { class: "scope-row" },
@@ -724,6 +758,19 @@
         scopeSwitch(clientId, scope, allowed)
       ));
     });
+    var advanced = h("details", { class: "perm-advanced" }, h("summary", {}, "Advanced: save and delete permissions"));
+    advanced.appendChild(h("p", { class: "client-card__status-copy", text: "These permissions apply to the memory areas below, including unassigned project memories. Named projects use their own switches above." }));
+    state.meta.scopes.forEach(function (scope) {
+      var area = capabilities[scope] || {};
+      var actions = h("div", { class: "permission-actions" });
+      [["Save", "write"], ["Delete", "delete"]].forEach(function (item) {
+        actions.appendChild(permissionToggle(clientId, SCOPE_LABEL[scope] || scope, item[0], area[item[1]], function (allowed) {
+          return B.setCapability(clientId, scope, item[1], allowed);
+        }));
+      });
+      advanced.appendChild(h("div", { class: "project-permission" }, h("span", { text: SCOPE_LABEL[scope] || scope }), actions));
+    });
+    card.appendChild(advanced);
     updateGrantedLabel(card);
     return card;
   }
@@ -733,19 +780,24 @@
     clear(body);
     body.appendChild(loadingBlock());
     try {
-      var clients = await B.listClients();
+      var result = await Promise.all([B.listClients(), B.assistantStatuses(), B.listProjects()]);
+      var clients = result[0];
+      var statuses = Array.isArray(result[1]) ? result[1] : [];
+      var statusById = {};
+      statuses.forEach(function (item) { statusById[item.id] = item; });
       clients = Array.isArray(clients) ? clients.slice() : [];
       extraClients.forEach(function (c) { if (clients.indexOf(c) === -1) clients.push(c); });
       clients.sort();
       setCount("permissions", clients.length);
 
+      var projects = Array.isArray(result[2]) ? result[2] : [];
       var permsList = await Promise.all(clients.map(function (c) {
-        return B.getPermissions(c).catch(function () { return {}; });
+        return Promise.all([B.getPermissions(c), B.getProjectPermissions(c), B.getCapabilities(c)]);
       }));
 
       clear(body);
 
-      // add-client bar
+      // advanced add-client bar
       var input = h("input", { type: "text", id: "new-client", placeholder: "e.g. claude-code", autocomplete: "off", spellcheck: "false", "aria-label": "New client id" });
       var addBtn = h("button", { type: "button", class: "btn btn--ghost btn--sm" }, "Add client");
       function addClient() {
@@ -759,21 +811,30 @@
       input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); addClient(); } });
       var intro = h("section", { class: "permission-help" },
         h("h2", { text: "You stay in control" }),
-        h("p", { text: "Ninai keeps the complete memory on this computer. A connected assistant receives only the memory areas switched on below. Turning an area off takes effect on its next request." })
+        h("p", { text: "Choose what each assistant may read, save, or delete. Named projects have separate permissions, all off by default. Changes apply to future requests; they cannot remove copies an assistant already received." })
       );
       body.appendChild(intro);
-      var bar = h("div", { class: "perm-addbar" },
-        h("label", { for: "new-client" }, "Add another assistant by its technical id:"),
-        input, addBtn
+      var bar = h("details", { class: "perm-advanced" },
+        h("summary", {}, "Advanced: add another assistant"),
+        h("div", { class: "perm-addbar" },
+          h("label", { for: "new-client" }, "Assistant technical id"),
+          input, addBtn
+        )
       );
       body.appendChild(bar);
+
+      var refresh = h("button", {
+        type: "button", class: "btn btn--ghost btn--sm", text: "Check connections again",
+        onclick: loadPermissions
+      });
+      body.appendChild(h("div", { class: "connection-refresh" }, refresh));
 
       if (!clients.length) {
         body.appendChild(stateBlock({ title: "No clients yet", body: "Add a client id above to set what it may read." }));
         return;
       }
       var grid = h("div", { class: "client-grid" });
-      clients.forEach(function (c, i) { grid.appendChild(clientCard(c, permsList[i] || {})); });
+      clients.forEach(function (c, i) { grid.appendChild(clientCard(c, permsList[i][0] || {}, statusById[c], projects, permsList[i][1] || [], permsList[i][2] || {})); });
       body.appendChild(grid);
     } catch (err) {
       showError(body, err);
@@ -862,6 +923,7 @@
     requestAnimationFrame(function () { modal.classList.add("is-open"); });
     $("#add-error").classList.remove("is-shown");
     $("#add-content").focus();
+    loadProjectOptions().catch(function (err) { toast(err.message || String(err), "error"); });
   }
 
   function closeModal() {
@@ -879,6 +941,7 @@
     var t = $("#add-type"); if (state.meta.memory_types.indexOf("fact") > -1) t.value = "fact";
     var s = $("#add-scope"); if (state.meta.scopes.indexOf("project") > -1) s.value = "project";
     var se = $("#add-sensitivity"); if (state.meta.sensitivities.indexOf("normal") > -1) se.value = "normal";
+    $("#add-project-field").hidden = s.value !== "project";
   }
 
   async function submitAdd(e) {
@@ -900,7 +963,8 @@
         $("#add-type").value,
         $("#add-scope").value,
         $("#add-source").value.trim() || "app://manual",
-        $("#add-sensitivity").value
+        $("#add-sensitivity").value,
+        $("#add-scope").value === "project" ? ($("#add-project").value || null) : null
       );
       closeModal();
       toast("Memory saved.");
@@ -912,6 +976,18 @@
     } finally {
       submitBtn.disabled = false;
     }
+  }
+
+  async function loadProjectOptions(selectedId) {
+    var projects = await B.listProjects();
+    var select = $("#add-project");
+    var selected = selectedId || select.value;
+    clear(select);
+    select.appendChild(h("option", { value: "", text: "Unassigned project memories" }));
+    projects.forEach(function (p) { select.appendChild(h("option", { value: p.id, text: p.name })); });
+    select.value = selected;
+    if (select.selectedIndex < 0) select.value = "";
+    $("#add-project-field").hidden = $("#add-scope").value !== "project";
   }
 
   /* ---- errors & counts -------------------------------------------------- */
@@ -1014,6 +1090,20 @@
 
   async function init() {
     wireEvents();
+    $("#add-scope").addEventListener("change", function () { $("#add-project-field").hidden = this.value !== "project"; });
+    $("#create-project").addEventListener("click", async function () {
+      var button = this;
+      var name = $("#new-project-name").value.trim();
+      if (!name) { $("#new-project-name").focus(); return; }
+      button.disabled = true;
+      try {
+        var project = await B.createProject(name);
+        await loadProjectOptions(project.id);
+        $("#new-project-name").value = "";
+        toast("Project created. Assistant access starts off.");
+      } catch (err) { toast(err.message || String(err), "error"); }
+      finally { button.disabled = false; }
+    });
     try {
       await B.waitForBridge();
       var meta = await B.meta();

@@ -24,6 +24,7 @@ class RuntimeEndToEndTest(unittest.TestCase):
             data_dir = Path(directory)
             store = MemoryStore(data_dir / "ninai.sqlite3")
             store.grant("claude-code", "project")
+            store.grant_action("claude-code", "project", "write")
             environment = os.environ.copy()
             environment["NINAI_CLIENT_ID"] = "claude-code"
             environment["NINAI_DATA_DIR"] = str(data_dir)
@@ -83,12 +84,15 @@ class RuntimeEndToEndTest(unittest.TestCase):
 
                     self._run_claude_hook(environment)
                     store.grant("claude-code", "project")
+                    hook_memory = store.get_by_source_uri("claude-hook://session-e2e/tool-e2e")
+                    store.grant_project("claude-code", str(hook_memory["project_id"]))
                     captured = await self._call_json(
                         session,
                         "recall",
                         {
                             "query": "NIN-77 merged launch",
                             "purpose": "verify PostToolUse capture",
+                            "project_id": hook_memory["project_id"],
                         },
                     )
                     hook_fact = next(
@@ -101,6 +105,48 @@ class RuntimeEndToEndTest(unittest.TestCase):
             logs = store.list_logs()
             self.assertEqual(len(logs), 3)
             self.assertEqual(logs[1]["memory_ids"], [])
+
+    def test_mcp_project_isolation_and_separate_write_delete_grants(self) -> None:
+        asyncio.run(self._run_project_scenario())
+
+    async def _run_project_scenario(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory)
+            store = MemoryStore(data_dir / "ninai.sqlite3")
+            first = store.ensure_project(name="First", binding_key="test:first", cwd_or_repo="/synthetic/first")
+            second = store.ensure_project(name="Second", binding_key="test:second", cwd_or_repo="/synthetic/second")
+            first_id, second_id = str(first["id"]), str(second["id"])
+            private = store.remember("Synthetic second project launch decision", project_id=second_id)
+            store.grant("claude-code", "project")
+            environment = {**os.environ, "NINAI_CLIENT_ID": "claude-code", "NINAI_DATA_DIR": str(data_dir)}
+            parameters = StdioServerParameters(command=sys.executable, args=["-m", "ninai.server"], env=environment)
+            async with stdio_client(parameters) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    for project_id in (None, first_id, second_id):
+                        args = {"query": "project launch decision", "purpose": "check broad grant isolation"}
+                        if project_id is not None:
+                            args["project_id"] = project_id
+                        self.assertEqual((await self._call_json(session, "recall", args))["facts"], [])
+                    self.assertEqual((await self._call_json(session, "list_projects", {}))["projects"], [])
+                    arguments = {"content": "Synthetic first project launch decision", "project_id": first_id}
+                    denied = await self._call_json(session, "remember", arguments)
+                    self.assertFalse(denied["stored"])
+                    store.grant_project("claude-code", first_id, "read")
+                    accessible = (await self._call_json(session, "list_projects", {}))["projects"]
+                    self.assertEqual(accessible, [{"id": first_id, "name": "First", "actions": ["read"]}])
+                    self.assertFalse((await self._call_json(session, "remember", arguments))["stored"])
+                    store.grant_project("claude-code", first_id, "write")
+                    saved = await self._call_json(session, "remember", arguments)
+                    self.assertTrue(saved["stored"])
+                    recall_args = {"query": "project launch decision", "purpose": "verify project handoff", "project_id": first_id}
+                    packet = await self._call_json(session, "recall", recall_args)
+                    self.assertEqual([fact["id"] for fact in packet["facts"]], [saved["id"]])
+                    self.assertEqual((await self._call_json(session, "explain", {"memory_id": private.id}))["error"], "Memory not found")
+                    self.assertFalse((await self._call_json(session, "forget", {"memory_id": saved["id"]}))["forgotten"])
+                    store.revoke_project("claude-code", first_id)
+                    self.assertEqual((await self._call_json(session, "list_projects", {}))["projects"], [])
+                    self.assertEqual((await self._call_json(session, "recall", recall_args))["facts"], [])
 
     async def _call_json(
         self,
@@ -116,6 +162,7 @@ class RuntimeEndToEndTest(unittest.TestCase):
     def _run_claude_hook(self, environment: dict[str, str]) -> None:
         hook = Path(__file__).resolve().parents[2] / ".claude/hooks/ninai_post_tool_use.py"
         event = {
+            "cwd": environment["NINAI_DATA_DIR"],
             "session_id": "session-e2e",
             "tool_use_id": "tool-e2e",
             "tool_name": "mcp__github__merge_pull_request",

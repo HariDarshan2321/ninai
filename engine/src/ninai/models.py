@@ -48,3 +48,4 @@ class Memory:
     updated_at: str
     access_count: int = 0
     sensitivity: str = "normal"
+    project_id: str | None = None

@@ -129,6 +129,14 @@ The site avoids third-party analytics, runtime API calls, fake customer proof, a
 
 ## Security boundaries
 
+Local named-project memory now uses explicit project IDs and independent
+read/write/delete grants. Existing category grants cover unassigned records
+only; they do not grant named-project access. The upgrade preserves old records
+without guessing their project or granting new capabilities. See
+[Local project permissions](LOCAL-PROJECT-PERMISSIONS.md) for migration,
+owner controls, and the same-user operating-system trust boundary. Sensitivity
+labels remain informational and local storage is not encrypted by Ninai.
+
 Present in the MVP:
 
 - explicit per-client scope grants;

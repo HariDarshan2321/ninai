@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from ninai.desktop.api import DesktopApi
+from ninai.desktop.api import DesktopApi, _cli_connection_status, _gemini_connection_status
 from ninai.store import MemoryStore
 
 
@@ -34,6 +36,8 @@ class DesktopApiTest(unittest.TestCase):
             self.assertIn(color, css)
         self.assertIn("Your first private handoff", script)
         self.assertIn("Review connected assistants", script)
+        self.assertIn("Check connections again", script)
+        self.assertIn("Needs attention", script)
         self.assertIn("What should your assistants remember?", markup)
         self.assertIn('<details class="advanced-fields"', markup)
         self.assertIn("This label does not grant access.", markup)
@@ -78,7 +82,7 @@ class DesktopApiTest(unittest.TestCase):
 
     def test_permissions_roundtrip(self) -> None:
         clients = self.api.list_clients()
-        self.assertIn("claude-desktop", clients["data"])
+        self.assertIn("claude-code", clients["data"])
 
         before = self.api.get_permissions("claude-code")["data"]
         self.assertFalse(before["project"])
@@ -89,6 +93,77 @@ class DesktopApiTest(unittest.TestCase):
 
         self.api.set_permission("claude-code", "project", False)
         self.assertFalse(self.api.get_permissions("claude-code")["data"]["project"])
+
+    def test_assistant_statuses_distinguish_connected_missing_and_repair(self) -> None:
+        with (
+            patch("ninai.desktop.api._cli_connection_status", side_effect=[(True, True), (True, False)]),
+            patch("ninai.desktop.api._gemini_connection_status", return_value=(False, False)),
+        ):
+            statuses = self.api.assistant_statuses()["data"]
+        by_id = {item["id"]: item for item in statuses}
+        self.assertEqual(by_id["claude-code"]["status"], "connected")
+        self.assertEqual(by_id["codex"]["status"], "needs_attention")
+        self.assertEqual(by_id["gemini"]["status"], "not_installed")
+        self.assertIn("rerun the ninai installer", by_id["codex"]["message"].lower())
+
+    def test_cli_status_treats_a_timeout_as_needing_attention(self) -> None:
+        with (
+            patch("ninai.desktop.api.shutil.which", return_value="/usr/local/bin/claude"),
+            patch(
+                "ninai.desktop.api.subprocess.run",
+                side_effect=subprocess.TimeoutExpired("claude", 3),
+            ),
+        ):
+            self.assertEqual(_cli_connection_status("claude-code"), (True, False))
+
+    def test_gemini_status_treats_malformed_settings_as_needing_attention(self) -> None:
+        home = Path(self.temp.name) / "home"
+        settings = home / ".gemini" / "settings.json"
+        settings.parent.mkdir(parents=True)
+        settings.write_text("not-json", encoding="utf-8")
+        with (
+            patch("ninai.desktop.api.shutil.which", return_value="/usr/local/bin/gemini"),
+            patch("ninai.desktop.api.Path.home", return_value=home),
+        ):
+            self.assertEqual(_gemini_connection_status(), (True, False))
+
+    def test_beginner_first_handoff_and_revocation_journey(self) -> None:
+        memory_id = self.api.add_memory(
+            "Keep every migration reversible", memory_type="decision", scope="project"
+        )["data"]["id"]
+        self.api.set_permission("claude-code", "project", True)
+        packet = self.store.recall(
+            "migration decision", client_id="claude-code", purpose="first handoff"
+        )
+        self.assertIn(memory_id, {fact["id"] for fact in packet["facts"]})
+
+        self.api.set_permission("claude-code", "project", False)
+        packet = self.store.recall(
+            "migration decision", client_id="claude-code", purpose="revocation check"
+        )
+        self.assertEqual(packet["facts"], [])
+
+    def test_project_controls_preserve_independent_capabilities(self) -> None:
+        self.assertFalse(self.api.create_project("  ")["ok"])
+        project = self.api.create_project("Client A")["data"]
+        self.assertIn(project["id"], {row["id"] for row in self.api.list_projects()["data"]})
+        memory_id = self.api.add_memory("Client A rollout decision", project_id=project["id"])["data"]["id"]
+        self.api.set_permission("codex", "project", True)
+        self.assertIsNone(self.store.explain(memory_id, client_id="codex"))
+        self.api.set_project_permission("codex", project["id"], "read", True)
+        grants = self.api.get_project_permissions("codex")["data"][0]
+        self.assertTrue(grants["can_read"])
+        self.assertFalse(grants["can_write"])
+        self.assertFalse(grants["can_delete"])
+        self.assertIsNotNone(self.store.explain(memory_id, client_id="codex"))
+        self.assertFalse(self.store.forget(memory_id, client_id="codex"))
+        self.api.set_project_permission("codex", project["id"], "read", False)
+        self.assertIsNone(self.store.explain(memory_id, client_id="codex"))
+        self.api.set_capability("codex", "work", "write", True)
+        capabilities = self.api.get_capabilities("codex")["data"]["work"]
+        self.assertTrue(capabilities["write"])
+        self.assertFalse(capabilities["read"])
+        self.assertFalse(capabilities["delete"])
 
     def test_today_groups_commitments_and_decisions(self) -> None:
         self.api.add_memory("Ship the alpha", memory_type="commitment", scope="project")

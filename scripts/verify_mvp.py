@@ -29,11 +29,14 @@ def run_verification(database: Path) -> None:
 
     store.grant(client_id, "project")
     memory_id = capture(event, store)
+    project_id = str(store.explain(str(memory_id))["project_id"])
+    store.grant_project(client_id, project_id, "read")
     packet = store.recall(
         "What must I finish before the Ninai launch?",
         client_id=client_id,
         purpose="release verification",
         max_tokens=300,
+        project_id=project_id,
     )
     source_tokens = estimate_tokens(json.dumps(event, ensure_ascii=False))
     released_tokens = int(packet["estimated_tokens"])
@@ -55,12 +58,13 @@ def run_verification(database: Path) -> None:
         )
     )
 
-    store.revoke(client_id, "project")
+    store.revoke_project(client_id, project_id)
     denied = store.recall(
         "What must I finish before the Ninai launch?",
         client_id=client_id,
         purpose="revocation proof",
         max_tokens=300,
+        project_id=project_id,
     )
     print("\nREVOKED RECALL")
     print(json.dumps(denied, indent=2, ensure_ascii=False))

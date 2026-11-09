@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import uuid
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -13,7 +18,73 @@ from ..store import MemoryStore
 
 # Default clients shown on the Permissions screen even before they appear in the
 # vault, so the owner can pre-authorize the assistants Ninai targets first.
-DEFAULT_CLIENTS = ["claude-code", "codex", "gemini", "claude-desktop"]
+DEFAULT_CLIENTS = ["claude-code", "codex", "gemini"]
+
+CLIENT_LABELS = {
+    "claude-code": "Claude Code",
+    "codex": "Codex",
+    "gemini": "Gemini CLI",
+}
+
+
+def _cli_connection_status(client_id: str) -> tuple[bool, bool]:
+    executable = {"claude-code": "claude", "codex": "codex"}.get(client_id)
+    if not executable:
+        return False, False
+    installed = shutil.which(executable) is not None
+    if not installed:
+        return False, False
+    command = [executable, "mcp", "get", "ninai-local"]
+    try:
+        result = subprocess.run(
+            command,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return True, False
+    return True, result.returncode == 0
+
+
+def _gemini_connection_status() -> tuple[bool, bool]:
+    installed = shutil.which("gemini") is not None
+    if not installed:
+        return False, False
+    settings = Path.home() / ".gemini" / "settings.json"
+    try:
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        connection = data.get("mcpServers", {}).get("ninai-local", {})
+        connected = bool(connection.get("command")) and connection.get("trust") is False
+    except (OSError, json.JSONDecodeError, AttributeError):
+        connected = False
+    return True, connected
+
+
+def _client_status(client_id: str) -> dict[str, Any]:
+    if client_id == "gemini":
+        installed, connected = _gemini_connection_status()
+    else:
+        installed, connected = _cli_connection_status(client_id)
+    if connected:
+        status = "connected"
+        message = "Ready to use Ninai."
+    elif installed:
+        status = "needs_attention"
+        message = "Installed, but Ninai is not connected. Rerun the Ninai installer to repair it."
+    else:
+        status = "not_installed"
+        message = "Not found on this computer. Install this assistant first, then rerun the Ninai installer."
+    return {
+        "id": client_id,
+        "name": CLIENT_LABELS[client_id],
+        "installed": installed,
+        "connected": connected,
+        "status": status,
+        "message": message,
+    }
 
 
 def _ok(data: Any) -> dict[str, Any]:
@@ -99,6 +170,7 @@ class DesktopApi:
         scope: str = "project",
         source_uri: str = "app://manual",
         sensitivity: str = "normal",
+        project_id: str | None = None,
     ) -> dict[str, Any]:
         try:
             memory = self.store.remember(
@@ -107,6 +179,7 @@ class DesktopApi:
                 scope=scope,
                 source_uri=source_uri or "app://manual",
                 sensitivity=sensitivity,
+                project_id=project_id,
             )
             return _ok({"id": memory.id})
         except ValueError as error:
@@ -180,6 +253,68 @@ class DesktopApi:
 
     # -- permissions --------------------------------------------------------
 
+    def list_projects(self) -> dict[str, Any]:
+        try:
+            return _ok(self.store.list_projects())
+        except Exception as error:
+            return _err(str(error))
+
+    def create_project(self, name: str) -> dict[str, Any]:
+        try:
+            if not name or not name.strip():
+                return _err("Give the project a name.")
+            return _ok(self.store.ensure_project(
+                name=name, binding_key=f"app://project/{uuid.uuid4()}", cwd_or_repo=""
+            ))
+        except Exception as error:
+            return _err(str(error))
+
+    def get_project_permissions(self, client_id: str) -> dict[str, Any]:
+        try:
+            projects: dict[str, dict[str, Any]] = {}
+            for item in self.store.project_permissions(client_id):
+                project_id = str(item["project_id"])
+                entry = projects.setdefault(project_id, {
+                    "project_id": project_id, "can_read": False,
+                    "can_write": False, "can_delete": False,
+                })
+                entry[f"can_{item['action']}"] = bool(item["allowed"])
+            return _ok(list(projects.values()))
+        except Exception as error:
+            return _err(str(error))
+
+    def set_project_permission(
+        self, client_id: str, project_id: str, action: str, allowed: bool
+    ) -> dict[str, Any]:
+        try:
+            if allowed:
+                self.store.grant_project(client_id, project_id, action)
+            else:
+                self.store.revoke_project(client_id, project_id, action)
+            return _ok({"allowed": bool(allowed)})
+        except Exception as error:
+            return _err(str(error))
+
+    def get_capabilities(self, client_id: str) -> dict[str, Any]:
+        try:
+            permissions = {str(item["scope"]): item for item in self.store.permissions(client_id)}
+            return _ok({scope: {
+                "read": bool(permissions.get(scope, {}).get("allowed", False)),
+                "write": bool(permissions.get(scope, {}).get("can_write", False)),
+                "delete": bool(permissions.get(scope, {}).get("can_delete", False)),
+            } for scope in sorted(ALLOWED_SCOPES)})
+        except Exception as error:
+            return _err(str(error))
+
+    def set_capability(
+        self, client_id: str, scope: str, action: str, allowed: bool
+    ) -> dict[str, Any]:
+        try:
+            self.store.set_scope_capability(client_id, scope, action, allowed)
+            return _ok({"allowed": bool(allowed)})
+        except Exception as error:
+            return _err(str(error))
+
     def list_clients(self) -> dict[str, Any]:
         try:
             seen = list(self.store.clients())
@@ -188,6 +323,17 @@ class DesktopApi:
                     seen.append(default)
             return _ok(sorted(seen))
         except Exception as error:
+            return _err(str(error))
+
+    def assistant_statuses(self) -> dict[str, Any]:
+        """Report observable installation and Ninai connection state.
+
+        The probe is read-only. It never installs software, grants access, or
+        modifies an assistant's configuration.
+        """
+        try:
+            return _ok([_client_status(client_id) for client_id in DEFAULT_CLIENTS])
+        except Exception as error:  # pragma: no cover - defensive
             return _err(str(error))
 
     def get_permissions(self, client_id: str) -> dict[str, Any]:

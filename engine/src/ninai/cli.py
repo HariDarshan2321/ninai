@@ -6,7 +6,7 @@ import sys
 
 from .config import client_id as configured_client_id
 from .hook_capture import capture
-from .session_capture import handle_lifecycle_event
+from .session_capture import _project_identity, handle_lifecycle_event
 from .store import ALLOWED_SCOPES, MemoryStore
 
 
@@ -20,20 +20,34 @@ def parser() -> argparse.ArgumentParser:
         command = permission_sub.add_parser(action)
         command.add_argument("client_id")
         command.add_argument("scope", choices=sorted(ALLOWED_SCOPES))
+        command.add_argument("--capability", choices=("read", "write", "delete"), default="read")
     list_permissions = permission_sub.add_parser("list")
     list_permissions.add_argument("client_id")
+
+    project = sub.add_parser("project", help="Create isolated projects and manage assistant access")
+    project_sub = project.add_subparsers(dest="action", required=True)
+    create = project_sub.add_parser("create")
+    create.add_argument("name")
+    create.add_argument("--path", required=True, help="Stable absolute project path")
+    for action in ("grant", "revoke"):
+        command = project_sub.add_parser(action)
+        command.add_argument("client_id")
+        command.add_argument("project_id")
+        command.add_argument("--capability", choices=("read", "write", "delete"), default="read")
 
     remember = sub.add_parser("remember", help="Store a manual memory")
     remember.add_argument("content")
     remember.add_argument("--type", default="fact", dest="memory_type")
     remember.add_argument("--scope", default="project", choices=sorted(ALLOWED_SCOPES))
     remember.add_argument("--source", default="cli://manual", dest="source_uri")
+    remember.add_argument("--project", dest="project_id")
 
     recall = sub.add_parser("recall", help="Test a context packet")
     recall.add_argument("query")
     recall.add_argument("--client", default=configured_client_id(), dest="client_id")
     recall.add_argument("--purpose", default="manual CLI test")
     recall.add_argument("--max-tokens", type=int, default=600)
+    recall.add_argument("--project", dest="project_id")
 
     sub.add_parser("memories", help="List recent memories")
     sub.add_parser("logs", help="List recent access logs")
@@ -57,13 +71,27 @@ def main() -> None:
 
     if args.command == "permission":
         if args.action == "grant":
-            store.grant(args.client_id, args.scope)
-            print(f"Granted {args.client_id!r} access to {args.scope!r}.")
+            store.grant_action(args.client_id, args.scope, args.capability)
+            print(f"Granted {args.client_id!r} {args.capability!r} access to {args.scope!r}.")
         elif args.action == "revoke":
-            store.revoke(args.client_id, args.scope)
-            print(f"Revoked {args.client_id!r} access to {args.scope!r}.")
+            store.revoke_action(args.client_id, args.scope, args.capability)
+            print(f"Revoked {args.client_id!r} {args.capability!r} access to {args.scope!r}.")
         else:
             print(json.dumps(store.permissions(args.client_id), indent=2))
+        return
+
+    if args.command == "project":
+        if args.action == "create":
+            _, binding, location = _project_identity(args.path)
+            print(json.dumps(store.ensure_project(
+                name=args.name, binding_key=binding, cwd_or_repo=location
+            ), indent=2))
+        elif args.action == "grant":
+            store.grant_project(args.client_id, args.project_id, args.capability)
+            print("Project access granted.")
+        else:
+            store.revoke_project(args.client_id, args.project_id, args.capability)
+            print("Project access revoked.")
         return
 
     if args.command == "remember":
@@ -73,6 +101,7 @@ def main() -> None:
                 memory_type=args.memory_type,
                 scope=args.scope,
                 source_uri=args.source_uri,
+                project_id=args.project_id,
             )
         except ValueError as error:
             print(json.dumps({"stored": False, "error": str(error)}, indent=2))
@@ -88,6 +117,7 @@ def main() -> None:
                     client_id=args.client_id,
                     purpose=args.purpose,
                     max_tokens=args.max_tokens,
+                    project_id=args.project_id,
                 ),
                 indent=2,
                 ensure_ascii=False,

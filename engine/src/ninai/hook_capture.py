@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Any
 
 from .security import redact_secrets
 from .store import MemoryStore
+from .session_capture import _project_identity
 
 DURABLE_TERMS = {
     "assigned",
@@ -151,5 +153,8 @@ def capture(event: dict[str, Any], store: MemoryStore | None = None) -> str | No
     existing = active_store.get_by_source_uri(str(payload["source_uri"]))
     if existing is not None:
         return str(existing["id"])
+    name, binding, root = _project_identity(str(event.get("cwd") or os.getcwd()))
+    project = active_store.ensure_project(name=name, binding_key=binding, cwd_or_repo=root)
+    payload["project_id"] = str(project["id"])
     memory = active_store.remember(**payload)
     return memory.id

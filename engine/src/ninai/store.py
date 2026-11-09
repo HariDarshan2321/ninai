@@ -181,6 +181,24 @@ class MemoryStore:
                 db.execute(
                     "ALTER TABLE memories ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'normal'"
                 )
+            if "project_id" not in columns:
+                db.execute("ALTER TABLE memories ADD COLUMN project_id TEXT REFERENCES projects(id)")
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS scope_capabilities (
+                    client_id TEXT NOT NULL, scope TEXT NOT NULL,
+                    action TEXT NOT NULL CHECK(action IN ('write','delete')),
+                    allowed INTEGER NOT NULL, updated_at TEXT NOT NULL,
+                    PRIMARY KEY(client_id,scope,action)
+                );
+                CREATE TABLE IF NOT EXISTS project_permissions (
+                    client_id TEXT NOT NULL,
+                    project_id TEXT NOT NULL REFERENCES projects(id),
+                    action TEXT NOT NULL CHECK(action IN ('read','write','delete')),
+                    allowed INTEGER NOT NULL, updated_at TEXT NOT NULL,
+                    PRIMARY KEY(client_id,project_id,action)
+                );
+                CREATE INDEX IF NOT EXISTS memories_project_idx ON memories(project_id,scope,updated_at);
+            """)
 
     def set_capture_enabled(self, enabled: bool) -> None:
         with self._connection() as db:
@@ -310,9 +328,9 @@ class MemoryStore:
         return changed.rowcount == 1
 
     def session_context(self, *, project_id: str, client_id: str, max_tokens: int = 600) -> dict[str, object]:
-        if "project" not in self.allowed_scopes(client_id):
+        if not self.can_access_project(client_id, project_id, "read"):
             return {"project_id": project_id, "sessions": [], "estimated_tokens": 0,
-                    "message": "Project scope is not granted to this client."}
+                    "message": "Read access to this project is not granted to this client."}
         budget = max(100, min(int(max_tokens), 2000))
         with self._connection() as db:
             rows = db.execute(
@@ -357,6 +375,8 @@ class MemoryStore:
         importance: float = 0.6,
         confidence: float = 1.0,
         sensitivity: str = "normal",
+        project_id: str | None = None,
+        client_id: str | None = None,
     ) -> Memory:
         clean = " ".join(content.split()).strip()
         if not clean:
@@ -369,6 +389,12 @@ class MemoryStore:
             raise ValueError(f"Unsupported memory type: {memory_type}")
         if scope not in ALLOWED_SCOPES:
             raise ValueError(f"Unsupported scope: {scope}")
+        if project_id is not None:
+            if scope != "project":
+                raise ValueError("Project memories must use project scope")
+            self._require_project(project_id)
+        if client_id is not None and not self._can_access(client_id, scope, project_id, "write"):
+            raise PermissionError("Client lacks write permission for this memory area")
         if sensitivity not in ALLOWED_SENSITIVITIES:
             raise ValueError(f"Unsupported sensitivity: {sensitivity}")
         source_uri = source_uri.strip() or "unknown://source"
@@ -390,6 +416,7 @@ class MemoryStore:
             created_at=timestamp,
             updated_at=timestamp,
             sensitivity=sensitivity,
+            project_id=project_id,
         )
         with self._connection() as db:
             db.execute(
@@ -397,8 +424,8 @@ class MemoryStore:
                 INSERT INTO memories (
                     id, content, memory_type, scope, source_uri,
                     importance, confidence, created_at, updated_at, access_count,
-                    sensitivity
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                    sensitivity, project_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                 """,
                 (
                     memory.id,
@@ -411,6 +438,7 @@ class MemoryStore:
                     memory.created_at,
                     memory.updated_at,
                     memory.sensitivity,
+                    memory.project_id,
                 ),
             )
             try:
@@ -432,6 +460,8 @@ class MemoryStore:
             importance=request.importance,
             confidence=request.confidence,
             sensitivity=request.sensitivity,
+            project_id=request.project_id,
+            client_id=request.client_id,
         )
 
     def update(
@@ -481,6 +511,8 @@ class MemoryStore:
         if scope is not None:
             if scope not in ALLOWED_SCOPES:
                 raise ValueError(f"Unsupported scope: {scope}")
+            if current.get("project_id") is not None and scope != "project":
+                raise ValueError("Project memories must use project scope")
             current["scope"] = scope
         if sensitivity is not None:
             if sensitivity not in ALLOWED_SENSITIVITIES:
@@ -524,6 +556,89 @@ class MemoryStore:
     def grant(self, client_id: str, scope: str) -> None:
         self._set_permission(client_id, scope, True)
 
+    def _require_project(self, project_id: str) -> None:
+        with self._connection() as db:
+            if not db.execute("SELECT 1 FROM projects WHERE id=?", (project_id,)).fetchone():
+                raise ValueError("Unknown project; create the project before assigning memory or permissions")
+
+    def list_projects(self) -> list[dict[str, object]]:
+        with self._connection() as db:
+            return [dict(row) for row in db.execute("SELECT * FROM projects ORDER BY name,id").fetchall()]
+
+    def project_permissions(self, client_id: str) -> list[dict[str, object]]:
+        with self._connection() as db:
+            return [dict(row) for row in db.execute("""SELECT project_id,action,allowed,updated_at
+                FROM project_permissions WHERE client_id=? ORDER BY project_id,action""", (client_id,)).fetchall()]
+
+    @staticmethod
+    def _validate_action(action: str) -> None:
+        if action not in {"read", "write", "delete"}:
+            raise ValueError("Action must be read, write, or delete")
+
+    def set_scope_capability(self, client_id: str, scope: str, action: str, allowed: bool) -> None:
+        self._validate_action(action)
+        if action == "read":
+            self._set_permission(client_id, scope, allowed)
+            return
+        if not client_id.strip() or scope not in ALLOWED_SCOPES:
+            raise ValueError("A client id and supported scope are required")
+        with self._connection() as db:
+            db.execute("""INSERT INTO permissions VALUES(?,?,0,?)
+                ON CONFLICT(client_id,scope) DO NOTHING""", (client_id.strip(), scope, now_iso()))
+            db.execute("""INSERT INTO scope_capabilities VALUES(?,?,?,?,?)
+                ON CONFLICT(client_id,scope,action) DO UPDATE SET
+                allowed=excluded.allowed,updated_at=excluded.updated_at""",
+                (client_id.strip(), scope, action, int(allowed), now_iso()))
+
+    def grant_action(self, client_id: str, scope: str, action: str) -> None:
+        self.set_scope_capability(client_id, scope, action, True)
+
+    def revoke_action(self, client_id: str, scope: str, action: str) -> None:
+        self.set_scope_capability(client_id, scope, action, False)
+
+    def grant_project(self, client_id: str, project_id: str, action: str = "read", *,
+                      can_read: bool | None = None, can_write: bool | None = None,
+                      can_delete: bool | None = None) -> None:
+        self._validate_action(action)
+        self._require_project(project_id)
+        if not client_id.strip():
+            raise ValueError("client_id cannot be empty")
+        capabilities = {"read": can_read, "write": can_write, "delete": can_delete}
+        if all(value is None for value in capabilities.values()):
+            capabilities[action] = True
+        with self._connection() as db:
+            for capability, allowed in capabilities.items():
+                if allowed is not None:
+                    db.execute("""INSERT INTO project_permissions VALUES(?,?,?,?,?)
+                        ON CONFLICT(client_id,project_id,action) DO UPDATE SET
+                        allowed=excluded.allowed,updated_at=excluded.updated_at""",
+                        (client_id.strip(), project_id, capability, int(allowed), now_iso()))
+
+    def revoke_project(self, client_id: str, project_id: str, action: str | None = None) -> None:
+        if action is not None:
+            self._validate_action(action)
+        with self._connection() as db:
+            db.execute("""UPDATE project_permissions SET allowed=0,updated_at=?
+                WHERE client_id=? AND project_id=? AND (? IS NULL OR action=?)""",
+                (now_iso(), client_id, project_id, action, action))
+
+    def can_access_project(self, client_id: str, project_id: str, action: str = "read") -> bool:
+        self._validate_action(action)
+        with self._connection() as db:
+            return bool(db.execute("""SELECT 1 FROM project_permissions
+                WHERE client_id=? AND project_id=? AND action=? AND allowed=1""",
+                (client_id, project_id, action)).fetchone())
+
+    def _can_access(self, client_id: str, scope: str, project_id: str | None, action: str) -> bool:
+        if project_id is not None:
+            return self.can_access_project(client_id, project_id, action)
+        if action == "read":
+            return scope in self.allowed_scopes(client_id)
+        with self._connection() as db:
+            return bool(db.execute("""SELECT 1 FROM scope_capabilities
+                WHERE client_id=? AND scope=? AND action=? AND allowed=1""",
+                (client_id, scope, action)).fetchone())
+
     def revoke(self, client_id: str, scope: str) -> None:
         self._set_permission(client_id, scope, False)
 
@@ -555,8 +670,12 @@ class MemoryStore:
     def permissions(self, client_id: str) -> list[dict[str, object]]:
         with self._connection() as db:
             rows = db.execute(
-                "SELECT scope, allowed, updated_at FROM permissions WHERE client_id=? ORDER BY scope",
-                (client_id,),
+                """SELECT p.scope,p.allowed,p.updated_at,
+                    COALESCE(w.allowed,0) can_write, COALESCE(d.allowed,0) can_delete
+                    FROM permissions p
+                    LEFT JOIN scope_capabilities w ON w.client_id=p.client_id AND w.scope=p.scope AND w.action='write'
+                    LEFT JOIN scope_capabilities d ON d.client_id=p.client_id AND d.scope=p.scope AND d.action='delete'
+                    WHERE p.client_id=? ORDER BY p.scope""", (client_id,),
             ).fetchall()
         return [dict(row) for row in rows]
 
@@ -568,6 +687,10 @@ class MemoryStore:
                 SELECT client_id FROM permissions
                 UNION
                 SELECT client_id FROM access_logs
+                UNION
+                SELECT client_id FROM project_permissions
+                UNION
+                SELECT client_id FROM scope_capabilities
                 ORDER BY client_id
                 """
             ).fetchall()
@@ -581,8 +704,11 @@ class MemoryStore:
         purpose: str,
         max_items: int = 6,
         max_tokens: int = 600,
+        project_id: str | None = None,
     ) -> dict[str, object]:
         scopes = self.allowed_scopes(client_id)
+        if project_id is not None:
+            scopes = {"project"} if self.can_access_project(client_id, project_id) else set()
         if not scopes:
             packet = {
                 "client_id": client_id,
@@ -596,7 +722,7 @@ class MemoryStore:
             self._log_access(client_id, purpose, query, [], [], 0)
             return packet
 
-        candidates = self._search_candidates(query, scopes, max(max_items * 4, 20))
+        candidates = self._search_candidates(query, scopes, max(max_items * 4, 20), project_id)
         ranked = rank_candidates(candidates, query)
         selected, token_total = compose_context(
             ranked,
@@ -624,7 +750,7 @@ class MemoryStore:
         }
 
     def _search_candidates(
-        self, query: str, scopes: set[str], limit: int
+        self, query: str, scopes: set[str], limit: int, project_id: str | None = None
     ) -> list[dict[str, object]]:
         placeholders = ",".join("?" for _ in scopes)
         scope_values = sorted(scopes)
@@ -645,10 +771,11 @@ class MemoryStore:
                         WHERE memory_fts MATCH ?
                           AND m.deleted_at IS NULL
                           AND m.scope IN ({placeholders})
+                          AND m.project_id IS ?
                         ORDER BY text_rank
                         LIMIT ?
                         """,
-                        [fts_query, *scope_values, limit],
+                        [fts_query, *scope_values, project_id, limit],
                     ).fetchall()
                     if rows:
                         return [dict(row) for row in rows]
@@ -671,10 +798,11 @@ class MemoryStore:
                     WHERE m.deleted_at IS NULL
                       AND ({like_clause})
                       AND m.scope IN ({placeholders})
+                      AND m.project_id IS ?
                     ORDER BY m.updated_at DESC
                     LIMIT ?
                     """,
-                    [*like_params, *scope_values, limit],
+                    [*like_params, *scope_values, project_id, limit],
                 ).fetchall()
             else:
                 rows = db.execute(
@@ -683,10 +811,11 @@ class MemoryStore:
                     FROM memories m
                     WHERE m.deleted_at IS NULL
                       AND m.scope IN ({placeholders})
+                      AND m.project_id IS ?
                     ORDER BY m.updated_at DESC
                     LIMIT ?
                     """,
-                    [*scope_values, limit],
+                    [*scope_values, project_id, limit],
                 ).fetchall()
         return [dict(row) for row in rows]
 
@@ -699,9 +828,15 @@ class MemoryStore:
         unknown_scopes = set(request.scopes) - ALLOWED_SCOPES
         if unknown_scopes:
             raise ValueError(f"Unsupported scope: {sorted(unknown_scopes)[0]}")
-        return self._search_candidates(
-            request.query, set(request.scopes), request.limit
-        )
+        scopes = set(request.scopes)
+        if request.client_id is not None:
+            if request.project_id is not None:
+                scopes &= {"project"} if self.can_access_project(request.client_id, request.project_id) else set()
+            else:
+                scopes &= self.allowed_scopes(request.client_id)
+        if not scopes:
+            return []
+        return self._search_candidates(request.query, scopes, request.limit, request.project_id)
 
     def get_memory(
         self, principal: PrincipalContext, memory_id: str
@@ -726,7 +861,7 @@ class MemoryStore:
         # boundary.
         if client_id is not None:
             scopes = self.allowed_scopes(client_id)
-            if str(memory["scope"]) not in scopes:
+            if not self._can_access(client_id, str(memory["scope"]), memory.get("project_id"), "read"):
                 self._log_access(
                     client_id, "explain", f"explain:{memory_id}", sorted(scopes), [], 0
                 )
@@ -760,10 +895,10 @@ class MemoryStore:
         if client_id is not None:
             with self._connection() as db:
                 row = db.execute(
-                    "SELECT scope FROM memories WHERE id=? AND deleted_at IS NULL",
+                    "SELECT scope,project_id FROM memories WHERE id=? AND deleted_at IS NULL",
                     (memory_id,),
                 ).fetchone()
-            if row is None or str(row["scope"]) not in self.allowed_scopes(client_id):
+            if row is None or not self._can_access(client_id, str(row["scope"]), row["project_id"], "delete"):
                 return False
         timestamp = now_iso()
         with self._connection() as db:

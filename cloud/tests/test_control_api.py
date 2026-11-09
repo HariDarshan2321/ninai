@@ -109,7 +109,7 @@ class FakeService:
     def review(self, who, memory_id, approve):
         self.calls.append(("review", who, memory_id, approve)); return {"id": memory_id, "status": "active" if approve else "deleted"}
     def create_grant(self, who, connection_id, data): return {"id": "g1", **data}
-    def revoke_connection(self, who, connection_id): return connection_id == "c1"
+    def revoke_connection(self, who, connection_id): return connection_id in {"c1", "c2"}
     def revoke_grant(self, who, grant_id): return grant_id == "g1"
     def delete_workspace(self, who, confirmation): return confirmation == "acme"
 
@@ -192,6 +192,52 @@ class ControlAppTest(unittest.TestCase):
         digest = hashlib.sha256(response.content).hexdigest()
         self.assertEqual(response.headers["x-installer-sha256"], digest)
         self.assertEqual(self.service.calls[-1], ("installer_download", self.identity, digest))
+
+    def test_launch_journey_from_signed_out_to_tested_connection(self):
+        landing = self.client.get("/control")
+        self.assertEqual(landing.status_code, 200)
+        self.assertIn("Sign in. Install. Keep going.", landing.text)
+        self.assertEqual(self.client.get("/api/control/overview").status_code, 401)
+
+        overview = self.client.get("/api/control/overview", headers=self.auth)
+        self.assertEqual(overview.status_code, 200)
+        self.assertEqual(overview.json()["workspace"]["id"], "workspace-1")
+
+        installer = self.client.get(
+            "/api/control/downloads/macos-installer", headers=self.auth
+        )
+        self.assertEqual(installer.status_code, 200)
+        self.assertTrue(installer.content.startswith(b"#!/usr/bin/env bash"))
+
+        connection = self.client.post(
+            "/api/control/connections",
+            headers=self.auth,
+            json={"provider": "anthropic", "client_type": "claude-code", "display_name": "Claude Code"},
+        )
+        self.assertEqual(connection.status_code, 200)
+        connection_id = connection.json()["id"]
+
+        check = self.client.post(
+            f"/api/control/connections/{connection_id}/test",
+            headers=self.auth,
+            json={},
+        )
+        self.assertEqual(check.status_code, 200)
+        self.assertEqual(check.json()["metadata_json"]["connection_test"]["status"], "ready")
+
+        grant = self.client.post(
+            f"/api/control/connections/{connection_id}/grants",
+            headers=self.auth,
+            json={"scope": "project", "can_read": True, "can_propose": True},
+        )
+        self.assertEqual(grant.status_code, 200)
+        revoked = self.client.post(
+            f"/api/control/connections/{connection_id}/revoke",
+            headers=self.auth,
+            json={},
+        )
+        self.assertEqual(revoked.status_code, 200)
+        self.assertTrue(revoked.json()["revoked"])
 
     def test_signed_in_control_center_contains_concise_local_setup(self):
         from ninai_cloud.control_ui import render_control_center
