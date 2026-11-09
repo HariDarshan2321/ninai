@@ -4,11 +4,14 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import uuid
 from typing import Any
 from urllib.parse import urlsplit
 
 from ..config import database_path
+from ..connectors import status as editor_status
+from ..connectors import configure as configure_editor
 from ..models import (
     ALLOWED_MEMORY_TYPES,
     ALLOWED_SCOPES,
@@ -18,12 +21,14 @@ from ..store import MemoryStore
 
 # Default clients shown on the Permissions screen even before they appear in the
 # vault, so the owner can pre-authorize the assistants Ninai targets first.
-DEFAULT_CLIENTS = ["claude-code", "codex", "gemini"]
+DEFAULT_CLIENTS = ["claude-code", "codex", "gemini", "cursor", "vscode"]
 
 CLIENT_LABELS = {
     "claude-code": "Claude Code",
     "codex": "Codex",
     "gemini": "Gemini CLI",
+    "cursor": "Cursor",
+    "vscode": "VS Code",
 }
 
 
@@ -64,13 +69,16 @@ def _gemini_connection_status() -> tuple[bool, bool]:
 
 
 def _client_status(client_id: str) -> dict[str, Any]:
+    if client_id in {"cursor", "vscode"}:
+        result = editor_status(client_id)
+        return {"id": client_id, "name": CLIENT_LABELS[client_id], **result}
     if client_id == "gemini":
         installed, connected = _gemini_connection_status()
     else:
         installed, connected = _cli_connection_status(client_id)
     if connected:
-        status = "connected"
-        message = "Ready to use Ninai."
+        status = "configured"
+        message = "Configuration found. Open this assistant and test a memory to verify the connection."
     elif installed:
         status = "needs_attention"
         message = "Installed, but Ninai is not connected. Rerun the Ninai installer to repair it."
@@ -81,7 +89,7 @@ def _client_status(client_id: str) -> dict[str, Any]:
         "id": client_id,
         "name": CLIENT_LABELS[client_id],
         "installed": installed,
-        "connected": connected,
+        "configured": connected,
         "status": status,
         "message": message,
     }
@@ -334,6 +342,22 @@ class DesktopApi:
         try:
             return _ok([_client_status(client_id) for client_id in DEFAULT_CLIENTS])
         except Exception as error:  # pragma: no cover - defensive
+            return _err(str(error))
+
+    def connect_assistant(self, client_id: str) -> dict[str, Any]:
+        """Explicit owner action: configure an editor without granting memory."""
+        try:
+            if client_id not in {"cursor", "vscode"}:
+                return _err("Use the Ninai installer to configure this assistant.")
+            executable = Path(sys.executable)
+            command = (executable.parents[3] / "venv/bin/ninai-mcp"
+                       if getattr(sys, "frozen", False) and sys.platform == "darwin"
+                       else executable.with_name("ninai-mcp.exe" if sys.platform == "win32" else "ninai-mcp"))
+            if not command.is_file():
+                return _err("Ninai's connection program is missing. Rerun the installer to repair it.")
+            configure_editor(client_id, str(command))
+            return _ok(_client_status(client_id))
+        except Exception as error:
             return _err(str(error))
 
     def get_permissions(self, client_id: str) -> dict[str, Any]:

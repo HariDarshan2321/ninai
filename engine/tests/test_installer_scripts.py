@@ -60,7 +60,9 @@ class InstallerScriptsTest(unittest.TestCase):
 
     def test_installer_configures_gemini_as_an_untrusted_scoped_mcp_client(self) -> None:
         installer = (ROOT / "scripts" / "install-local").read_text()
-        self.assertIn('permission grant gemini project', installer)
+        self.assertNotIn('permission grant', installer)
+        self.assertNotIn('mcp remove ninai-cloud', installer)
+        self.assertIn('connect_editor', installer)
         self.assertIn('"NINAI_CLIENT_ID": "gemini"', installer)
         self.assertIn('"trust": False', installer)
         self.assertIn('servers["ninai-local"]', installer)
@@ -70,9 +72,8 @@ class InstallerScriptsTest(unittest.TestCase):
         installer = (ROOT / "scripts" / "install-windows.ps1").read_text()
         self.assertIn('$env:LOCALAPPDATA\\Ninai', installer)
         self.assertIn('InstallDir must be inside LOCALAPPDATA', installer)
-        self.assertIn('permission grant claude-code project', installer)
-        self.assertIn('permission grant codex project', installer)
-        self.assertIn('permission grant gemini project', installer)
+        self.assertNotIn('permission grant', installer)
+        self.assertIn('Connect-Editor', installer)
         self.assertIn('trust = $false', installer)
         self.assertNotIn('Start-Process powershell -Verb RunAs', installer)
 

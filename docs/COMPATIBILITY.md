@@ -2,6 +2,14 @@
 
 Status is deliberately evidence-based. “Implemented” means the repository contains the code and automated coverage; “verified” requires a recorded run against the named real host.
 
+Latest local release evidence: [9 November acceptance](LOCAL-PRODUCT-ACCEPTANCE-2026-11-09.md).
+Claude Code 2.1.319 and Codex 0.145.0 passed actual installed local model handoff,
+source preservation and revocation. Cursor 3.21.16 and VS Code 1.142.0 have native
+configuration plus MCP subprocess transport coverage; actual editor-agent calls
+are pending by user choice because clean profiles require authentication.
+All 107 cloud tests ran with real disposable PostgreSQL and zero skips locally.
+These results do not establish production OAuth or signed installer readiness.
+
 | Client or surface | Transport | Repository status | Real-host status |
 | --- | --- | --- | --- |
 | Claude Code, local | stdio MCP | Implemented and locally tested | Available path |

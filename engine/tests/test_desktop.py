@@ -94,6 +94,18 @@ class DesktopApiTest(unittest.TestCase):
         self.api.set_permission("claude-code", "project", False)
         self.assertFalse(self.api.get_permissions("claude-code")["data"]["project"])
 
+    def test_explicit_editor_setup_never_grants_memory(self) -> None:
+        with (
+            patch("ninai.desktop.api.Path.is_file", return_value=True),
+            patch("ninai.desktop.api.configure_editor") as configure,
+            patch("ninai.desktop.api.editor_status", return_value={"installed": True, "configured": True, "status": "configured"}),
+        ):
+            self.assertTrue(self.api.connect_assistant("cursor")["ok"])
+            configure.assert_called_once()
+        self.assertEqual(self.store.allowed_scopes("cursor"), set())
+        self.assertEqual(self.store.project_permissions("cursor"), [])
+        self.assertFalse(self.api.connect_assistant("other")["ok"])
+
     def test_assistant_statuses_distinguish_connected_missing_and_repair(self) -> None:
         with (
             patch("ninai.desktop.api._cli_connection_status", side_effect=[(True, True), (True, False)]),
@@ -101,7 +113,7 @@ class DesktopApiTest(unittest.TestCase):
         ):
             statuses = self.api.assistant_statuses()["data"]
         by_id = {item["id"]: item for item in statuses}
-        self.assertEqual(by_id["claude-code"]["status"], "connected")
+        self.assertEqual(by_id["claude-code"]["status"], "configured")
         self.assertEqual(by_id["codex"]["status"], "needs_attention")
         self.assertEqual(by_id["gemini"]["status"], "not_installed")
         self.assertIn("rerun the ninai installer", by_id["codex"]["message"].lower())

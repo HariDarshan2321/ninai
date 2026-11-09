@@ -73,6 +73,7 @@
     sources: function () { return call("sources"); },
     listClients: function () { return call("list_clients"); },
     assistantStatuses: function () { return call("assistant_statuses"); },
+    connectAssistant: function (clientId) { return call("connect_assistant", clientId); },
     listProjects: function () { return call("list_projects"); },
     createProject: function (name) { return call("create_project", name); },
     getProjectPermissions: function (id) { return call("get_project_permissions", id); },

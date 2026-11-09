@@ -34,6 +34,12 @@ elif command -v python3 >/dev/null 2>&1; then
 fi
 
 if [[ -n "${python_cmd}" ]]; then
+  if [[ -x "${install_dir}/venv/bin/ninai-connect" ]]; then
+    for editor in cursor vscode; do
+      "${install_dir}/venv/bin/ninai-connect" "${editor}" --command "${install_dir}/venv/bin/ninai-mcp" --remove || \
+        printf 'Kept %s settings unchanged; review the Ninai entry in the editor.\n' "${editor}" >&2
+    done
+  fi
   NINAI_INSTALL_DIR="${install_dir}" "${python_cmd}" - <<'PY'
 import json
 import os

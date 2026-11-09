@@ -723,7 +723,7 @@
     var card = h("article", { class: "client-card" });
     var stateName = assistantStatus ? assistantStatus.status : "custom";
     var stateLabel = assistantStatus
-      ? ({ connected: "Connected", needs_attention: "Needs attention", not_installed: "Not installed" }[stateName] || "Check status")
+      ? ({ connected: "Connected", configured: "Configured", needs_attention: "Needs attention", not_installed: "Not installed" }[stateName] || "Check status")
       : "Custom";
     var head = h("div", { class: "client-card__head" },
       markSvg("nav__glyph"),
@@ -734,6 +734,19 @@
     card.appendChild(head);
     if (assistantStatus) {
       card.appendChild(h("p", { class: "client-card__status-copy", text: assistantStatus.message }));
+      if ((clientId === "cursor" || clientId === "vscode") && assistantStatus.installed) {
+        var connectButton = h("button", { type: "button", class: "btn btn--ghost btn--sm", text: "Configure " + assistantStatus.name });
+        connectButton.addEventListener("click", async function () {
+          connectButton.disabled = true;
+          try {
+            await B.connectAssistant(clientId);
+            toast("Configuration saved. Open the editor to verify Ninai tools. Memory access remains your choice.");
+            await loadPermissions();
+          } catch (err) { toast(err.message || String(err), "error"); }
+          finally { connectButton.disabled = false; }
+        });
+        card.appendChild(h("div", { class: "connection-refresh" }, connectButton));
+      }
     }
     card.appendChild(h("h3", { class: "permission-section-title", text: "Named projects" }));
     if (!projects.length) card.appendChild(h("p", { class: "client-card__status-copy", text: "Create a project when adding a memory to control its access separately." }));

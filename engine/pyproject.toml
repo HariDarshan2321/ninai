@@ -28,6 +28,7 @@ windows-build = [
 ninai = "ninai.cli:main"
 ninai-mcp = "ninai.server:main"
 ninai-app = "ninai.desktop.app:main"
+ninai-connect = "ninai.connectors:main"
 
 [build-system]
 requires = ["hatchling"]
