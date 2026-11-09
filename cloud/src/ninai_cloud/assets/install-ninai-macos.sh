@@ -22,7 +22,7 @@ usage() {
   cat <<'EOF'
 Install Ninai's local engine and optional MCP client connection.
 
-Usage: install-local [--client all|both|claude-code|codex|gemini|none] [--session-capture ask|on|off]
+Usage: install-local [--client all|both|claude-code|codex|gemini|cursor|vscode|none] [--session-capture ask|on|off]
 
 Environment:
   NINAI_INSTALL_DIR  Installation directory (default: ~/.ninai-app)
@@ -61,8 +61,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${client}" in
-  auto|all|both|claude-code|codex|gemini|none) ;;
-  *) printf '%s\n' '--client must be all, both, claude-code, codex, gemini, or none.' >&2; exit 2 ;;
+  auto|all|both|claude-code|codex|gemini|cursor|vscode|none) ;;
+  *) printf '%s\n' '--client must be all, both, claude-code, codex, gemini, cursor, vscode, or none.' >&2; exit 2 ;;
 esac
 case "${session_capture}" in
   ask|on|off) ;;
@@ -71,7 +71,7 @@ esac
 
 case "$(uname -s)" in
   Darwin) ;;
-  *) printf '%s\n' 'This MVP installer currently supports macOS only.' >&2; exit 1 ;;
+  *) printf '%s\n' 'This installer supports macOS only. Windows has a separate preview installer.' >&2; exit 1 ;;
 esac
 
 python_cmd="${NINAI_PYTHON:-}"
@@ -222,11 +222,11 @@ connect_claude() {
       printf '%s\n' 'Ninai installed, but Claude Code was not found. Install Claude Code and rerun with --client claude-code.' >&2
       exit 1
     fi
-    "${install_dir}/venv/bin/ninai" permission grant claude-code project
     claude mcp remove ninai-local --scope user >/dev/null 2>&1 || true
     claude mcp remove ninai --scope user >/dev/null 2>&1 || true
-    claude mcp remove ninai-cloud --scope user >/dev/null 2>&1 || true
-    claude mcp add --transport stdio --scope user ninai-local -- "${install_dir}/venv/bin/ninai-mcp"
+    claude_env=(--env NINAI_CLIENT_ID=claude-code)
+    if [[ -n "${NINAI_DATA_DIR:-}" ]]; then claude_env+=(--env "NINAI_DATA_DIR=${NINAI_DATA_DIR}"); fi
+    claude mcp add --transport stdio --scope user ninai-local "${claude_env[@]}" -- "${install_dir}/venv/bin/ninai-mcp"
     merge_hooks "${HOME}/.claude/settings.json" "claude-code" "yes"
 }
 
@@ -235,10 +235,10 @@ connect_codex() {
       printf '%s\n' 'Ninai installed, but Codex was not found. Install Codex and rerun with --client codex.' >&2
       exit 1
     fi
-    "${install_dir}/venv/bin/ninai" permission grant codex project
     codex mcp remove ninai-local >/dev/null 2>&1 || true
-    codex mcp remove ninai-cloud >/dev/null 2>&1 || true
-    codex mcp add ninai-local --env NINAI_CLIENT_ID=codex -- "${install_dir}/venv/bin/ninai-mcp"
+    codex_env=(--env NINAI_CLIENT_ID=codex)
+    if [[ -n "${NINAI_DATA_DIR:-}" ]]; then codex_env+=(--env "NINAI_DATA_DIR=${NINAI_DATA_DIR}"); fi
+    codex mcp add ninai-local "${codex_env[@]}" -- "${install_dir}/venv/bin/ninai-mcp"
     merge_hooks "${HOME}/.codex/hooks.json" "codex" "no"
 }
 
@@ -247,7 +247,6 @@ connect_gemini() {
       printf '%s\n' 'Ninai installed, but Gemini CLI was not found. Install Gemini CLI and rerun with --client gemini.' >&2
       exit 1
     fi
-    "${install_dir}/venv/bin/ninai" permission grant gemini project
     settings_path="${HOME}/.gemini/settings.json"
     mkdir -p "$(dirname "${settings_path}")"
     NINAI_GEMINI_SETTINGS="${settings_path}" NINAI_MCP_COMMAND="${install_dir}/venv/bin/ninai-mcp" \
@@ -273,6 +272,8 @@ servers["ninai-local"] = {
     "trust": False,
     "description": "Permissioned local Ninai memory",
 }
+if os.environ.get("NINAI_DATA_DIR"):
+    servers["ninai-local"]["env"]["NINAI_DATA_DIR"] = os.environ["NINAI_DATA_DIR"]
 mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o600
 temporary = path.with_name(path.name + ".ninai-install.tmp")
 temporary.write_text(json.dumps(data, indent=2) + "\n")
@@ -281,18 +282,35 @@ os.replace(temporary, path)
 PY
 }
 
+connect_editor() {
+    if ! "${install_dir}/venv/bin/python" -c 'from ninai.connectors import installed; import sys; sys.exit(not installed(sys.argv[1]))' "$1"; then
+      printf '%s was not found. Copy this configuration after installing it:\n' "$1"
+      "${install_dir}/venv/bin/ninai-connect" "$1" --command "${install_dir}/venv/bin/ninai-mcp"
+      return
+    fi
+    "${install_dir}/venv/bin/ninai-connect" "$1" --command "${install_dir}/venv/bin/ninai-mcp" --apply
+}
+
 case "${client}" in
   auto)
     detected_clients=()
     if command -v claude >/dev/null 2>&1; then connect_claude; detected_clients+=("claude-code"); fi
     if command -v codex >/dev/null 2>&1; then connect_codex; detected_clients+=("codex"); fi
     if command -v gemini >/dev/null 2>&1; then connect_gemini; detected_clients+=("gemini"); fi
+    for editor in cursor vscode; do
+      if "${install_dir}/venv/bin/python" -c 'from ninai.connectors import installed; import sys; sys.exit(not installed(sys.argv[1]))' "${editor}"; then
+        connect_editor "${editor}"
+        detected_clients+=("${editor} (verify in editor)")
+      fi
+    done
     if [[ ${#detected_clients[@]} -eq 0 ]]; then client="none"; else client="${detected_clients[*]}"; fi
     ;;
   all)
     connect_claude
     connect_codex
     connect_gemini
+    connect_editor cursor
+    connect_editor vscode
     ;;
   both)
     connect_claude
@@ -307,15 +325,18 @@ case "${client}" in
   gemini)
     connect_gemini
     ;;
+  cursor|vscode)
+    connect_editor "${client}"
+    ;;
 esac
 
 printf '\nNinai is ready.\n'
 open "${app_bundle}" >/dev/null 2>&1 || true
 printf '%s\n' 'The Ninai app is opening now.'
 if [[ "${client}" == "none" ]]; then
-  printf 'No supported AI client was detected. Rerun with --client after installing Claude Code, Codex, or Gemini CLI.\n'
+  printf 'No assistant connection was configured. Choose an assistant in Ninai, or rerun the installer with --client.\n'
 else
-  printf 'Connected client: %s (project scope only)\n' "${client}"
+  printf 'Configured assistants: %s. Verify tools in each assistant, then choose memory access in Ninai. New access stays off until you grant it.\n' "${client}"
 fi
 if [[ "${session_capture}" == "on" ]]; then
   printf '%s\n' 'Automatic local session capture: enabled'
