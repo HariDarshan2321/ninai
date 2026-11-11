@@ -51,7 +51,7 @@
   /* ---- static reference data ------------------------------------------- */
 
   var SCOPE_DESC = {
-    public: "Shareable with anyone. Nothing private lives here.",
+    public: "Information you choose to share. Assistants still need permission.",
     work: "General working context — your role, team, and how you operate.",
     project: "Older or unassigned memories share this permission. Named projects use separate access controls.",
     preference: "How you like things done — tools, defaults, working style.",
@@ -71,7 +71,7 @@
   };
 
   function scopeDescription(scope) {
-    return SCOPE_DESC[scope] || ("Context filed under the " + scope + " scope.");
+    return SCOPE_DESC[scope] || ("Memories in " + humanize(scope) + ".");
   }
 
   /* ---- formatting ------------------------------------------------------- */
@@ -150,8 +150,13 @@
   }
 
   function scopeBadge(scope) {
-    return h("span", { class: "badge badge--scope", title: "Scope: " + scope },
-      h("span", { class: "badge__dot" }), scope);
+    var label = memoryAreaLabel(scope);
+    return h("span", { class: "badge badge--scope", title: "Memory area: " + label },
+      h("span", { class: "badge__dot" }), label);
+  }
+
+  function memoryAreaLabel(scope) {
+    return scope === "project" ? "Project memories" : (SCOPE_LABEL[scope] || humanize(scope));
   }
 
   function typeBadge(type) {
@@ -254,7 +259,7 @@
               h("span", { class: "badge", text: s.capture_status }),
               sourceTag(s.source_uri), formatRelative(s.updated_at),
               h("button", { class: "btn btn--danger", type: "button", text: "Delete archive", onclick: async function () {
-                if (!window.confirm("Delete this archived session from the local vault?")) return;
+                if (!window.confirm("Delete this archived session from Ninai on this device?")) return;
                 await B.deleteSession(s.id); toast("Session archive deleted."); loadSessions();
               } })
             )
@@ -497,7 +502,7 @@
     if (!filtered.length) {
       var filtering = state.filters.query || state.filters.scope || state.filters.type;
       body.appendChild(stateBlock({
-        title: filtering ? "No memories match" : "Your vault is empty",
+        title: filtering ? "No memories match" : "No saved memories yet",
         body: filtering
           ? "Try a different search term or clear the filters."
           : "Add one useful decision here. Then open Connected assistants and choose who may use it."
@@ -573,7 +578,7 @@
   function editSelect(id, name, values, current) {
     var sel = h("select", { class: "form__control", id: id, name: name });
     values.forEach(function (v) {
-      sel.appendChild(h("option", { value: v, selected: v === current }, v));
+      sel.appendChild(h("option", { value: v, selected: v === current }, name === "scope" ? memoryAreaLabel(v) : humanize(v)));
     });
     return sel;
   }
@@ -597,7 +602,7 @@
       h("div", { class: "form__field" }, h("label", { class: "form__label", for: "edit-content" }, "Content"), content),
       h("div", { class: "form__row" },
         h("div", { class: "form__field" }, h("label", { class: "form__label", for: "edit-type" }, "Type"), typeSel),
-        h("div", { class: "form__field" }, h("label", { class: "form__label", for: "edit-scope" }, "Scope"), scopeSel)
+        h("div", { class: "form__field" }, h("label", { class: "form__label", for: "edit-scope" }, "Memory area"), scopeSel)
       ),
       h("div", { class: "form__row" },
         h("div", { class: "form__field" }, h("label", { class: "form__label", for: "edit-sens" }, "Sensitivity"), sensSel),
@@ -647,7 +652,7 @@
     var actions = $("#drawer-actions");
     clear(actions);
     var strip = h("div", { class: "confirm" },
-      h("p", { class: "confirm__q", text: "Forget this memory? The record is removed from the vault and cannot be undone." })
+      h("p", { class: "confirm__q", text: "Delete this saved memory? You cannot restore it in the app. Assistants may still have copies they already received." })
     );
     var row = h("div", { class: "confirm__actions" });
     row.appendChild(h("button", { type: "button", class: "btn btn--ghost", onclick: function () { renderDrawerView(mem); } }, "Keep"));
@@ -995,8 +1000,8 @@
       clear(body);
       if (!logs.length) {
         body.appendChild(stateBlock({
-          title: "No packets released yet",
-          body: "When an assistant requests context, the exact packet it received is recorded here — with the facts and scopes involved."
+          title: "No sharing requests yet",
+          body: "When an assistant requests memory, this history records the request, memory areas and IDs shared, and estimated token count."
         }));
         return;
       }
@@ -1114,8 +1119,8 @@
 
   /* ---- populate selects from meta -------------------------------------- */
 
-  function fillFilter(sel, values) {
-    values.forEach(function (v) { sel.appendChild(h("option", { value: v }, v)); });
+  function fillFilter(sel, values, label) {
+    values.forEach(function (v) { sel.appendChild(h("option", { value: v }, label ? label(v) : humanize(v))); });
   }
 
   function humanize(value) {
@@ -1132,7 +1137,7 @@
     state.meta = meta;
     $("#vault-path").textContent = meta.vault_path || "local";
     $("#vault-path").title = meta.vault_path || "";
-    fillFilter($("#filter-scope"), meta.scopes);
+    fillFilter($("#filter-scope"), meta.scopes, memoryAreaLabel);
     fillFilter($("#filter-type"), meta.memory_types);
     fillFormSelect($("#add-type"), meta.memory_types);
     fillFormSelect($("#add-scope"), meta.scopes, SCOPE_LABEL);
@@ -1181,7 +1186,7 @@
     clear(boot);
     var inner = h("div", { class: "boot__inner" });
     inner.appendChild(markSvg("boot__mark"));
-    inner.appendChild(h("p", { class: "state__title", text: "Can't reach the vault" }));
+    inner.appendChild(h("p", { class: "state__title", text: "Can't open your saved memories" }));
     inner.appendChild(h("p", { class: "state__body", text: (err && err.message) ? err.message : String(err) }));
     boot.appendChild(inner);
   }

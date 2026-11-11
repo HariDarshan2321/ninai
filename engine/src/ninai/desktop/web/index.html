@@ -17,7 +17,7 @@
           <circle cx="32" cy="36" r="5.2"/>
         </g>
       </svg>
-      <p>Opening the vault&hellip;</p>
+      <p>Opening Ninai&hellip;</p>
     </div>
   </div>
 
@@ -42,7 +42,7 @@
       </div>
 
       <nav class="nav" aria-label="Primary">
-        <p class="nav__label" id="nav-label">Vault</p>
+        <p class="nav__label" id="nav-label">Your workspace</p>
         <button class="nav__item" type="button" data-screen="today" aria-current="page">
           <span class="nav__glyph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
           <span class="nav__name">Home</span>
@@ -77,8 +77,10 @@
 
       <div class="sidebar__foot">
         <button class="btn btn--ghost btn--sm" id="open-setup-guide" type="button">Setup guide</button>
-        <p class="foot-label">Vault</p>
-        <p class="foot-value" id="vault-path">local</p>
+        <details class="storage-details">
+          <summary class="foot-label">Stored on this device</summary>
+          <p class="foot-value" id="vault-path">local</p>
+        </details>
         <a class="foot-link" href="mailto:hello@ninai.io?subject=Ninai%20feedback" target="_blank" rel="noreferrer">Help &amp; feedback</a>
       </div>
     </aside>
@@ -100,7 +102,7 @@
       <section class="screen" id="screen-memories" role="region" aria-labelledby="memories-title" tabindex="-1">
         <header class="screen__head">
           <div>
-            <p class="screen__eyebrow">The complete local vault</p>
+            <p class="screen__eyebrow">Saved on this device</p>
             <h1 class="screen__title" id="memories-title">Memories</h1>
           </div>
           <div class="screen__head-actions">
@@ -115,8 +117,8 @@
             <input type="search" id="mem-search" placeholder="Search memories&hellip;" aria-label="Search memories" autocomplete="off" spellcheck="false">
           </div>
           <div class="field-select">
-            <label class="visually-hidden" for="filter-scope">Filter by scope</label>
-            <select id="filter-scope"><option value="">All scopes</option></select>
+            <label class="visually-hidden" for="filter-scope">Filter by memory area</label>
+            <select id="filter-scope"><option value="">All memory areas</option></select>
           </div>
           <div class="field-select">
             <label class="visually-hidden" for="filter-type">Filter by type</label>

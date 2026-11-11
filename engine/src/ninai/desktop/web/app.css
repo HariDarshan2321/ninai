@@ -295,6 +295,11 @@ a {
   text-transform: uppercase;
 }
 
+.storage-details summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+
 .sidebar__foot .foot-value {
   margin-top: 6px;
   color: var(--sidebar-text);
