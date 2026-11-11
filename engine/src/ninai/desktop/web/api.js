@@ -75,6 +75,7 @@
     assistantStatuses: function () { return call("assistant_statuses"); },
     connectAssistant: function (clientId) { return call("connect_assistant", clientId); },
     listProjects: function () { return call("list_projects"); },
+    getSetupStatus: function (projectId, clientId) { return call("setup_status", projectId, clientId); },
     createProject: function (name) { return call("create_project", name); },
     getProjectPermissions: function (id) { return call("get_project_permissions", id); },
     setProjectPermission: function (id, project, action, allowed) {

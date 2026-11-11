@@ -1,39 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-output="${repo_root}/website/public/assets/ninai-install-guide.mp4"
-build_dir="$(mktemp -d)"
-trap 'rm -rf "${build_dir}"' EXIT
-
-make_frame() {
-  number="$1"
-  background="$2"
-  foreground="$3"
-  accent="$4"
-  heading="$5"
-  detail="$6"
-  frame="${build_dir}/frame-${number}.svg"
-  printf '%s' "<svg xmlns='http://www.w3.org/2000/svg' width='1280' height='720' viewBox='0 0 1280 720'><rect width='1280' height='720' fill='${background}'/><circle cx='82' cy='82' r='9' fill='${accent}'/><text x='108' y='94' fill='${foreground}' font-family='Arial, sans-serif' font-size='30' font-weight='700' letter-spacing='5'>NINAI</text><text x='80' y='305' fill='${foreground}' font-family='Arial, sans-serif' font-size='58' font-weight='700'>${heading}</text><text x='80' y='395' fill='${accent}' font-family='Arial, sans-serif' font-size='32'>${detail}</text><text x='80' y='640' fill='${foreground}' opacity='.62' font-family='Arial, sans-serif' font-size='22'>Private memory shared by the assistants you choose</text></svg>" > "${frame}"
-  qlmanage -t -s 1280 -o "${build_dir}" "${frame}" >/dev/null 2>&1
-  mv "${frame}.png" "${build_dir}/frame-${number}.png"
-}
-
-make_frame 1 '#0b302b' '#f4efe5' '#ff6846' 'Keep the project' 'Switch AI assistants without repeating your work'
-make_frame 2 '#f4efe5' '#111512' '#ff6846' '1  Choose your computer' 'Mac is available now. Windows is in preview.'
-make_frame 3 '#dcef7b' '#111512' '#0b302b' '2  Open the installer' 'The release package will include everything Ninai needs.'
-make_frame 4 '#f4efe5' '#111512' '#ff6846' '3  Choose your assistants' 'Ninai shows what it found. You decide what to connect.'
-make_frame 5 '#ff6846' '#111512' '#0b302b' '4  Test one handoff' 'Save a decision. Recall it elsewhere. Check the source.'
-make_frame 6 '#0b302b' '#f4efe5' '#dcef7b' 'Your memory stays local' 'Change or remove assistant access at any time.'
-
-ffmpeg -y \
-  -loop 1 -t 7 -i "${build_dir}/frame-1.png" \
-  -loop 1 -t 8 -i "${build_dir}/frame-2.png" \
-  -loop 1 -t 8 -i "${build_dir}/frame-3.png" \
-  -loop 1 -t 8 -i "${build_dir}/frame-4.png" \
-  -loop 1 -t 8 -i "${build_dir}/frame-5.png" \
-  -loop 1 -t 7 -i "${build_dir}/frame-6.png" \
-  -filter_complex "[0:v][1:v][2:v][3:v][4:v][5:v]concat=n=6:v=1:a=0,format=yuv420p[v]" \
-  -map "[v]" -r 30 -movflags +faststart -c:v libx264 -crf 20 "${output}" >/dev/null 2>&1
-
-printf 'Created %s\n' "${output}"
+if [[ $# -eq 0 ]]; then
+  printf '%s\n' 'Provide capture.json from a real product walkthrough. Text-card concept videos are no longer generated.' >&2
+  exit 2
+fi
+exec python3 "${repo_root}/scripts/build-install-walkthrough.py" "$@"

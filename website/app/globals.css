@@ -3042,3 +3042,53 @@ a:focus-visible {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Recorded product walkthrough: native playback, optional guided pauses. */
+.setup-walkthrough { padding-block: 80px; }
+.setup-walkthrough__heading { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: end; margin-bottom: 32px; }
+.setup-walkthrough__heading h2 { margin: 12px 0 0; max-width: 14ch; font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.08; letter-spacing: -.04em; }
+.setup-walkthrough__heading > p { color: var(--muted); margin: 0; max-width: 58ch; }
+.setup-walkthrough__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 24px; align-items: start; }
+.setup-walkthrough__video { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: contain; background: var(--ink-soft); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); }
+.setup-walkthrough__playback { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-block: 20px; font-size: .88rem; }
+.setup-walkthrough__playback label { display: flex; align-items: start; gap: 9px; cursor: pointer; }
+.setup-walkthrough input { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--ink-soft); }
+.setup-walkthrough__instruction { padding: 28px; border-radius: 20px; border: 1px solid var(--line); background: var(--paper-soft); }
+.setup-walkthrough__instruction h3 { font-size: 1.5rem; margin: 10px 0; }
+.setup-walkthrough__instruction p { max-width: 65ch; }
+.setup-walkthrough__instruction .button { margin-top: 10px; text-align: center; }
+.setup-walkthrough__notice { min-height: 1.5em; color: var(--muted); font-size: .9rem; }
+.setup-walkthrough__chapters { border: 1px solid var(--line); border-radius: 20px; background: var(--paper-soft); overflow: hidden; }
+.setup-walkthrough__progress { background: var(--ink-soft); color: var(--paper); padding: 24px; }
+.setup-walkthrough__progress h3 { margin: 0; font-size: 1.2rem; }
+.setup-walkthrough__progress p { margin: 6px 0 14px; font-size: .9rem; }
+.setup-walkthrough progress { width: 100%; height: 8px; accent-color: var(--acid); }
+.setup-walkthrough__chapters ol { list-style: none; padding: 0; margin: 0; }
+.setup-walkthrough__chapters li + li { border-top: 1px solid var(--line); }
+.setup-walkthrough__chapters li button { display: flex; align-items: start; gap: 13px; width: 100%; padding: 18px 20px; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.setup-walkthrough__chapters li button:hover { background: var(--paper-deep); }
+.setup-walkthrough__chapters li button.is-active { background: var(--acid); box-shadow: inset 4px 0 var(--ink-soft); }
+.setup-walkthrough__chapters li button > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.setup-walkthrough__step { flex: 0 0 26px; font-family: "SFMono-Regular", Consolas, monospace; font-size: .8rem; padding-top: 3px; }
+.setup-walkthrough__chapters small { display: block; margin-top: 4px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.setup-walkthrough__storage { font-size: .78rem; color: var(--muted); padding: 0 20px; margin-block: 18px 10px; }
+.setup-walkthrough__reset { border: 0; color: var(--ink-soft); background: transparent; text-decoration: underline; cursor: pointer; padding: 8px 20px 20px; font-size: .85rem; }
+.setup-walkthrough__reset:disabled { opacity: .5; cursor: default; }
+.setup-walkthrough__transcript { margin-top: 24px; padding: 22px 26px; border: 1px solid var(--line); border-radius: 16px; }
+.setup-walkthrough__transcript summary { cursor: pointer; font-weight: 700; }
+.setup-walkthrough__transcript ol { padding-left: 24px; }
+.setup-walkthrough__transcript li { padding-left: 10px; margin-top: 24px; }
+.setup-walkthrough__transcript h3 { margin-bottom: 6px; }
+.setup-walkthrough__transcript p { margin: 8px 0; max-width: 80ch; }
+.setup-walkthrough button:focus-visible, .setup-walkthrough input:focus-visible, .setup-walkthrough summary:focus-visible { outline: 3px solid var(--coral); outline-offset: 3px; }
+@media (max-width: 900px) {
+  .setup-walkthrough { padding-block: 52px; }
+  .setup-walkthrough__heading { grid-template-columns: 1fr; gap: 20px; }
+  .setup-walkthrough__grid { grid-template-columns: 1fr; }
+  .setup-walkthrough__heading h2 { max-width: 22ch; }
+}
+@media (max-width: 480px) {
+  .setup-walkthrough__instruction { padding: 20px; }
+  .setup-walkthrough__instruction .button { width: 100%; }
+  .setup-walkthrough__transcript { padding: 18px; }
+}

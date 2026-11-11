@@ -183,6 +183,9 @@ class MemoryStore:
                 )
             if "project_id" not in columns:
                 db.execute("ALTER TABLE memories ADD COLUMN project_id TEXT REFERENCES projects(id)")
+            log_columns = {str(row["name"]) for row in db.execute("PRAGMA table_info(access_logs)")}
+            if "project_id" not in log_columns:
+                db.execute("ALTER TABLE access_logs ADD COLUMN project_id TEXT")
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS scope_capabilities (
                     client_id TEXT NOT NULL, scope TEXT NOT NULL,
@@ -198,6 +201,7 @@ class MemoryStore:
                     PRIMARY KEY(client_id,project_id,action)
                 );
                 CREATE INDEX IF NOT EXISTS memories_project_idx ON memories(project_id,scope,updated_at);
+                CREATE INDEX IF NOT EXISTS access_logs_project_client_idx ON access_logs(project_id,client_id,created_at DESC);
             """)
 
     def set_capture_enabled(self, enabled: bool) -> None:
@@ -719,7 +723,7 @@ class MemoryStore:
                 "estimated_tokens": 0,
                 "message": "No memory scopes are granted to this client.",
             }
-            self._log_access(client_id, purpose, query, [], [], 0)
+            self._log_access(client_id, purpose, query, [], [], 0, project_id=project_id)
             return packet
 
         candidates = self._search_candidates(query, scopes, max(max_items * 4, 20), project_id)
@@ -738,7 +742,7 @@ class MemoryStore:
                     f"UPDATE memories SET access_count=access_count+1 WHERE id IN ({placeholders})",
                     ids,
                 )
-        self._log_access(client_id, purpose, query, sorted(scopes), ids, token_total)
+        self._log_access(client_id, purpose, query, sorted(scopes), ids, token_total, project_id=project_id)
         return {
             "client_id": client_id,
             "purpose": purpose,
@@ -953,6 +957,38 @@ class MemoryStore:
             "allowed_scopes": sorted(self.allowed_scopes(client_id)) if client_id else [],
         }
 
+    def project_setup_status(self, project_id: str, client_id: str) -> dict[str, object]:
+        """Owner-side observations only; never creates a test disclosure or grant."""
+        with self._connection() as db:
+            project = db.execute("SELECT id FROM projects WHERE id=?", (project_id,)).fetchone()
+            count = db.execute("SELECT count(*) FROM memories WHERE project_id=? AND deleted_at IS NULL", (project_id,)).fetchone()[0]
+            sample = db.execute("SELECT id,content,source_uri FROM memories WHERE project_id=? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1", (project_id,)).fetchone()
+            success = db.execute(
+                """SELECT memory_ids,created_at FROM access_logs
+                   WHERE project_id=? AND client_id=? AND memory_ids!='[]'
+                   ORDER BY created_at DESC LIMIT 1""", (project_id, client_id)
+            ).fetchone()
+            read_grant = db.execute("SELECT allowed,updated_at FROM project_permissions WHERE client_id=? AND project_id=? AND action='read'", (client_id, project_id)).fetchone()
+            read_allowed = bool(read_grant and read_grant["allowed"])
+            revoked_at = str(read_grant["updated_at"]) if read_grant and not read_allowed else None
+            denied_after_revoke = db.execute(
+                """SELECT created_at FROM access_logs
+                   WHERE project_id=? AND client_id=? AND created_at>=?
+                     AND scopes='[]' AND memory_ids='[]'
+                   ORDER BY created_at DESC LIMIT 1""",
+                (project_id, client_id, revoked_at),
+            ).fetchone() if revoked_at else None
+        return {
+            "project_selected": project is not None,
+            "memory_saved": bool(count), "memories_count": int(count),
+            "read_allowed": read_allowed,
+            "write_allowed": self.can_access_project(client_id, project_id, "write"),
+            "recall_verified": success is not None,
+            "revocation_verified": bool(success and denied_after_revoke and str(denied_after_revoke["created_at"]) > str(success["created_at"])),
+            "latest_read": ({"created_at": success["created_at"], "memory_ids": json.loads(success["memory_ids"])} if success else None),
+            "example_memory": dict(sample) if sample else None,
+        }
+
     def _log_access(
         self,
         client_id: str,
@@ -961,14 +997,16 @@ class MemoryStore:
         scopes: list[str],
         memory_ids: list[str],
         estimated_tokens: int,
+        *,
+        project_id: str | None = None,
     ) -> None:
         with self._connection() as db:
             db.execute(
                 """
                 INSERT INTO access_logs(
                     id, client_id, purpose, query, scopes,
-                    memory_ids, estimated_tokens, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    memory_ids, estimated_tokens, created_at, project_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(uuid.uuid4()),
@@ -979,6 +1017,7 @@ class MemoryStore:
                     json.dumps(memory_ids),
                     int(estimated_tokens),
                     now_iso(),
+                    project_id,
                 ),
             )
 

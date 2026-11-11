@@ -573,6 +573,29 @@ a.source-tag:hover {
 .first-run__steps li { padding-left: 8px; }
 .first-run__steps strong, .first-run__steps span { display: block; }
 .first-run__steps span { margin-top: 3px; color: var(--text-muted); line-height: 1.45; }
+.setup-guide { margin: 0 0 28px; }
+.setup-guide__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.setup-guide__head h2 { margin: 4px 0; font-size: 1.4rem; }
+.setup-guide__intro, .setup-guide__content p { color: var(--text-muted); line-height: 1.6; max-width: 72ch; }
+.setup-guide__choices { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin: 20px 0; }
+.setup-guide label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 7px; }
+.setup-guide select, .setup-guide textarea { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; color: var(--text); background: var(--surface); font: inherit; }
+.setup-guide textarea { font-size: .85rem; line-height: 1.5; resize: vertical; }
+.setup-guide__chapters { padding: 0; margin: 20px 0; list-style: none; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
+.setup-guide__chapter { width: 100%; height: 100%; text-align: left; border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--surface); color: var(--text-muted); font: inherit; font-size: .83rem; cursor: pointer; }
+.setup-guide__chapter[aria-current="step"] { border-color: var(--text); color: var(--text); font-weight: 650; }
+.setup-guide__chapter.is-complete { background: var(--surface-sunk); }
+.setup-guide__content { border-top: 1px solid var(--line); padding: 20px 0 8px; }
+.setup-guide__content h3 { margin: 6px 0 12px; font-size: 1.2rem; }
+.setup-guide__status { margin: 0; font-size: .8rem; font-weight: 650; }
+.setup-guide__hint { font-size: .83rem; }
+.setup-guide__footer { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 18px; }
+@media (max-width: 800px) {
+  .setup-guide { padding: 20px; }
+  .setup-guide__chapters { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .setup-guide__head { align-items: flex-start; flex-wrap: wrap; }
+}
+@media (max-width: 560px) { .setup-guide__choices { grid-template-columns: 1fr; } }
 .permission-help { max-width: 760px; margin-bottom: 20px; padding: 22px 24px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); }
 .permission-help h2 { margin: 0 0 8px; font-size: 1.15rem; }
 .permission-help p { margin: 0; color: var(--text-muted); line-height: 1.5; }

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from html.parser import HTMLParser
 import re
+import json
 from urllib.parse import unquote, urlsplit
 
 
@@ -132,9 +133,16 @@ for private_setup_marker in (
 for gated_copy in ("official installer", "I already have an account", "screen_hint=signup"):
     if gated_copy not in public_install:
         raise SystemExit(f"Public install page is missing account gate copy: {gated_copy}")
-for current_release_copy in ("Preview the planned setup", "Your complete memory stays on your computer"):
+for current_release_copy in ("Follow a real setup walkthrough", "Your complete memory stays on your computer"):
     if current_release_copy not in public_install:
         raise SystemExit(f"Public install page is missing current-release copy: {current_release_copy}")
+
+for media in ("ninai-install-guide.mp4", "ninai-install-poster.jpg", "ninai-install-guide.vtt", "ninai-install-chapters.json"):
+    if not (root / "assets" / media).is_file():
+        raise SystemExit(f"Setup walkthrough asset missing: {media}")
+chapters = json.loads((root / "assets/ninai-install-chapters.json").read_text())["chapters"]
+if not chapters or any(chapter["end"] <= chapter["start"] for chapter in chapters):
+    raise SystemExit("Setup walkthrough must have playable chapter timings")
 
 global_css = (website / "app/globals.css").read_text(encoding="utf-8")
 closed_panel = re.search(r"\.mobile-nav__panel\s*\{[^}]*display:\s*none;", global_css, re.S)

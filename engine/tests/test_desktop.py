@@ -106,6 +106,27 @@ class DesktopApiTest(unittest.TestCase):
         self.assertEqual(self.store.project_permissions("cursor"), [])
         self.assertFalse(self.api.connect_assistant("other")["ok"])
 
+    def test_setup_progress_observes_only_selected_project_and_client(self) -> None:
+        project = self.api.create_project("Walkthrough")["data"]["id"]
+        other = self.api.create_project("Other project")["data"]["id"]
+        self.api.add_memory("Keep migrations reversible", project_id=project)
+        self.store.grant_project("codex", project, "read")
+        before = len(self.store.list_logs())
+        status = self.api.setup_status(project, "codex")["data"]
+        self.assertTrue(status["memory_saved"])
+        self.assertFalse(status["recall_verified"])
+        self.assertEqual(len(self.store.list_logs()), before)
+        self.store.recall("reversible", client_id="codex", project_id=project, purpose="real setup check")
+        self.assertTrue(self.api.setup_status(project, "codex")["data"]["recall_verified"])
+        self.assertFalse(self.api.setup_status(project, "cursor")["data"]["recall_verified"])
+        self.store.revoke_project("codex", project, "read")
+        self.store.recall("reversible", client_id="codex", project_id=other, purpose="unrelated denial")
+        self.assertFalse(self.api.setup_status(project, "codex")["data"]["revocation_verified"])
+        self.store.recall("reversible", client_id="codex", project_id=project, purpose="verify revocation")
+        self.assertTrue(self.api.setup_status(project, "codex")["data"]["revocation_verified"])
+        self.store.grant_project("codex", project, "read")
+        self.assertFalse(self.api.setup_status(project, "codex")["data"]["revocation_verified"])
+
     def test_assistant_statuses_distinguish_connected_missing_and_repair(self) -> None:
         with (
             patch("ninai.desktop.api._cli_connection_status", side_effect=[(True, True), (True, False)]),
@@ -117,6 +138,23 @@ class DesktopApiTest(unittest.TestCase):
         self.assertEqual(by_id["codex"]["status"], "needs_attention")
         self.assertEqual(by_id["gemini"]["status"], "not_installed")
         self.assertIn("rerun the ninai installer", by_id["codex"]["message"].lower())
+
+    def test_setup_verification_survives_long_history_and_requires_fresh_revocation(self) -> None:
+        project = self.api.create_project("Long-lived project")["data"]["id"]
+        self.api.add_memory("Keep migrations reversible", project_id=project)
+        self.store.grant_project("codex", project, "read")
+        self.store.recall("reversible", client_id="codex", project_id=project, purpose="first success")
+        self.store.revoke_project("codex", project, "read")
+        for _ in range(110):
+            self.store.recall("reversible", client_id="codex", project_id=project, purpose="denied")
+        status = self.api.setup_status(project, "codex")["data"]
+        self.assertTrue(status["recall_verified"])
+        self.assertTrue(status["revocation_verified"])
+        self.store.grant_project("codex", project, "read")
+        self.store.revoke_project("codex", project, "read")
+        self.assertFalse(self.api.setup_status(project, "codex")["data"]["revocation_verified"])
+        self.store.recall("reversible", client_id="codex", project_id=project, purpose="fresh denial")
+        self.assertTrue(self.api.setup_status(project, "codex")["data"]["revocation_verified"])
 
     def test_cli_status_treats_a_timeout_as_needing_attention(self) -> None:
         with (

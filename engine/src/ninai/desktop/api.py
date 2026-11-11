@@ -267,6 +267,12 @@ class DesktopApi:
         except Exception as error:
             return _err(str(error))
 
+    def setup_status(self, project_id: str, client_id: str) -> dict[str, Any]:
+        try:
+            return _ok(self.store.project_setup_status(project_id, client_id))
+        except Exception as error:
+            return _err(str(error))
+
     def create_project(self, name: str) -> dict[str, Any]:
         try:
             if not name or not name.strip():

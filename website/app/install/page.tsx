@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import InstallWalkthrough from "../../components/InstallWalkthrough";
 
 export const metadata: Metadata = {
   title: "Install Ninai",
@@ -24,10 +25,10 @@ export default function InstallPage() {
           <div className="page-hero__aside">
             <p>Ninai checks which supported AI assistants are already on your computer, connects the ones you choose, and keeps their shared memory on your device.</p>
             <div className="hero-actions">
-              <a className="button button--acid" href={signupUrl}>Get the Mac installer ↗</a>
+              <a className="button button--acid" href={signupUrl}>Get Mac setup instructions ↗</a>
               <a className="button button--ink" href={signinUrl}>I already have an account</a>
             </div>
-            <p className="install-note">Your account provides the official installer and product updates. Your local memories are not uploaded to the account.</p>
+            <p className="install-note">The official installer currently builds Ninai from source and requires Python 3.11 or newer. A signed, notarized Mac package is not available yet. Your local memories are not uploaded to your account.</p>
           </div>
         </div>
       </section>
@@ -35,21 +36,18 @@ export default function InstallPage() {
       <section className="platform-choice shell" aria-labelledby="platform-title">
         <div className="platform-choice__intro"><p className="section-label">Choose your computer</p><h2 id="platform-title">Start on Mac</h2><p>Claude Code and Codex are the verified local handoff path today.</p></div>
         <div className="platform-choice__items">
-          <article><span className="status-pill status-pill--ready">Available</span><h3>macOS</h3><p>Works with Claude Code, Codex, and Gemini CLI beta.</p><a className="text-link" href={signupUrl}>Get the Mac installer ↗</a></article>
-          <article className="platform-choice__future"><span className="status-pill">In development</span><h3>Windows</h3><p>A signed Windows installer is being built and tested. It is not available today.</p><a className="text-link" href="mailto:hello@ninai.io?subject=Ninai%20for%20Windows">Join the Windows test group</a></article>
+          <article><span className="status-pill status-pill--ready">Source setup available</span><h3>macOS</h3><p>Claude Code and Codex have a verified local handoff. Other configured assistants still need their own connection check.</p><a className="text-link" href={signupUrl}>Get Mac setup instructions ↗</a></article>
+          <article className="platform-choice__future"><span className="status-pill">Preview only</span><h3>Windows</h3><p>A source setup script is available for testing. A signed Windows installer and clean-machine verification are still pending.</p><a className="text-link" href="mailto:hello@ninai.io?subject=Ninai%20for%20Windows">Ask about Windows testing</a></article>
         </div>
       </section>
 
       <section className="install-choice shell" aria-label="Ninai setup steps">
-        <article><span className="status-pill status-pill--ready">1 · Install</span><h2>Open the installer</h2><p>Download the version for your computer and follow the prompts.</p></article>
+        <article><span className="status-pill status-pill--ready">1 · Install</span><h2>Follow the Mac setup</h2><p>Check the prerequisites, then run the source installer. Review the command before running it.</p></article>
         <article><span className="status-pill status-pill--ready">2 · Connect</span><h2>Choose your assistants</h2><p>Ninai shows what it found. You decide which assistants to connect.</p></article>
         <article><span className="status-pill status-pill--ready">3 · Check</span><h2>Run a private test</h2><p>Save one sample decision, open another assistant, and confirm that it can recall it.</p></article>
       </section>
 
-      <section className="install-video shell" aria-labelledby="video-title">
-        <div><p className="section-label">Installation concept</p><h2 id="video-title">Preview the planned setup</h2><p>This concept guide shows the experience we are building. A real installation recording will replace it after the signed installer is ready.</p></div>
-        <video controls preload="metadata" poster="/assets/og-image.png"><source src="/assets/ninai-install-guide.mp4" type="video/mp4" />Your browser does not support embedded video.</video>
-      </section>
+      <InstallWalkthrough />
 
       <section className="beta-trust shell">
         <div><p className="section-label">What stays private</p><h2>Your complete memory stays on your computer.</h2></div>

@@ -7,7 +7,7 @@ on:
       - "cloud/**"
       - ".claude/**"
       - "website/**"
-      - "scripts/validate_website.py"
+      - "scripts/**"
       - ".github/workflows/test.yml"
   pull_request:
     paths:
@@ -15,7 +15,8 @@ on:
       - "cloud/**"
       - ".claude/**"
       - "website/**"
-      - "scripts/validate_website.py"
+      - "scripts/**"
+      - ".github/workflows/test.yml"
 
 jobs:
   test:
@@ -31,6 +32,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install .
       - run: python -m unittest discover -s tests -v
+      - run: python ../scripts/verify_local_setup.py
 
   website:
     runs-on: ubuntu-latest
@@ -52,6 +54,22 @@ jobs:
 
   cloud:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ninai_test
+          POSTGRES_USER: ninai_test
+          POSTGRES_PASSWORD: disposable_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ninai_test -d ninai_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NINAI_TEST_DATABASE_URL: postgresql://ninai_test:disposable_ci_only@127.0.0.1:5432/ninai_test
     defaults:
       run:
         working-directory: cloud

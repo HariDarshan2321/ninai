@@ -7,6 +7,7 @@ Stop with Ctrl-C; the disposable vault is removed on exit.
 from __future__ import annotations
 
 import json
+import argparse
 import mimetypes
 import os
 import secrets
@@ -28,15 +29,21 @@ METHODS = frozenset({
     "get_project_permissions", "set_project_permission", "get_capabilities", "set_capability",
     "list_clients", "assistant_statuses", "get_permissions", "set_permission", "list_logs",
     "list_sessions", "delete_session", "capture_status", "set_capture_enabled",
+    "setup_status",
 })
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--port", type=int, default=58040)
+    args = parser.parse_args()
+    if not 1024 <= args.port <= 65535:
+        parser.error("port must be between 1024 and 65535")
     with tempfile.TemporaryDirectory(prefix="ninai-desktop-acceptance-") as fixture:
         os.environ["NINAI_DATA_DIR"] = fixture
-        api = DesktopApi(MemoryStore(Path(fixture) / "synthetic.sqlite3"))
+        api = DesktopApi(MemoryStore(Path(fixture) / "ninai.sqlite3"))
         token = secrets.token_urlsafe(32)
-        origin = "http://127.0.0.1:58040"
+        origin = f"http://127.0.0.1:{args.port}"
         bridge = """<script>
         window.pywebview={api:{}};
         METHODS.forEach(function(method){window.pywebview.api[method]=async function(){
@@ -62,7 +69,7 @@ def main() -> None:
                 self.wfile.write(body)
 
             def host_allowed(self):
-                return self.headers.get("Host") == "127.0.0.1:58040"
+                return self.headers.get("Host") == f"127.0.0.1:{args.port}"
 
             def do_GET(self):
                 if not self.host_allowed():
@@ -99,8 +106,9 @@ def main() -> None:
                 except (ValueError, TypeError, KeyError):
                     self.reply(400, b'{"ok":false,"error":"Invalid test bridge request"}')
 
-        server = ThreadingHTTPServer(("127.0.0.1", 58040), Handler)
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
         print(origin + "/", flush=True)
+        print(f"Synthetic database: {api.store.path}", flush=True)
         print("Disposable synthetic desktop API fixture; Ctrl-C stops it.", flush=True)
         try:
             server.serve_forever()

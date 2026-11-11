@@ -1,0 +1,95 @@
+{
+  "title": "Your first private handoff",
+  "duration": 74.602,
+  "recording": "Actual local product UI with synthetic sample data. Model calls occur between scenes; waiting is edited. Narration uses a system voice.",
+  "chapters": [
+    {
+      "id": "open",
+      "title": "Open the setup guide",
+      "start": 0.0,
+      "end": 6.908,
+      "instruction": "After installing Ninai, open Setup guide. The recording uses the real local interface and sample data.",
+      "success": "The fresh guide starts without project access."
+    },
+    {
+      "id": "project",
+      "title": "Create a project",
+      "start": 6.908,
+      "end": 13.908,
+      "instruction": "Add a project decision and create a named project for this work.",
+      "success": "The named project has separate assistant permissions."
+    },
+    {
+      "id": "save",
+      "title": "Save one useful decision",
+      "start": 13.908,
+      "end": 20.908,
+      "instruction": "Write a short decision and save it under your project. Choose Codex as the assistant to test.",
+      "success": "The guide detects the saved decision."
+    },
+    {
+      "id": "access",
+      "title": "Allow Read for this project",
+      "start": 20.908,
+      "end": 27.864,
+      "instruction": "Choose access, open the assistant card, and enable Read for Launch rehearsal. Save and Delete stay off.",
+      "success": "The permission applies only to this named project."
+    },
+    {
+      "id": "grant",
+      "title": "Enable Read, keep Save and Delete separate",
+      "start": 27.864,
+      "end": 35.114,
+      "instruction": "Turn on Read for Codex. Other project actions remain off.",
+      "success": "Only Read is enabled for this assistant and project."
+    },
+    {
+      "id": "recall",
+      "title": "Run the request in your assistant",
+      "start": 35.114,
+      "end": 42.114,
+      "instruction": "Send this project-specific request to Codex. A real Codex recall ran between these recorded scenes.",
+      "success": "Check progress verifies the actual disclosure, not the connection label."
+    },
+    {
+      "id": "revoke",
+      "title": "Test revocation",
+      "start": 42.114,
+      "end": 48.114,
+      "instruction": "Open permissions and turn off Read for the same project. Then ask the assistant to recall again.",
+      "success": "Revocation blocks future reads; it cannot erase earlier copies."
+    },
+    {
+      "id": "off",
+      "title": "Turn project Read off",
+      "start": 48.114,
+      "end": 54.141,
+      "instruction": "Choose project access and disable Read for Codex. Other assistants keep their own permissions.",
+      "success": "Only this project permission changes."
+    },
+    {
+      "id": "disable",
+      "title": "Disable the project grant",
+      "start": 54.141,
+      "end": 60.367,
+      "instruction": "Turn off the Read checkbox. Ask Codex to repeat the same request before checking progress.",
+      "success": "The guide waits for an actual denied request."
+    },
+    {
+      "id": "verified",
+      "title": "Verify the denied request",
+      "start": 60.367,
+      "end": 68.145,
+      "instruction": "Repeat the request after revocation, then check progress. This real Codex request returned no project memories.",
+      "success": "Ninai verifies the denied request after revocation."
+    },
+    {
+      "id": "history",
+      "title": "Inspect what was shared",
+      "start": 68.145,
+      "end": 74.602,
+      "instruction": "Sharing history shows the successful recall and the denied request, including purpose and token count.",
+      "success": "One request shared the memory. The request after revocation shared none."
+    }
+  ]
+}

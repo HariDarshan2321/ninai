@@ -203,7 +203,8 @@
     screen: "today",
     memories: [],
     filters: { query: "", scope: "", type: "" },
-    lastFocus: null
+    lastFocus: null,
+    guide: { open: true, step: 0, project: "", client: "" }
   };
 
   var extraClients = []; // client ids added this session but not yet persisted
@@ -285,6 +286,89 @@
 
   /* ---- Home ------------------------------------------------------------- */
 
+  function setupRequest(guide, status, revocation) {
+    var block = h("div");
+    if (!guide.project || !guide.client || !status.memory_saved) {
+      block.appendChild(h("p", { text: "Choose a project and assistant above, and save a decision first." }));
+      return block;
+    }
+    var prompt = 'Use Ninai recall for project_id "' + guide.project + '" with purpose "' + (revocation ? "verify revoked access" : "first setup handoff") + '" and query ' + JSON.stringify(status.example_memory ? status.example_memory.content : "project decision") + '. ' + (revocation ? 'Make a fresh tool call even if you remember a previous answer. Report whether Ninai returns any memories.' : 'Show the returned decision and its source.') + ' Use Ninai only; do not guess from this message.';
+    var request = h("textarea", { id: "setup-request", readonly: true, rows: "4", text: prompt, onclick: function () { this.select(); } });
+    block.appendChild(h("label", { for: "setup-request", text: "Request to send to your assistant" }));
+    block.appendChild(request);
+    block.appendChild(h("button", { type: "button", class: "btn btn--ghost", text: "Copy request", onclick: async function () {
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(prompt);
+        toast("Request copied. Paste it into your chosen assistant.");
+      } catch (_) {
+        request.focus(); request.select();
+        toast("Request selected. Use your keyboard’s Copy command.");
+      }
+    } }));
+    block.appendChild(h("p", { class: "setup-guide__hint", text: "If the assistant cannot find Ninai, check its connection in Assistants and restart the assistant." }));
+    return block;
+  }
+
+  async function setupGuide() {
+    var guide = state.guide;
+    var section = h("section", { class: "first-run setup-guide", "aria-labelledby": "setup-title" });
+    section.appendChild(h("div", { class: "setup-guide__head" },
+      h("div", {}, h("p", { class: "screen__eyebrow", text: "Setup guide" }), h("h2", { id: "setup-title", text: "Your first private handoff" })),
+      h("button", { type: "button", class: "btn btn--ghost btn--sm", text: guide.open ? "Collapse guide" : "Continue setup", onclick: function () { guide.open = !guide.open; loadToday(); } })
+    ));
+    if (!guide.open) return section;
+    var records = await Promise.all([B.listProjects(), B.listClients()]);
+    var projects = records[0] || [], clients = records[1] || [];
+    if (!projects.some(function (p) { return p.id === guide.project; })) guide.project = "";
+    if (clients.indexOf(guide.client) < 0) guide.client = "";
+    section.appendChild(h("p", { class: "setup-guide__intro", text: "Save one decision, choose who can read it, and test it in your assistant. Progress is checked against saved memories, permissions, and sharing history." }));
+    var projectSelect = h("select", { id: "setup-project", onchange: function () { guide.project = this.value; loadToday(); } }, h("option", { value: "", text: "Choose a project" }));
+    projects.forEach(function (p) { projectSelect.appendChild(h("option", { value: p.id, text: p.name })); });
+    projectSelect.value = guide.project;
+    var clientSelect = h("select", { id: "setup-assistant", onchange: function () { guide.client = this.value; loadToday(); } }, h("option", { value: "", text: "Choose an assistant" }));
+    clients.forEach(function (id) { clientSelect.appendChild(h("option", { value: id, text: { "claude-code": "Claude Code", codex: "Codex", gemini: "Gemini CLI", cursor: "Cursor", vscode: "VS Code" }[id] || id })); });
+    clientSelect.value = guide.client;
+    section.appendChild(h("div", { class: "setup-guide__choices" },
+      h("div", {}, h("label", { for: "setup-project", text: "Your project" }), projectSelect),
+      h("div", {}, h("label", { for: "setup-assistant", text: "Assistant to test" }), clientSelect)
+    ));
+    var status = await B.getSetupStatus(guide.project || null, guide.client || null);
+    var complete = [!!status.memory_saved, !!status.read_allowed, !!status.recall_verified, !!status.revocation_verified];
+    var names = ["Save a decision", "Choose access", "Test recall", "Test revocation"];
+    var chapters = h("ol", { class: "setup-guide__chapters", "aria-label": "Setup chapters" });
+    names.forEach(function (name, i) {
+      chapters.appendChild(h("li", {}, h("button", { type: "button", "aria-current": guide.step === i ? "step" : null, class: "setup-guide__chapter" + (complete[i] ? " is-complete" : ""), text: (complete[i] ? "✓ " : (i + 1) + ". ") + name, onclick: function () { guide.step = i; loadToday(); } })));
+    });
+    section.appendChild(chapters);
+    var content = h("div", { class: "setup-guide__content", "aria-live": "polite" });
+    content.appendChild(h("p", { class: "setup-guide__status", text: complete[guide.step] ? "Verified in Ninai" : "Waiting for this step" }));
+    content.appendChild(h("h3", { text: names[guide.step] }));
+    if (guide.step === 0) {
+      content.appendChild(h("p", { text: "Add a short decision you want another assistant to know. Choose a named project, or create one in the Add memory window. Nothing is shared until you allow access." }));
+      content.appendChild(h("button", { class: "btn btn--primary", type: "button", text: "Add a project decision", onclick: function () { openModal(guide.project); $("#add-type").value = "decision"; } }));
+    } else if (guide.step === 1) {
+      content.appendChild(h("p", { text: "Open your chosen assistant’s card. Under your project, enable Read. Save and Delete are separate choices; leave them off unless you need them. Follow the card’s instructions if its connection needs attention, then return here." }));
+      content.appendChild(h("button", { class: "btn btn--primary", type: "button", text: "Review connected assistants", onclick: function () { navTo("permissions"); } }));
+    } else if (guide.step === 2) {
+      content.appendChild(h("p", { text: "Open the assistant you selected and send the request below. Return here and check progress. A configured connection alone does not verify recall: Ninai needs a real request that returns this project’s memory." }));
+      content.appendChild(setupRequest(guide, status, false));
+      content.appendChild(h("button", { class: "btn btn--ghost", type: "button", text: "Inspect sharing history", onclick: function () { navTo("activity"); } }));
+    } else {
+      content.appendChild(h("p", { text: "After a successful recall, turn Read off for this project in Assistants. Ask the same assistant to call Ninai again. Already shared text cannot be taken back; this test checks that the next request receives no project memories." }));
+      content.appendChild(h("button", { class: "btn btn--primary", type: "button", text: "Choose project access", onclick: function () { navTo("permissions"); } }));
+      content.appendChild(setupRequest(guide, status, true));
+      content.appendChild(h("p", { class: "setup-guide__hint", text: "You can turn Read back on later. The guide never changes your permissions." }));
+    }
+    section.appendChild(content);
+    var check = h("button", { class: "btn btn--primary", type: "button", text: "Check progress", onclick: function () { loadToday(); } });
+    section.appendChild(h("div", { class: "setup-guide__footer" }, check,
+      h("button", { class: "btn btn--ghost", type: "button", disabled: guide.step === 0, text: "Back", onclick: function () { guide.step -= 1; loadToday(); } }),
+      h("button", { class: "btn btn--ghost", type: "button", disabled: guide.step === 3, text: "Next chapter", onclick: function () { guide.step += 1; loadToday(); } })
+    ));
+    return section;
+  }
+
   function todayItem(mem, kind) {
     return h("article", { class: "today-item" + (kind === "decision" ? " today-item--decision" : "") },
       h("p", { class: "today-item__content", text: mem.content }),
@@ -311,14 +395,14 @@
     return group;
   }
 
-  function recentSessionsGroup(sessions) {
+  function recentSessionsGroup(sessions, captureEnabled) {
     var group = h("section", { class: "today-group" });
     group.appendChild(h("div", { class: "today-group__head" },
       h("h2", { text: "Recent agent sessions" }),
       h("span", { class: "today-group__count", text: String(sessions.length) })
     ));
     if (!sessions.length) {
-      group.appendChild(h("p", { class: "state__body", style: "padding:10px 2px;color:var(--text-faint)", text: "Start Claude Code or Codex in a project to see automatic activity here." }));
+      group.appendChild(h("p", { class: "state__body", style: "padding:10px 2px;color:var(--text-faint)", text: captureEnabled ? "Start Claude Code or Codex in a project to see captured activity here." : "Session capture is off. You can still save decisions and share them with your chosen assistant." }));
     } else {
       var list = h("div", { class: "today-list" });
       sessions.forEach(function (session) {
@@ -342,35 +426,29 @@
     clear(body);
     body.appendChild(loadingBlock());
     try {
-      var result = await Promise.all([B.today(), B.listSessions(5)]);
+      var result = await Promise.all([B.today(), B.listSessions(5), B.captureStatus()]);
       var data = result[0];
       var sessions = result[1] || [];
       var memories = data.recent_memories || [];
       setCount("today", memories.length + sessions.length);
+      var guide;
+      try { guide = await setupGuide(); }
+      catch (_) {
+        guide = stateBlock({ title: "Setup progress is unavailable", body: "Your memories are still below. Try loading the setup guide again." });
+        guide.appendChild(h("button", { type: "button", class: "btn btn--ghost", text: "Retry setup guide", onclick: loadToday }));
+      }
       clear(body);
+      body.appendChild(guide);
       if (!memories.length && !sessions.length) {
         body.appendChild(stateBlock({
           title: "Your private memory is ready",
-          body: "Complete the three steps below to connect an assistant and test your first memory."
+          body: "Start with one decision in the setup guide above."
         }));
-        var guide = h("section", { class: "first-run", "aria-label": "Getting started" },
-          h("div", { class: "first-run__head" },
-            h("p", { class: "screen__eyebrow", text: "Getting started" }),
-            h("h2", { text: "Your first private handoff" })
-          ),
-          h("ol", { class: "first-run__steps" },
-            h("li", {}, h("strong", { text: "Choose an assistant" }), h("span", { text: "Open Connected assistants and check which tools may use project memories." })),
-            h("li", {}, h("strong", { text: "Save one decision" }), h("span", { text: "Add a short project decision, such as “Keep every database change reversible.”" })),
-            h("li", {}, h("strong", { text: "Test the handoff" }), h("span", { text: "Open a connected assistant in this project and ask what it should remember." }))
-          ),
-          h("button", { class: "btn btn--primary", type: "button", text: "Review connected assistants", onclick: function () { navTo("permissions"); } })
-        );
-        body.appendChild(guide);
         return;
       }
       var cols = h("div", { class: "today-cols" });
       cols.appendChild(todayGroup("Recent memories", memories, "memory"));
-      cols.appendChild(recentSessionsGroup(sessions));
+      cols.appendChild(recentSessionsGroup(sessions, !!(result[2] && result[2].enabled)));
       body.appendChild(cols);
     } catch (err) {
       showError(body, err);
@@ -760,10 +838,12 @@
       });
       card.appendChild(h("div", { class: "project-permission" }, h("strong", { text: project.name }), actions));
     });
-    card.appendChild(h("h3", { class: "permission-section-title", text: "Read other memory areas" }));
+    var otherAreas = h("details", { class: "perm-advanced" }, h("summary", {}, "Read other memory areas"));
+    otherAreas.open = state.meta.scopes.some(function (scope) { return !!perms[scope]; });
+    otherAreas.appendChild(h("p", { class: "client-card__status-copy", text: "Optional: share memories outside named projects. You can complete the setup guide using only your chosen project." }));
     state.meta.scopes.forEach(function (scope) {
       var allowed = !!perms[scope];
-      card.appendChild(h("div", { class: "scope-row" },
+      otherAreas.appendChild(h("div", { class: "scope-row" },
         h("div", { class: "scope-row__text" },
           h("div", { class: "scope-row__name", text: SCOPE_LABEL[scope] || scope }),
           h("div", { class: "scope-row__desc", text: scopeDescription(scope) })
@@ -771,6 +851,7 @@
         scopeSwitch(clientId, scope, allowed)
       ));
     });
+    card.appendChild(otherAreas);
     var advanced = h("details", { class: "perm-advanced" }, h("summary", {}, "Advanced: save and delete permissions"));
     advanced.appendChild(h("p", { class: "client-card__status-copy", text: "These permissions apply to the memory areas below, including unassigned project memories. Named projects use their own switches above." }));
     state.meta.scopes.forEach(function (scope) {
@@ -929,14 +1010,14 @@
 
   /* ---- add-memory modal ------------------------------------------------- */
 
-  function openModal() {
+  function openModal(selectedProject) {
     state.lastFocus = document.activeElement;
     var modal = $("#add-modal");
     modal.hidden = false;
     requestAnimationFrame(function () { modal.classList.add("is-open"); });
     $("#add-error").classList.remove("is-shown");
     $("#add-content").focus();
-    loadProjectOptions().catch(function (err) { toast(err.message || String(err), "error"); });
+    loadProjectOptions(typeof selectedProject === "string" ? selectedProject : null).catch(function (err) { toast(err.message || String(err), "error"); });
   }
 
   function closeModal() {
@@ -979,9 +1060,12 @@
         $("#add-sensitivity").value,
         $("#add-scope").value === "project" ? ($("#add-project").value || null) : null
       );
+      var savedProject = $("#add-project").value;
+      if (savedProject && $("#add-scope").value === "project") state.guide.project = savedProject;
       closeModal();
       toast("Memory saved.");
       if (state.screen === "memories") loadMemories();
+      if (state.screen === "today") loadToday();
       refreshCounts();
     } catch (err) {
       errBox.textContent = err.message || String(err);
@@ -1068,6 +1152,7 @@
     $("#filter-type").addEventListener("change", function (e) { state.filters.type = e.target.value; renderMemList(); });
 
     $("#add-memory-btn").addEventListener("click", openModal);
+    $("#open-setup-guide").addEventListener("click", function () { state.guide.open = true; navTo("today"); });
     $("#add-close").addEventListener("click", closeModal);
     $("#add-cancel").addEventListener("click", closeModal);
     $("#add-form").addEventListener("submit", submitAdd);

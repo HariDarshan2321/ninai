@@ -1,0 +1,54 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:06.908
+After installing Ninai, open Setup guide. The recording uses the real
+local interface and sample data.
+
+2
+00:00:06.908 --> 00:00:13.908
+Add a project decision and create a named project for this work.
+
+3
+00:00:13.908 --> 00:00:20.908
+Write a short decision and save it under your project. Choose Codex as
+the assistant to test.
+
+4
+00:00:20.908 --> 00:00:27.864
+Choose access, open the assistant card, and enable Read for Launch
+rehearsal. Save and Delete stay off.
+
+5
+00:00:27.864 --> 00:00:35.114
+Turn on Read for Codex. Other project actions remain off.
+
+6
+00:00:35.114 --> 00:00:42.114
+Send this project-specific request to Codex. A real Codex recall ran
+between these recorded scenes.
+
+7
+00:00:42.114 --> 00:00:48.114
+Open permissions and turn off Read for the same project. Then ask the
+assistant to recall again.
+
+8
+00:00:48.114 --> 00:00:54.141
+Choose project access and disable Read for Codex. Other assistants
+keep their own permissions.
+
+9
+00:00:54.141 --> 00:01:00.367
+Turn off the Read checkbox. Ask Codex to repeat the same request
+before checking progress.
+
+10
+00:01:00.367 --> 00:01:08.145
+Repeat the request after revocation, then check progress. This real
+Codex request returned no project memories.
+
+11
+00:01:08.145 --> 00:01:14.602
+Sharing history shows the successful recall and the denied request,
+including purpose and token count.
