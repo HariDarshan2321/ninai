@@ -3,7 +3,9 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 from unittest.mock import patch
 
 from ninai.contracts import SearchRequest
@@ -94,6 +96,30 @@ class ProjectIsolationTest(unittest.TestCase):
         self.assertIsNotNone(store.explain("old", client_id="assistant"))
         self.assertFalse(store.forget("old", client_id="assistant"))
         self.assertEqual(store.project_permissions("assistant"), [])
+
+    def test_simultaneous_assistant_startups_migrate_legacy_database_safely(self):
+        for attempt in range(8):
+            path = Path(self.temp.name) / f"concurrent-{attempt}.sqlite3"
+            with sqlite3.connect(path) as db:
+                db.execute("""CREATE TABLE memories(id TEXT PRIMARY KEY,content TEXT NOT NULL,
+                    memory_type TEXT NOT NULL,scope TEXT NOT NULL,source_uri TEXT NOT NULL,
+                    importance REAL NOT NULL,confidence REAL NOT NULL,created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,access_count INTEGER NOT NULL DEFAULT 0,deleted_at TEXT)""")
+                db.execute("INSERT INTO memories VALUES('old','launch decision','decision','project','user://manual',1,1,'2026-01-01','2026-01-01',0,NULL)")
+            barrier = Barrier(8)
+
+            def start(_):
+                barrier.wait(timeout=10)
+                store = MemoryStore(path)
+                return store.explain("old")
+
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                results = list(pool.map(start, range(8)))
+            self.assertTrue(all(result["content"] == "launch decision" for result in results))
+            self.assertTrue(all(result["project_id"] is None for result in results))
+            reopened = MemoryStore(path)
+            self.assertEqual(reopened.allowed_scopes("assistant"), set())
+            self.assertEqual(reopened.project_permissions("assistant"), [])
 
 
 if __name__ == "__main__":

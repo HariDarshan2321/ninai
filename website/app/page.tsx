@@ -23,10 +23,10 @@ export default function HomePage() {
               the project again. Built today for people who use Claude Code and Codex on the same project.
             </p>
             <div className={styles.heroActions}>
-              <Link className={styles.primaryAction} href="/install/">See the 5-minute setup <span aria-hidden="true">↗</span></Link>
+              <Link className={styles.primaryAction} href="/install/">See setup steps <span aria-hidden="true">↗</span></Link>
               <Link className={styles.secondaryAction} href="#how-it-works">See how it works</Link>
             </div>
-            <p className={styles.heroNote}>Available on Mac · Windows preview · you choose what each assistant can use</p>
+            <p className={styles.heroNote}>Mac source setup · Windows preview · you choose what each assistant can use</p>
           </div>
           <div className={styles.heroProduct}>
             <p className={styles.productCaption}>First success <span>Three clear steps</span></p>

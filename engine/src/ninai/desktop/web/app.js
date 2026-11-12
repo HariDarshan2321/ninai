@@ -209,6 +209,9 @@
     memories: [],
     filters: { query: "", scope: "", type: "" },
     lastFocus: null,
+    modalGeneration: 0,
+    addFromGuide: false,
+    assistantStatuses: null,
     guide: { open: true, step: 0, project: "", client: "" }
   };
 
@@ -297,7 +300,7 @@
       block.appendChild(h("p", { text: "Choose a project and assistant above, and save a decision first." }));
       return block;
     }
-    var prompt = 'Use Ninai recall for project_id "' + guide.project + '" with purpose "' + (revocation ? "verify revoked access" : "first setup handoff") + '" and query ' + JSON.stringify(status.example_memory ? status.example_memory.content : "project decision") + '. ' + (revocation ? 'Make a fresh tool call even if you remember a previous answer. Report whether Ninai returns any memories.' : 'Show the returned decision and its source.') + ' Use Ninai only; do not guess from this message.';
+    var prompt = 'Use Ninai recall for project_id "' + guide.project + '" with purpose "' + (revocation ? "verify revoked access" : "first setup handoff") + '" and query "" (an empty query for recent project memories). Make a fresh tool call even if you remember a previous answer. ' + (revocation ? 'Report whether Ninai returns any memories.' : 'Show a returned decision and its source, or say that none were returned.') + ' Use Ninai only; do not guess.';
     var request = h("textarea", { id: "setup-request", readonly: true, rows: "4", text: prompt, onclick: function () { this.select(); } });
     block.appendChild(h("label", { for: "setup-request", text: "Request to send to your assistant" }));
     block.appendChild(request);
@@ -332,12 +335,24 @@
     projects.forEach(function (p) { projectSelect.appendChild(h("option", { value: p.id, text: p.name })); });
     projectSelect.value = guide.project;
     var clientSelect = h("select", { id: "setup-assistant", onchange: function () { guide.client = this.value; loadToday(); } }, h("option", { value: "", text: "Choose an assistant" }));
-    clients.forEach(function (id) { clientSelect.appendChild(h("option", { value: id, text: { "claude-code": "Claude Code", codex: "Codex", gemini: "Gemini CLI", cursor: "Cursor", vscode: "VS Code" }[id] || id })); });
+    clients.forEach(function (id) {
+      var connection = (state.assistantStatuses || []).filter(function (s) { return s.id === id; })[0];
+      var label = { "claude-code": "Claude Code", codex: "Codex", gemini: "Gemini CLI", cursor: "Cursor", vscode: "VS Code" }[id] || id;
+      var statusLabel = connection ? ({ configured: "Configured", connected: "Connected", needs_attention: "Needs attention", not_installed: "Not installed" }[connection.status] || "Not checked") : "Not checked";
+      clientSelect.appendChild(h("option", { value: id, text: label + " — " + statusLabel }));
+    });
     clientSelect.value = guide.client;
     section.appendChild(h("div", { class: "setup-guide__choices" },
       h("div", {}, h("label", { for: "setup-project", text: "Your project" }), projectSelect),
       h("div", {}, h("label", { for: "setup-assistant", text: "Assistant to test" }), clientSelect)
     ));
+    var selectedConnection = (state.assistantStatuses || []).filter(function (s) { return s.id === guide.client; })[0];
+    if (selectedConnection) section.appendChild(h("p", { class: "setup-guide__hint", text: selectedConnection.message }));
+    section.appendChild(h("button", { type: "button", class: "btn btn--ghost btn--sm", text: "Check assistant connections", onclick: async function () {
+      this.disabled = true; this.textContent = "Checking connections…";
+      try { state.assistantStatuses = await B.assistantStatuses(); if (state.screen === "today") loadToday(); }
+      catch (err) { toast(err.message || String(err), "error"); this.disabled = false; this.textContent = "Check assistant connections"; }
+    } }));
     var status = await B.getSetupStatus(guide.project || null, guide.client || null);
     var complete = [!!status.memory_saved, !!status.read_allowed, !!status.recall_verified, !!status.revocation_verified];
     var names = ["Save a decision", "Choose access", "Test recall", "Test revocation"];
@@ -350,8 +365,8 @@
     content.appendChild(h("p", { class: "setup-guide__status", text: complete[guide.step] ? "Verified in Ninai" : "Waiting for this step" }));
     content.appendChild(h("h3", { text: names[guide.step] }));
     if (guide.step === 0) {
-      content.appendChild(h("p", { text: "Add a short decision you want another assistant to know. Choose a named project, or create one in the Add memory window. Nothing is shared until you allow access." }));
-      content.appendChild(h("button", { class: "btn btn--primary", type: "button", text: "Add a project decision", onclick: function () { openModal(guide.project); $("#add-type").value = "decision"; } }));
+      content.appendChild(h("p", { text: "Add a short decision under a named project, or create a project in the Add memory window. New projects start with assistant access off. Existing project permissions apply to any decision you add." }));
+      content.appendChild(h("button", { class: "btn btn--primary", type: "button", text: "Add a project decision", onclick: function () { openModal(guide.project, true); $("#add-type").value = "decision"; } }));
     } else if (guide.step === 1) {
       content.appendChild(h("p", { text: "Open your chosen assistant’s card. Under your project, enable Read. Save and Delete are separate choices; leave them off unless you need them. Follow the card’s instructions if its connection needs attention, then return here." }));
       content.appendChild(h("button", { class: "btn btn--primary", type: "button", text: "Review connected assistants", onclick: function () { navTo("permissions"); } }));
@@ -682,6 +697,9 @@
     var drawer = $("#drawer");
     var scrim = $("#drawer-scrim");
     drawer.hidden = false;
+    drawer.inert = false;
+    clearTimeout(drawerCloseTimer);
+    syncDialogBackground();
     scrim.hidden = false;
     requestAnimationFrame(function () { drawer.classList.add("is-open"); scrim.classList.add("is-open"); });
 
@@ -705,8 +723,10 @@
     drawer.classList.remove("is-open");
     scrim.classList.remove("is-open");
     $$(".mem-row").forEach(function (r) { r.classList.remove("is-selected"); });
-    setTimeout(function () { drawer.hidden = true; scrim.hidden = true; }, 260);
-    if (state.lastFocus && state.lastFocus.focus) state.lastFocus.focus();
+    drawer.inert = true;
+    drawerCloseTimer = setTimeout(function () { drawer.hidden = true; scrim.hidden = true; }, 260);
+    syncDialogBackground();
+    restoreDialogFocus();
   }
 
   /* ---- Sources ---------------------------------------------------------- */
@@ -1015,10 +1035,33 @@
 
   /* ---- add-memory modal ------------------------------------------------- */
 
-  function openModal(selectedProject) {
+  var modalCloseTimer = null, drawerCloseTimer = null;
+
+  function activeDialog() {
+    return [$("#add-modal"), $("#drawer")].filter(function (node) { return !node.hidden && !node.inert; })[0] || null;
+  }
+
+  function syncDialogBackground() { $("#app").inert = !!activeDialog(); }
+
+  function restoreDialogFocus() {
+    if (state.lastFocus && state.lastFocus.isConnected && state.lastFocus.focus) state.lastFocus.focus();
+    else $("#screen-" + state.screen).focus({ preventScroll: true });
+  }
+
+  function openModal(selectedProject, requireProject) {
+    state.modalGeneration += 1;
+    state.addFromGuide = requireProject === true;
     state.lastFocus = document.activeElement;
     var modal = $("#add-modal");
+    clearTimeout(modalCloseTimer);
     modal.hidden = false;
+    modal.inert = false;
+    syncDialogBackground();
+    $("#add-submit").disabled = false;
+    $("#add-submit").textContent = "Save memory";
+    $("#add-scope").disabled = state.addFromGuide;
+    $("#add-scope option[value='project']").textContent = state.addFromGuide ? "Project memories" : SCOPE_LABEL.project;
+    if (state.addFromGuide) $("#add-scope").value = "project";
     requestAnimationFrame(function () { modal.classList.add("is-open"); });
     $("#add-error").classList.remove("is-shown");
     $("#add-content").focus();
@@ -1026,13 +1069,21 @@
   }
 
   function closeModal() {
+    state.modalGeneration += 1;
+    state.addFromGuide = false;
     var modal = $("#add-modal");
     modal.classList.remove("is-open");
-    setTimeout(function () { modal.hidden = true; }, 200);
+    modal.inert = true;
+    modalCloseTimer = setTimeout(function () { modal.hidden = true; }, 200);
     $("#add-form").reset();
     $("#add-advanced").open = false;
+    $("#new-project-details").open = false;
+    $("#add-scope").disabled = false;
+    $("#add-scope option[value='project']").textContent = SCOPE_LABEL.project;
+    $("#add-project").removeAttribute("aria-invalid");
     setFormDefaults();
-    if (state.lastFocus && state.lastFocus.focus) state.lastFocus.focus();
+    syncDialogBackground();
+    restoreDialogFocus();
   }
 
   function setFormDefaults() {
@@ -1054,8 +1105,18 @@
       $("#add-content").focus();
       return;
     }
+    if (state.addFromGuide && !$("#add-project").value) {
+      errBox.textContent = "Choose or create a named project so the setup guide can check your decision.";
+      errBox.classList.add("is-shown");
+      $("#add-project").setAttribute("aria-invalid", "true");
+      $("#add-project").focus();
+      return;
+    }
+    var generation = state.modalGeneration;
+    var savedProject = $("#add-scope").value === "project" ? $("#add-project").value : "";
     var submitBtn = $("#add-submit");
     submitBtn.disabled = true;
+    submitBtn.textContent = "Saving…";
     try {
       await B.addMemory(
         content,
@@ -1065,30 +1126,41 @@
         $("#add-sensitivity").value,
         $("#add-scope").value === "project" ? ($("#add-project").value || null) : null
       );
-      var savedProject = $("#add-project").value;
-      if (savedProject && $("#add-scope").value === "project") state.guide.project = savedProject;
-      closeModal();
+      if (generation === state.modalGeneration) {
+        if (savedProject) state.guide.project = savedProject;
+        closeModal();
+      }
       toast("Memory saved.");
       if (state.screen === "memories") loadMemories();
       if (state.screen === "today") loadToday();
       refreshCounts();
     } catch (err) {
-      errBox.textContent = err.message || String(err);
-      errBox.classList.add("is-shown");
+      if (generation === state.modalGeneration) {
+        errBox.textContent = err.message || String(err);
+        errBox.classList.add("is-shown");
+      } else toast("The earlier memory could not be saved. Your current draft is unchanged.", "error");
     } finally {
-      submitBtn.disabled = false;
+      if (generation === state.modalGeneration) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Save memory";
+      }
     }
   }
 
   async function loadProjectOptions(selectedId) {
+    var generation = state.modalGeneration;
     var projects = await B.listProjects();
+    if (generation !== state.modalGeneration || $("#add-modal").hidden || $("#add-modal").inert) return;
     var select = $("#add-project");
     var selected = selectedId || select.value;
     clear(select);
-    select.appendChild(h("option", { value: "", text: "Unassigned project memories" }));
+    select.appendChild(h("option", { value: "", text: state.addFromGuide ? "Choose a project to continue" : "Unassigned project memories" }));
     projects.forEach(function (p) { select.appendChild(h("option", { value: p.id, text: p.name })); });
     select.value = selected;
     if (select.selectedIndex < 0) select.value = "";
+    select.required = state.addFromGuide;
+    select.removeAttribute("aria-invalid");
+    if (state.addFromGuide && !projects.length) $("#new-project-details").open = true;
     $("#add-project-field").hidden = $("#add-scope").value !== "project";
   }
 
@@ -1167,9 +1239,18 @@
     $("#drawer-scrim").addEventListener("click", closeDrawer);
 
     document.addEventListener("keydown", function (e) {
-      if (e.key !== "Escape") return;
-      if (!$("#add-modal").hidden) { closeModal(); }
-      else if (!$("#drawer").hidden) { closeDrawer(); }
+      var dialog = activeDialog();
+      if (!dialog) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (dialog.id === "add-modal") closeModal(); else closeDrawer();
+      } else if (e.key === "Tab") {
+        var controls = $$("button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href],summary,[tabindex]:not([tabindex='-1'])", dialog).filter(function (node) { return node.getClientRects().length > 0; });
+        var first = controls[0], last = controls[controls.length - 1];
+        if (!first) { e.preventDefault(); return; }
+        if (e.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+      }
     });
   }
 
@@ -1196,13 +1277,16 @@
     $("#add-scope").addEventListener("change", function () { $("#add-project-field").hidden = this.value !== "project"; });
     $("#create-project").addEventListener("click", async function () {
       var button = this;
+      var generation = state.modalGeneration;
       var name = $("#new-project-name").value.trim();
       if (!name) { $("#new-project-name").focus(); return; }
       button.disabled = true;
       try {
         var project = await B.createProject(name);
-        await loadProjectOptions(project.id);
-        $("#new-project-name").value = "";
+        if (generation === state.modalGeneration) {
+          await loadProjectOptions(project.id);
+          $("#new-project-name").value = "";
+        }
         toast("Project created. Assistant access starts off.");
       } catch (err) { toast(err.message || String(err), "error"); }
       finally { button.disabled = false; }
@@ -1214,6 +1298,10 @@
       revealApp();
       navTo("today");
       refreshCounts();
+      B.assistantStatuses().then(function (statuses) {
+        state.assistantStatuses = statuses;
+        if (state.screen === "today" && $("#add-modal").hidden) loadToday();
+      }).catch(function () {});
     } catch (err) {
       bootFailed(err);
     }

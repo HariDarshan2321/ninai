@@ -49,6 +49,13 @@ def _jsonable(value: Any) -> Any:
     raise TypeError(f"Cannot serialize {type(value).__name__}")
 
 
+def _boolean_setting(data: Mapping[str, Any], key: str, default: bool = False) -> bool:
+    value = data.get(key, default)
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be true or false")
+    return value
+
+
 class ControlService:
     def __init__(self, connect: Callable[[], ContextManager[Any]], *, self_hosted: bool = False,
                  public_mcp_url: str = "/mcp", oauth_issuer: str | None = None,
@@ -87,7 +94,13 @@ class ControlService:
     def admin_overview(self, identity: ControlIdentity) -> dict[str, Any]:
         self.require_platform_admin(identity)
         with self._connect() as db:
-            row = db.execute("""SELECT
+            row = db.execute("""WITH successful_recalls AS (
+                SELECT d.user_id,d.created_at FROM disclosure_logs d
+                JOIN users u ON u.id=d.user_id AND u.deleted_at IS NULL
+                JOIN workspaces w ON w.id=d.workspace_id AND w.deleted_at IS NULL
+                WHERE d.tool_name='recall' AND d.decision='allow'
+                  AND jsonb_array_length(d.returned_memory_ids)>0
+            ) SELECT
                 (SELECT count(*) FROM users WHERE deleted_at IS NULL) AS users,
                 (SELECT count(*) FROM users WHERE deleted_at IS NULL
                   AND created_at >= now()-interval '7 days') AS signups_7d,
@@ -98,7 +111,12 @@ class ControlService:
                 (SELECT count(*) FROM installer_downloads) AS downloads,
                 (SELECT count(*) FROM workspaces WHERE deleted_at IS NULL) AS workspaces,
                 (SELECT count(*) FROM client_connections c JOIN workspaces w ON w.id=c.workspace_id
-                  WHERE c.status='active' AND c.revoked_at IS NULL AND w.deleted_at IS NULL) AS connections
+                  WHERE c.status='active' AND c.revoked_at IS NULL AND w.deleted_at IS NULL) AS connections,
+                (SELECT count(DISTINCT user_id) FROM successful_recalls) AS activated_hosted_users,
+                (SELECT count(DISTINCT user_id) FROM successful_recalls
+                  WHERE created_at >= now()-interval '7 days') AS hosted_active_users_7d,
+                (SELECT count(*) FROM successful_recalls
+                  WHERE created_at >= now()-interval '7 days') AS successful_recalls_7d
             """).fetchone()
             return dict(row)
 
@@ -139,13 +157,25 @@ class ControlService:
             workspaces = db.execute("""SELECT w.id,w.name,w.plan,w.created_at,w.deleted_at,m.role,m.revoked_at
                 FROM workspaces w JOIN workspace_members m ON m.workspace_id=w.id
                 WHERE m.user_id=%s ORDER BY w.created_at DESC LIMIT 100""", (user_id,)).fetchall()
-            connections = db.execute("""SELECT id,workspace_id,provider,client_type,display_name,status,
-                created_at,last_seen_at,revoked_at FROM client_connections
-                WHERE user_id=%s ORDER BY created_at DESC LIMIT 100""", (user_id,)).fetchall()
+            connections = db.execute("""SELECT c.id,c.workspace_id,c.provider,c.client_type,c.display_name,c.status,
+                c.created_at,c.last_seen_at,c.revoked_at,
+                (SELECT max(d.created_at) FROM disclosure_logs d
+                 WHERE d.workspace_id=c.workspace_id AND d.client_connection_id=c.id) AS last_disclosure_at
+                FROM client_connections c WHERE c.user_id=%s
+                ORDER BY c.created_at DESC LIMIT 100""", (user_id,)).fetchall()
             downloads = db.execute("""SELECT platform,artifact_sha256,created_at FROM installer_downloads
                 WHERE user_id=%s ORDER BY created_at DESC LIMIT 100""", (user_id,)).fetchall()
+            usage = db.execute("""SELECT min(d.created_at) AS first_successful_recall_at,
+                count(*) AS successful_recalls,
+                count(*) FILTER (WHERE d.created_at >= now()-interval '7 days') AS successful_recalls_7d
+                FROM disclosure_logs d JOIN workspaces w ON w.id=d.workspace_id
+                JOIN users u ON u.id=d.user_id AND u.deleted_at IS NULL
+                WHERE d.user_id=%s AND w.deleted_at IS NULL AND d.tool_name='recall'
+                  AND d.decision='allow' AND jsonb_array_length(d.returned_memory_ids)>0""",
+                (user_id,)).fetchone()
             return {"user": dict(user), "workspaces": [dict(r) for r in workspaces],
-                    "connections": [dict(r) for r in connections], "downloads": [dict(r) for r in downloads]}
+                    "connections": [dict(r) for r in connections], "downloads": [dict(r) for r in downloads],
+                    "usage": dict(usage)}
 
     @staticmethod
     def _slug(value: str) -> str:
@@ -363,8 +393,9 @@ class ControlService:
         kind, scope_id = data.get("scope_kind"), data.get("scope_id")
         if kind not in {"workspace", "project", "user"} or not scope_id:
             raise ValueError("scope_kind and scope_id are required")
-        can_read, can_propose = bool(data.get("can_read")), bool(data.get("can_propose"))
-        can_auto_activate = bool(data.get("can_auto_activate"))
+        can_read = _boolean_setting(data, "can_read")
+        can_propose = _boolean_setting(data, "can_propose")
+        can_auto_activate = _boolean_setting(data, "can_auto_activate")
         if not any((can_read, can_propose, can_auto_activate)):
             raise ValueError("At least one permission is required")
         if can_auto_activate and not can_propose:
@@ -453,9 +484,9 @@ class ControlService:
             }
 
     def update_capture_settings(self, identity: ControlIdentity, data: Mapping[str, Any]) -> dict[str, Any]:
-        archive = bool(data.get("archive_sessions"))
-        propose = bool(data.get("propose_memories", True))
-        auto = bool(data.get("auto_approve_low_risk", False))
+        archive = _boolean_setting(data, "archive_sessions")
+        propose = _boolean_setting(data, "propose_memories", True)
+        auto = _boolean_setting(data, "auto_approve_low_risk")
         retention = data.get("retention_days")
         if retention in ("", None):
             retention = None

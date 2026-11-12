@@ -18,14 +18,6 @@ done
 printf '%s\n' 'Removing Ninai connections and hooks…'
 pkill -f "${install_dir}/Ninai.app/Contents/MacOS/Ninai" >/dev/null 2>&1 || true
 
-if command -v claude >/dev/null 2>&1; then
-  claude mcp remove ninai-local --scope user >/dev/null 2>&1 || true
-  claude mcp remove ninai --scope user >/dev/null 2>&1 || true
-fi
-if command -v codex >/dev/null 2>&1; then
-  codex mcp remove ninai-local >/dev/null 2>&1 || true
-fi
-
 python_cmd=""
 if [[ -x "${install_dir}/venv/bin/python" ]]; then
   python_cmd="${install_dir}/venv/bin/python"
@@ -33,7 +25,44 @@ elif command -v python3 >/dev/null 2>&1; then
   python_cmd="$(command -v python3)"
 fi
 
+cli_entry_owned() {
+  NINAI_INSTALL_DIR="${install_dir}" "${python_cmd}" - "$1" "$2" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+import tomllib
+
+client, name = sys.argv[1:]
+try:
+    if client == "claude":
+        path = Path(os.environ["CLAUDE_CONFIG_DIR"]) / ".claude.json" if os.environ.get("CLAUDE_CONFIG_DIR") else Path.home() / ".claude.json"
+        if path.is_symlink():
+            raise ValueError("Linked configuration needs manual review")
+        data = json.loads(path.read_text())
+        entry = data.get("mcpServers", {}).get(name, {})
+    else:
+        path = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "config.toml"
+        if path.is_symlink():
+            raise ValueError("Linked configuration needs manual review")
+        data = tomllib.loads(path.read_text())
+        entry = data.get("mcp_servers", {}).get(name, {})
+    owned = isinstance(entry, dict) and entry.get("command") == os.environ["NINAI_INSTALL_DIR"] + "/venv/bin/ninai-mcp"
+except (OSError, ValueError, AttributeError, TypeError):
+    owned = False
+raise SystemExit(0 if owned else 1)
+PY
+}
+
 if [[ -n "${python_cmd}" ]]; then
+  if command -v claude >/dev/null 2>&1; then
+    for name in ninai-local ninai; do
+      if cli_entry_owned claude "${name}"; then claude mcp remove "${name}" --scope user >/dev/null 2>&1 || true; fi
+    done
+  fi
+  if command -v codex >/dev/null 2>&1 && cli_entry_owned codex ninai-local; then
+    codex mcp remove ninai-local >/dev/null 2>&1 || true
+  fi
   if [[ -x "${install_dir}/venv/bin/ninai-connect" ]]; then
     for editor in cursor vscode; do
       "${install_dir}/venv/bin/ninai-connect" "${editor}" --command "${install_dir}/venv/bin/ninai-mcp" --remove || \
@@ -43,16 +72,18 @@ if [[ -n "${python_cmd}" ]]; then
   NINAI_INSTALL_DIR="${install_dir}" "${python_cmd}" - <<'PY'
 import json
 import os
+import shlex
 import stat
 from pathlib import Path
 
 install_dir = os.environ["NINAI_INSTALL_DIR"]
 gemini_settings = Path.home() / ".gemini" / "settings.json"
-if gemini_settings.exists():
+if gemini_settings.exists() and not gemini_settings.is_symlink():
     try:
         data = json.loads(gemini_settings.read_text())
         servers = data.get("mcpServers") if isinstance(data, dict) else None
-        if isinstance(servers, dict) and "ninai-local" in servers:
+        entry = servers.get("ninai-local") if isinstance(servers, dict) else None
+        if isinstance(entry, dict) and entry.get("command") == install_dir + "/venv/bin/ninai-mcp":
             del servers["ninai-local"]
             mode = stat.S_IMODE(gemini_settings.stat().st_mode)
             temporary = gemini_settings.with_name(gemini_settings.name + ".ninai-uninstall.tmp")
@@ -62,10 +93,22 @@ if gemini_settings.exists():
     except (OSError, json.JSONDecodeError) as exc:
         print(f"Kept {gemini_settings} unchanged because it could not be safely read: {exc}")
 
-targets = (Path.home() / ".claude" / "settings.json", Path.home() / ".codex" / "hooks.json")
+targets = (Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))) / "settings.json",
+           Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "hooks.json")
+
+def owned_hook(command):
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return False
+    if words[:1] == ["env"]:
+        words = words[1:]
+        while words and "=" in words[0] and not words[0].startswith("-"):
+            words = words[1:]
+    return len(words) >= 2 and words[0] == install_dir + "/venv/bin/ninai" and words[1] in {"session-hook", "capture-hook"}
 
 for path in targets:
-    if not path.exists():
+    if not path.exists() or path.is_symlink():
         continue
     try:
         original = path.read_text()
@@ -73,7 +116,7 @@ for path in targets:
     except (OSError, json.JSONDecodeError) as exc:
         print(f"Kept {path} unchanged because it could not be safely read: {exc}")
         continue
-    hooks = data.get("hooks")
+    hooks = data.get("hooks") if isinstance(data, dict) else None
     if not isinstance(hooks, dict):
         continue
     changed = False
@@ -89,7 +132,7 @@ for path in targets:
             kept_hooks = []
             for item in group["hooks"]:
                 command = str(item.get("command", "")) if isinstance(item, dict) else ""
-                is_ninai = command.startswith(install_dir + "/venv/bin/ninai")
+                is_ninai = owned_hook(command)
                 if is_ninai:
                     changed = True
                 else:

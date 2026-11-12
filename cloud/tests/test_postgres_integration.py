@@ -117,6 +117,54 @@ class PostgresLifecycleTest(unittest.TestCase):
         with self.assertRaises(AuthorizationError):
             control.admin_users(identity)
 
+    def test_platform_usage_counts_only_nonempty_allowed_hosted_recalls(self) -> None:
+        control = ControlService(self.store._connection,
+                                 platform_admin_user_ids=frozenset({self.user}))
+        identity = ControlIdentity(self.user, self.workspace)
+        before = control.admin_overview(identity)
+        memory_id = str(uuid.uuid4())
+        for tool, ids, decision in [('recall', [], 'allow'),
+                                     ('recall', [memory_id], 'deny'),
+                                     ('search', [memory_id], 'allow')]:
+            self.store.record_disclosure(self.principal, tool_name=tool,
+                query='synthetic usage check', purpose='test metric exclusions',
+                returned_memory_ids=ids, decision=decision)
+        excluded = control.admin_overview(identity)
+        for key in ('activated_hosted_users', 'hosted_active_users_7d', 'successful_recalls_7d'):
+            self.assertEqual(excluded[key], before[key])
+        detail = control.admin_user(identity, self.user)
+        self.assertIsNone(detail['usage']['first_successful_recall_at'])
+        self.assertIsNotNone(detail['connections'][0]['last_disclosure_at'])
+
+        old = self.store.record_disclosure(self.principal, tool_name='recall',
+            query='synthetic usage check', purpose='old successful recall',
+            returned_memory_ids=[memory_id])
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("UPDATE disclosure_logs SET created_at=now()-interval '8 days' WHERE id=%s", (old,))
+        historical = control.admin_overview(identity)
+        self.assertEqual(historical['activated_hosted_users'], before['activated_hosted_users'] + 1)
+        self.assertEqual(historical['hosted_active_users_7d'], before['hosted_active_users_7d'])
+        self.assertEqual(historical['successful_recalls_7d'], before['successful_recalls_7d'])
+        for _ in range(2):
+            self.store.record_disclosure(self.principal, tool_name='recall',
+                query='synthetic usage check', purpose='recent successful recall',
+                returned_memory_ids=[memory_id])
+        active = control.admin_overview(identity)
+        self.assertEqual(active['activated_hosted_users'], before['activated_hosted_users'] + 1)
+        self.assertEqual(active['hosted_active_users_7d'], before['hosted_active_users_7d'] + 1)
+        self.assertEqual(active['successful_recalls_7d'], before['successful_recalls_7d'] + 2)
+        usage = control.admin_user(identity, self.user)['usage']
+        self.assertIsNotNone(usage['first_successful_recall_at'])
+        self.assertEqual(usage['successful_recalls'], 3)
+        self.assertEqual(usage['successful_recalls_7d'], 2)
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute('UPDATE workspaces SET deleted_at=now() WHERE id=%s', (self.workspace,))
+        closed = control.admin_overview(identity)
+        self.assertEqual(closed['activated_hosted_users'], before['activated_hosted_users'])
+        self.assertEqual(closed['hosted_active_users_7d'], before['hosted_active_users_7d'])
+        self.assertEqual(closed['successful_recalls_7d'], before['successful_recalls_7d'])
+        self.assertEqual(control.admin_user(identity, self.user)['usage']['successful_recalls'], 0)
+
     def test_session_archive_consent_idempotency_context_export_and_deletion(self) -> None:
         control = ControlService(self.store._connection)
         identity = ControlIdentity(self.user, self.workspace)

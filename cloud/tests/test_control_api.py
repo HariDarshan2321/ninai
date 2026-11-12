@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import hashlib
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -124,6 +124,28 @@ class Verifier(TokenVerifier):
                                    "email_verified": True})
 
 
+class BooleanSettingValidationTest(unittest.TestCase):
+    def test_malformed_permissions_and_capture_choices_never_reach_database(self):
+        connection = Mock(side_effect=AssertionError("Invalid setting reached the database"))
+        service = ControlService(connection, platform_admin_user_ids=frozenset())
+        identity = ControlIdentity("synthetic-user", "synthetic-workspace")
+        for bad in ("false", "true", "0", "1", 0, 1, None, [], {}):
+            for key in ("can_read", "can_propose", "can_auto_activate"):
+                with self.subTest(setting=key, value=bad):
+                    data = {"scope_kind": "project", "scope_id": "synthetic-project",
+                            "can_read": True, "can_propose": True, "can_auto_activate": False}
+                    data[key] = bad
+                    with self.assertRaisesRegex(ValueError, "must be true or false"):
+                        service.create_grant(identity, "synthetic-connection", data)
+            for key in ("archive_sessions", "propose_memories", "auto_approve_low_risk"):
+                with self.subTest(setting=key, value=bad):
+                    data = {"archive_sessions": False, "propose_memories": True, "auto_approve_low_risk": False}
+                    data[key] = bad
+                    with self.assertRaisesRegex(ValueError, "must be true or false"):
+                        service.update_capture_settings(identity, data)
+        connection.assert_not_called()
+
+
 class ControlAppTest(unittest.TestCase):
     def setUp(self):
         self.service = FakeService()
@@ -140,18 +162,18 @@ class ControlAppTest(unittest.TestCase):
     def test_control_page_is_dependency_free_and_does_not_cache(self):
         response = self.client.get("/control")
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Set up Ninai for Mac", response.text)
+        self.assertIn("Set up Ninai", response.text)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIn("sessionStorage", response.text)
         for label in ("Memories", "Permissions", "Download workspace export", "Delete workspace"):
             self.assertIn(label, response.text)
         for brand_copy in ("#0b302b", "#f4efe5", "#ff6846", "#dcef7b",
-                           "Sign in. Install. Keep going."):
+                           "Sign in. Choose your setup."):
             self.assertIn(brand_copy, response.text)
         self.assertIn('src="https://ninai.io/assets/ninai-wordmark.svg" alt="Ninai"', response.text)
         for native_dialog in ("prompt(", "alert(", "confirm("):
             self.assertNotIn(native_dialog, response.text)
-        for dashboard_copy in ("Finish setup", "Open signed-in setup",
+        for dashboard_copy in ("Finish cloud setup", "Copy Claude Code command",
                                "Claude.ai or supported ChatGPT workspace",
                                "Choose a project", "Create your workspace", "Read approved memories",
                                "Propose new memories", "Check configuration"):
@@ -196,7 +218,7 @@ class ControlAppTest(unittest.TestCase):
     def test_launch_journey_from_signed_out_to_tested_connection(self):
         landing = self.client.get("/control")
         self.assertEqual(landing.status_code, 200)
-        self.assertIn("Sign in. Install. Keep going.", landing.text)
+        self.assertIn("Sign in. Choose your setup.", landing.text)
         self.assertEqual(self.client.get("/api/control/overview").status_code, 401)
 
         overview = self.client.get("/api/control/overview", headers=self.auth)
@@ -242,12 +264,32 @@ class ControlAppTest(unittest.TestCase):
     def test_signed_in_control_center_contains_concise_local_setup(self):
         from ninai_cloud.control_ui import render_control_center
         page = render_control_center(oauth_enabled=True, signed_in=True)
-        for copy in ("Install Ninai in two minutes", "Download Ninai for Mac",
-                     "bash ~/Downloads/install-ninai-macos.sh", "Cloud is coming later.",
-                     "Shared connector preview", "Manage shared connections",
-                     "It never uploads or synchronizes the local Mac vault",
-                     "prepareLocalSetup"):
+        for copy in ("Choose your Ninai setup", "Download Mac source installer",
+                     "bash ~/Downloads/install-ninai-macos.sh", "Python 3.11",
+                     "signed, notarized Mac package is not available", "Set up cloud memory",
+                     "never uploads or synchronizes the local Mac memory",
+                     "prepareLocalSetup", "openCloudSetup(this)", "Try your first cloud memory",
+                     "Copy Claude Code command", "Copy Codex command"):
             self.assertIn(copy, page)
+        for unsupported in ("in two minutes", "local MVP", "Ninai%20MVP", "Cloud is coming later", "That is all."):
+            self.assertNotIn(unsupported, page)
+        from html.parser import HTMLParser
+        class Paths(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.details = 0
+                self.cloud_buttons = []
+            def handle_starttag(self, tag, attrs):
+                if tag == 'details':
+                    self.details += 1
+                if tag == 'button' and dict(attrs).get('onclick') == 'openCloudSetup(this)':
+                    self.cloud_buttons.append(self.details)
+            def handle_endtag(self, tag):
+                if tag == 'details':
+                    self.details -= 1
+        paths = Paths()
+        paths.feed(page)
+        self.assertEqual(paths.cloud_buttons, [0], 'Cloud setup must be discoverable outside advanced disclosures')
 
     def test_dashboard_oauth_login_uses_authorization_code_pkce(self):
         from ninai_cloud.auth import AuthSettings
@@ -266,8 +308,8 @@ class ControlAppTest(unittest.TestCase):
         ]))
         landing = client.get("/control").text
         self.assertIn("const oauthEnabled=true", landing)
-        for copy in ("Ninai for Mac", "Sign in. Install. Keep going.",
-                     "Cloud-hosted vaults are coming later."):
+        for copy in ("Your Ninai account", "Sign in. Choose your setup.",
+                     "Cloud setup is available for invited testing"):
             self.assertIn(copy, landing)
         self.assertIn('href="/control/login?screen_hint=signup"', landing)
         self.assertIn('href="/control/login"', landing)
@@ -563,7 +605,7 @@ class ControlAppTest(unittest.TestCase):
             self.assertIn('fill="#0B0B0C"', icon.text)
             self.assertIn('aria-label="ninai app icon — the return"', icon.text)
             self.assertEqual(client.get("/health").json()["status"], "ok")
-            self.assertIn("Set up Ninai for Mac", client.get("/control").text)
+            self.assertIn("Set up Ninai", client.get("/control").text)
             response = client.get("/api/control/overview", headers=self.auth)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["workspace"]["id"], "workspace-1")

@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -52,11 +53,30 @@ class MemoryStore:
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA foreign_keys=ON")
-        # Wait rather than fail immediately when the long-lived server and a
-        # short-lived hook write concurrently.
-        connection.execute("PRAGMA busy_timeout=5000")
+        try:
+            # Initial WAL conversion can return SQLITE_BUSY immediately when
+            # several assistants open the same older database together. Retry
+            # only lock errors within one shared five-second deadline, not a
+            # fresh five-second wait per attempt. Other errors must surface.
+            deadline = time.monotonic() + 5
+            while True:
+                remaining = max(0, deadline - time.monotonic())
+                connection.execute(f"PRAGMA busy_timeout={max(1, int(remaining * 1000))}")
+                try:
+                    connection.execute("PRAGMA journal_mode=WAL")
+                    break
+                except sqlite3.OperationalError as error:
+                    code = (getattr(error, "sqlite_errorcode", 0) or 0) & 0xFF
+                    remaining = deadline - time.monotonic()
+                    if code not in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED} or remaining <= 0:
+                        raise
+                    time.sleep(min(.025, remaining))
+            connection.execute("PRAGMA foreign_keys=ON")
+            # Normal operations retain their bounded contention wait.
+            connection.execute("PRAGMA busy_timeout=5000")
+        except BaseException:
+            connection.close()
+            raise
         return connection
 
     @contextmanager
@@ -171,6 +191,10 @@ class MemoryStore:
                 # Some minimal SQLite builds omit FTS5. Recall falls back to LIKE.
                 pass
 
+            # The app and several assistant subprocesses can open an older
+            # database together. Serialize the column inspection and ALTERs:
+            # checking outside a write transaction lets both add the same column.
+            db.execute("BEGIN IMMEDIATE")
             # Backward-compatible migration for vaults created before the
             # sensitivity column existed.
             columns = {
@@ -621,6 +645,10 @@ class MemoryStore:
     def revoke_project(self, client_id: str, project_id: str, action: str | None = None) -> None:
         if action is not None:
             self._validate_action(action)
+        client_id = client_id.strip()
+        if not client_id:
+            raise ValueError("client_id cannot be empty")
+        self._require_project(project_id)
         with self._connection() as db:
             db.execute("""UPDATE project_permissions SET allowed=0,updated_at=?
                 WHERE client_id=? AND project_id=? AND (? IS NULL OR action=?)""",

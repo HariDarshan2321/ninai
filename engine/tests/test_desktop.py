@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -155,6 +156,69 @@ class DesktopApiTest(unittest.TestCase):
         self.assertFalse(self.api.setup_status(project, "codex")["data"]["revocation_verified"])
         self.store.recall("reversible", client_id="codex", project_id=project, purpose="fresh denial")
         self.assertTrue(self.api.setup_status(project, "codex")["data"]["revocation_verified"])
+
+    def test_malformed_switch_values_cannot_grant_access_or_enable_capture(self) -> None:
+        project = self.api.create_project("Malformed switch check")["data"]["id"]
+        setters = [
+            lambda value: self.api.set_permission("codex", "work", value),
+            lambda value: self.api.set_project_permission("codex", project, "read", value),
+            lambda value: self.api.set_capability("codex", "work", "write", value),
+            self.api.set_capture_enabled,
+        ]
+        for invalid in ("false", "true", "1", 0, 1, None, [], {}):
+            for setter in setters:
+                with self.subTest(value=invalid, setter=setter):
+                    self.assertFalse(setter(invalid)["ok"])
+            self.assertEqual(self.store.allowed_scopes("codex"), set())
+            self.assertFalse(self.store.can_access_project("codex", project))
+            self.assertEqual(self.store.permissions("codex"), [])
+            self.assertFalse(self.store.capture_enabled())
+        self.assertTrue(self.api.set_permission("codex", "work", True)["ok"])
+        self.assertFalse(self.api.set_permission("codex", "work", "false")["ok"])
+        self.assertEqual(self.store.allowed_scopes("codex"), {"work"})
+        self.assertTrue(self.api.set_permission("codex", "work", False)["ok"])
+        self.assertEqual(self.store.allowed_scopes("codex"), set())
+
+    def test_project_revoke_normalizes_client_and_rejects_missing_project(self) -> None:
+        project = self.api.create_project("Whitespace client check")["data"]["id"]
+        self.assertTrue(self.api.set_project_permission(" codex ", project, "read", True)["ok"])
+        self.assertTrue(self.store.can_access_project("codex", project))
+        self.assertTrue(self.api.set_project_permission(" codex ", project, "read", False)["ok"])
+        self.assertFalse(self.store.can_access_project("codex", project))
+        self.assertTrue(self.api.set_project_permission("codex", project, "read", False)["ok"])
+        self.assertFalse(self.api.set_project_permission("codex", "missing", "read", False)["ok"])
+        self.assertFalse(self.api.set_project_permission(" ", project, "read", False)["ok"])
+
+    def test_empty_selection_and_legacy_logs_never_verify_a_new_project(self) -> None:
+        for project, client in ((None, None), ("", ""), ("missing", "codex")):
+            status = self.api.setup_status(project, client)["data"]
+            self.assertFalse(status["project_selected"])
+            self.assertFalse(status["memory_saved"])
+            self.assertFalse(status["read_allowed"])
+            self.assertFalse(status["recall_verified"])
+            self.assertFalse(status["revocation_verified"])
+        old_path = Path(self.temp.name) / "legacy.sqlite3"
+        with sqlite3.connect(old_path) as db:
+            db.execute("""CREATE TABLE access_logs (
+                id TEXT PRIMARY KEY, client_id TEXT NOT NULL, purpose TEXT NOT NULL,
+                query TEXT NOT NULL, scopes TEXT NOT NULL, memory_ids TEXT NOT NULL,
+                estimated_tokens INTEGER NOT NULL, created_at TEXT NOT NULL)""")
+            db.execute("INSERT INTO access_logs VALUES(?,?,?,?,?,?,?,?)", (
+                "old", "codex", "legacy recall", "decision", '["project"]',
+                '["old-memory"]', 20, "2026-01-01T00:00:00+00:00",
+            ))
+        legacy = MemoryStore(old_path)
+        api = DesktopApi(legacy)
+        project = api.create_project("New named project")["data"]["id"]
+        api.add_memory("Keep changes reversible", project_id=project)
+        legacy.grant_project("codex", project, "read")
+        self.assertFalse(api.setup_status(project, "codex")["data"]["recall_verified"])
+        self.assertIsNone(legacy.list_logs()[0]["project_id"])
+        reopened = MemoryStore(old_path)
+        self.assertEqual(len(reopened.list_logs()), 1)
+        self.assertEqual(len(reopened.list_projects()), 1)
+        reopened.recall("reversible", client_id="codex", project_id=project, purpose="fresh named-project check")
+        self.assertTrue(DesktopApi(reopened).setup_status(project, "codex")["data"]["recall_verified"])
 
     def test_cli_status_treats_a_timeout_as_needing_attention(self) -> None:
         with (

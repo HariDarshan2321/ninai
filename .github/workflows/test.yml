@@ -33,6 +33,7 @@ jobs:
       - run: pip install .
       - run: python -m unittest discover -s tests -v
       - run: python ../scripts/verify_local_setup.py
+      - run: python ../scripts/stress_local_setup.py --workers 8 --operations 1000 --timeout-seconds 45
 
   website:
     runs-on: ubuntu-latest
@@ -81,3 +82,33 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install .
       - run: python -m unittest discover -s tests -v
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: website
+    env:
+      NINAI_TEST_PYTHON: python3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: python -m pip install ../engine
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-regression-failures
+          path: website/test-results/
+          retention-days: 7

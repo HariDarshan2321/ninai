@@ -54,7 +54,7 @@ async def verify(directory: str) -> dict[str, object]:
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 result = await session.call_tool("recall", {
-                    "query": "reversible migrations", "purpose": "disposable onboarding acceptance",
+                    "query": "", "purpose": "disposable onboarding acceptance",
                     "project_id": target, "max_tokens": 300,
                 })
                 if result.isError:

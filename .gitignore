@@ -18,3 +18,5 @@ website/.next/
 website/node_modules/
 website/out/
 website/tsconfig.tsbuildinfo
+website/test-results/
+website/playwright-report/

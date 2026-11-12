@@ -103,6 +103,11 @@ def _err(message: str) -> dict[str, Any]:
     return {"ok": False, "error": message}
 
 
+def _require_boolean(value: Any) -> None:
+    if not isinstance(value, bool):
+        raise ValueError("Choose on or off for this setting.")
+
+
 def _source_scheme(source_uri: str) -> str:
     scheme = urlsplit(source_uri).scheme
     return scheme or "unknown"
@@ -301,6 +306,7 @@ class DesktopApi:
         self, client_id: str, project_id: str, action: str, allowed: bool
     ) -> dict[str, Any]:
         try:
+            _require_boolean(allowed)
             if allowed:
                 self.store.grant_project(client_id, project_id, action)
             else:
@@ -324,6 +330,7 @@ class DesktopApi:
         self, client_id: str, scope: str, action: str, allowed: bool
     ) -> dict[str, Any]:
         try:
+            _require_boolean(allowed)
             self.store.set_scope_capability(client_id, scope, action, allowed)
             return _ok({"allowed": bool(allowed)})
         except Exception as error:
@@ -379,6 +386,7 @@ class DesktopApi:
         self, client_id: str, scope: str, allowed: bool
     ) -> dict[str, Any]:
         try:
+            _require_boolean(allowed)
             client_id = (client_id or "").strip()
             if not client_id:
                 return _err("Client id cannot be empty")
@@ -420,7 +428,8 @@ class DesktopApi:
 
     def set_capture_enabled(self, enabled: bool) -> dict[str, Any]:
         try:
-            self.store.set_capture_enabled(bool(enabled))
+            _require_boolean(enabled)
+            self.store.set_capture_enabled(enabled)
             return _ok({"enabled": self.store.capture_enabled()})
         except Exception as error:
             return _err(str(error))

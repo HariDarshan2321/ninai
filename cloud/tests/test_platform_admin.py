@@ -36,7 +36,12 @@ class Database:
             return {'n': 0}
         if 'AS signups_7d' in self.sql:
             return dict(users=0, signups_7d=0, signed_in_7d=0, downloaders=0,
-                        downloads=0, workspaces=0, connections=0)
+                        downloads=0, workspaces=0, connections=0,
+                        activated_hosted_users=0, hosted_active_users_7d=0,
+                        successful_recalls_7d=0)
+        if 'AS first_successful_recall_at' in self.sql:
+            return dict(first_successful_recall_at=None, successful_recalls=0,
+                        successful_recalls_7d=0)
         return None if self.deleted else {'id': ADMIN}
 
     def fetchall(self):
@@ -114,7 +119,9 @@ class AdminTest(unittest.TestCase):
         for sql, _ in self.db.calls:
             for forbidden in ('memories', 'memory_sources', 'session_artifacts', 'personal_access_tokens', 'metadata_json'):
                 self.assertNotIn(forbidden, sql)
-        self.assertEqual(set(response.json()), {'user', 'workspaces', 'connections', 'downloads'})
+        self.assertEqual(set(response.json()), {'user', 'workspaces', 'connections', 'downloads', 'usage'})
+        self.assertEqual(response.json()['usage'], dict(first_successful_recall_at=None,
+                         successful_recalls=0, successful_recalls_7d=0))
 
     def test_callback_records_only_valid_dashboard_logins_and_redirects_admin(self):
         for access_token, expected, destination in [('admin', 302, '/control/admin'),
