@@ -24,6 +24,8 @@ The official customer path is deliberately short:
 
 The installer checks for a compatible Python version, installs the Ninai app and local SQLite vault, detects Claude Code, Codex, and Gemini CLI, connects supported agents it finds, asks before enabling automatic Claude/Codex session handoff, and opens Ninai. Other local stdio MCP hosts can connect manually with their own explicitly granted client identity. Advanced flags and contributor setup remain documented in [`scripts/install-local`](scripts/install-local).
 
+For existing installations, see [Customer upgrades](docs/CUSTOMER-UPGRADES.md). App, cloud service, and assistant integration updates are separate; there is no automatic in-app updater yet.
+
 To remove only Ninai, its local connectors, and its lifecycle hooks while keeping a recoverable copy in the Mac Trash, run [`scripts/uninstall-local`](scripts/uninstall-local) from a clone.
 
 Because this repository is public, developers can inspect and run its source directly. The official download and customer onboarding flow require an account; the open-source code itself is not access-controlled.
