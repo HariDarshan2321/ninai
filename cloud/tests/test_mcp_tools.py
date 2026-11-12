@@ -87,6 +87,17 @@ class HostedMCPToolsTest(unittest.TestCase):
         self.assertFalse(self.store.creates[0]["activate"])
         self.assertTrue(self.store.creates[1]["activate"])
         self.assertEqual(self.store.creates[1]["source_uri"], "codex://session/1")
+
+    def test_recall_can_browse_without_inventing_search_terms(self) -> None:
+        result = self.tools.recall("  \n ", "show my memories", project_id="project", max_tokens=2000)
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(self.store.searches, [{"query": "", "project_id": "project"}])
+        self.assertEqual(self.store.disclosures[0]["returned_memory_ids"], ["memory-1"])
+        for invalid in (None, 12, [], "x" * 1001):
+            with self.subTest(query=type(invalid).__name__), self.assertRaises(ValueError):
+                self.tools.recall(invalid, "show my memories")
+        with self.assertRaisesRegex(ValueError, "query is required"):
+            self.tools.search("", "directed search")
     def test_request_text_limits(self) -> None:
         with self.assertRaisesRegex(ValueError, "query must be at most"):
             self.tools.search("x" * 1001, "purpose")

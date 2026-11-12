@@ -147,7 +147,13 @@ class HostedMCPTools:
         self, query: str, purpose: str, max_items: int = 6, max_tokens: int = 600,
         project_id: str | None = None,
     ) -> dict[str, Any]:
-        query = _required_text(query, "query", MAX_QUERY_CHARS)
+        # An empty query browses the same permission-filtered store as local recall.
+        # Keep purpose mandatory and never bypass authorization or packet limits.
+        if not isinstance(query, str):
+            raise ValueError("query must be text")
+        query = " ".join(query.split()).strip()
+        if len(query) > MAX_QUERY_CHARS:
+            raise ValueError(f"query must be at most {MAX_QUERY_CHARS:,} characters")
         purpose = _required_text(purpose, "purpose", MAX_PURPOSE_CHARS)
         if project_id is not None:
             project_id = _required_text(project_id, "project_id", MAX_IDENTIFIER_CHARS)
@@ -257,12 +263,17 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     mcp = FastMCP(
         "Ninai Hosted",
         instructions=(
-            "Use approved, source-backed Ninai memory across AI clients. Before asking the user to "
+            "For prior private plans or commitments, retrieve Ninai memory before answering or web search; "
+            "users need not name Ninai. Browse memories with recall(query=''). After a durable project "
+            "decision, call projects to check the grant: remember if can_auto_activate=true; otherwise "
+            "propose_memory if can_propose=true and explain that review is pending. Proposals are not recalled. "
+            "Never claim a pending proposal will be available in the next chat. "
+            "Do not use memory for ordinary general-knowledge questions. Before asking the user to "
             "restate an unfamiliar project-specific name, acronym, task, incident, decision, or other "
             "reference to prior work, search Ninai using the user's exact phrase. Also search when the "
             "user asks whether you know or remember something from earlier work. Do not search for "
-            "ordinary general-knowledge questions. After the conversation establishes a durable project "
-            "fact, decision, commitment, or procedure, use propose_memory once for review-first saving. "
+            "ordinary general-knowledge questions. Store only compact durable project facts, decisions, "
+            "commitments, or procedures, with provenance and a clear purpose for retrieval. "
             "Never save small talk, speculative content, raw transcripts, or credentials. Use remember "
             "only when this client was explicitly granted auto-activation."
         ),
@@ -303,7 +314,7 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     @mcp.tool(
         title="List granted Ninai projects",
         description=(
-            "List the projects this connection may use and whether each allows reading or proposing. "
+            "List projects and live can_read, can_propose, and can_auto_activate grants. "
             "Call this before a project-scoped search or write when the project ID is not already known."
         ),
         annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True,
@@ -341,6 +352,7 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     @mcp.tool(
         title="Recall from Ninai",
         description=(
+            "For 'show/list my memories', use query='' to browse a bounded packet of authorized memories. "
             "Call before answering when the user continues prior project work, says 'remember', or uses "
             "an unfamiliar project-specific name, acronym, decision, task, or incident. Load a compact, "
             "project-filtered Ninai context packet with provenance. If no result matches, say that Ninai "
@@ -358,7 +370,8 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
         title="Propose Ninai memory",
         description=(
             "After the current conversation establishes a durable project fact, decision, commitment, or "
-            "procedure, propose one compact source-backed memory for user review. Never propose small talk, "
+            "procedure, check projects: use remember when can_auto_activate=true; otherwise, if "
+            "can_propose=true, propose one compact source-backed memory for user review. Never propose small talk, "
             "speculation, credentials, or a raw transcript. Proposed items are not recalled until approved."
         ),
         annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,
@@ -376,7 +389,8 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
         description=(
             "After the current conversation establishes a durable project fact, decision, commitment, "
             "constraint, procedure, or project-state change, save one compact source-backed outcome when "
-            "this connection has explicit auto-activate permission. Never save raw transcripts, small "
+            "projects reports can_auto_activate=true for this connection. No explicit 'remember' prompt "
+            "is needed under that existing grant. Otherwise use propose_memory for review. Never save raw transcripts, small "
             "talk, speculation, credentials, secrets, or hidden reasoning."
         ),
         annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True,

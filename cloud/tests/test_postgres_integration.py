@@ -266,6 +266,22 @@ class PostgresLifecycleTest(unittest.TestCase):
         with self.assertRaises(AuthorizationError):
             self.store.get_memory(self.principal, created.id)
 
+    def test_browse_recall_respects_live_grants_and_discloses(self) -> None:
+        from ninai_cloud.mcp_server import HostedMCPTools
+        created = self.store.create_memory(self.principal, content="Atlas commitments reviewed monthly",
+            memory_type="decision", scope_kind="project", scope_id=self.project,
+            project_id=self.project, source_uri="synthetic://browse", idempotency_key="browse", activate=True)
+        tools = HostedMCPTools(self.store, lambda: self.principal)
+        packet = tools.recall("", "show my memories", max_tokens=2000)
+        self.assertEqual([fact["id"] for fact in packet["facts"]], [created.id])
+        self.assertLessEqual(packet["estimated_tokens"], 2000)
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("UPDATE client_scope_grants SET can_read=false WHERE client_connection_id=%s", (self.client,))
+        self.assertEqual(tools.recall("", "show my memories")["facts"], [])
+        self.store.revoke_client(self.workspace, self.client, self.user)
+        with self.assertRaises(AuthorizationError):
+            tools.recall("", "show my memories")
+
     def test_granted_projects_and_project_filtered_search(self) -> None:
         other_project = str(uuid.uuid4())
         ungranted_project = str(uuid.uuid4())
