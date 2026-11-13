@@ -8,6 +8,43 @@ from ninai.desktop.api import DesktopApi
 
 WINDOW_TITLE = "Ninai"
 
+# Expose flat, explicit RPC names only; never pass the owner object to the
+# webview recursive/dotted dispatcher. Private store and approval authority stay
+# unreachable through native bridge payload names.
+BRIDGE_METHODS = (
+    'list_access_requests',
+    'approve_access_request',
+    'deny_access_request',
+    'meta',
+    'check_for_updates',
+    'list_memories',
+    'search',
+    'get_memory',
+    'add_memory',
+    'update_memory',
+    'delete_memory',
+    'today',
+    'sources',
+    'list_projects',
+    'setup_status',
+    'create_project',
+    'get_project_permissions',
+    'set_project_permission',
+    'get_capabilities',
+    'set_capability',
+    'list_clients',
+    'assistant_statuses',
+    'connect_assistant',
+    'get_permissions',
+    'set_permission',
+    'list_logs',
+    'list_sessions',
+    'delete_session',
+    'capture_status',
+    'set_capture_enabled',
+)
+
+
 
 def _index_path() -> Path:
     index = Path(str(files("ninai.desktop").joinpath("web", "index.html")))
@@ -55,14 +92,15 @@ def main() -> None:
     _configure_macos_app()
     sys.stdout.write("Opening Ninai…\n")
     sys.stdout.flush()
-    webview.create_window(
+    window = webview.create_window(
         WINDOW_TITLE,
         url=str(_index_path()),
-        js_api=api,
+        js_api=None,
         width=1120,
         height=760,
         min_size=(880, 620),
     )
+    window.expose(*(getattr(api, name) for name in BRIDGE_METHODS))
     webview.start()
 
 

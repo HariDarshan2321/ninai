@@ -1,0 +1,60 @@
+name: Desktop installer regression
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'engine/**'
+      - 'packaging/**'
+      - 'scripts/build-*-app*'
+      - 'scripts/test-windows-installer.ps1'
+      - 'scripts/test-macos-bundle-upgrade.py'
+      - '.github/workflows/desktop-installers.yml'
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 8eb5224ce2c7023ad52ad42e7563c446c10e3b3f
+          path: prior-source
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Build previous package fixture (0.1.0)
+        shell: pwsh
+        run: ./scripts/build-windows-app.ps1 -EngineDir "$pwd/prior-source/engine" -BuildDir "$env:RUNNER_TEMP/old-build" -DistDir "$env:RUNNER_TEMP/old-dist"
+      - name: Build current unsigned package
+        shell: pwsh
+        run: ./scripts/build-windows-app.ps1
+      - name: Native install and upgrade regression
+        shell: pwsh
+        run: ./scripts/test-windows-installer.ps1 -PreviousInstaller "$env:RUNNER_TEMP/old-dist/Ninai-Windows-0.1.0-unsigned.exe" -CurrentInstaller ((Get-ChildItem dist/windows/*-unsigned.exe).FullName)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-unsigned-preview
+          path: |
+            dist/windows/*-unsigned.exe
+            dist/windows/*.sha256
+          retention-days: 7
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: ./scripts/build-macos-app
+      - run: build/macos/venv/bin/python -m unittest discover -s engine/tests -p test_desktop_bridge_boundary.py -v
+      - run: python -m pip install ./engine
+      - run: python scripts/test-macos-bundle-upgrade.py dist/macos/Ninai.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-adhoc-development
+          path: dist/macos/Ninai-macOS.zip
+          retention-days: 7

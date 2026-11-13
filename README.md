@@ -22,7 +22,7 @@ The official customer path is deliberately short:
 2. Create an account or sign in.
 3. Download the authenticated Mac installer and run the one command shown there.
 
-The installer checks for a compatible Python version, installs the Ninai app and local SQLite vault, detects Claude Code, Codex, and Gemini CLI, connects supported agents it finds, asks before enabling automatic Claude/Codex session handoff, and opens Ninai. Other local stdio MCP hosts can connect manually with their own explicitly granted client identity. Advanced flags and contributor setup remain documented in [`scripts/install-local`](scripts/install-local).
+The source installer requires Python 3.11+ and Apple Command Line Tools. It checks those prerequisites, installs the Ninai app and local SQLite vault, detects Claude Code, Codex, and Gemini CLI, connects supported agents it finds, asks before enabling automatic Claude/Codex session handoff, and opens Ninai. Other local stdio MCP hosts can connect manually with their own explicitly granted client identity. Advanced flags and contributor setup remain documented in [`scripts/install-local`](scripts/install-local).
 
 For existing installations, see [Customer upgrades](docs/CUSTOMER-UPGRADES.md). App, cloud service, and assistant integration updates are separate; there is no automatic in-app updater yet.
 

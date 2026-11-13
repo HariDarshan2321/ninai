@@ -24,7 +24,7 @@ from ninai.store import MemoryStore
 
 WEB = ROOT / "engine" / "src" / "ninai" / "desktop" / "web"
 METHODS = frozenset({
-    "meta", "check_for_updates", "list_memories", "search", "get_memory", "add_memory", "update_memory",
+    "meta", "check_for_updates", "list_access_requests", "approve_access_request", "deny_access_request", "test_seed_access_request", "list_memories", "search", "get_memory", "add_memory", "update_memory",
     "delete_memory", "today", "sources", "list_projects", "create_project",
     "get_project_permissions", "set_project_permission", "get_capabilities", "set_capability",
     "list_clients", "assistant_statuses", "get_permissions", "set_permission", "list_logs",
@@ -41,7 +41,7 @@ def main() -> None:
         parser.error("port must be between 1024 and 65535")
     with tempfile.TemporaryDirectory(prefix="ninai-desktop-acceptance-") as fixture:
         os.environ["NINAI_DATA_DIR"] = fixture
-        api = DesktopApi(MemoryStore(Path(fixture) / "ninai.sqlite3"))
+        api = DesktopApi(MemoryStore(Path(fixture) / "ninai.sqlite3"), owner_verifier=lambda snapshot: True)
         token = secrets.token_urlsafe(32)
         origin = f"http://127.0.0.1:{args.port}"
         bridge = """<script>
@@ -101,14 +101,18 @@ def main() -> None:
                     if request.get("method") not in METHODS or not isinstance(request.get("args"), list):
                         self.reply(400, b'{}')
                         return
-                    result = getattr(api, request["method"])(*request["args"])
+                    if request["method"] == "test_seed_access_request":
+                        values = request["args"][0]
+                        result = {"ok": True, "data": api._store.create_access_request(**values)}
+                    else:
+                        result = getattr(api, request["method"])(*request["args"])
                     self.reply(200, json.dumps(result).encode())
                 except (ValueError, TypeError, KeyError):
                     self.reply(400, b'{"ok":false,"error":"Invalid test bridge request"}')
 
         server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
         print(origin + "/", flush=True)
-        print(f"Synthetic database: {api.store.path}", flush=True)
+        print(f"Synthetic database: {api._store.path}", flush=True)
         print("Disposable synthetic desktop API fixture; Ctrl-C stops it.", flush=True)
         try:
             server.serve_forever()

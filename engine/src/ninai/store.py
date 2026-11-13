@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Iterator
 
 from .config import database_path
+from .governance import OwnerVerificationAuthority
 from .contracts import (
     CreateMemoryRequest,
     DisclosureEvent,
@@ -44,6 +45,7 @@ class MemoryStore:
         self.path = Path(path) if path else database_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
+        self._init_governance_triggers()
         os.chmod(self.path, 0o600)
         for suffix in ("-wal", "-shm"):
             sidecar = Path(f"{self.path}{suffix}")
@@ -228,9 +230,246 @@ class MemoryStore:
                     allowed INTEGER NOT NULL, updated_at TEXT NOT NULL,
                     PRIMARY KEY(client_id,project_id,action)
                 );
+                CREATE TABLE IF NOT EXISTS governance_revision (
+                    id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL
+                );
+                INSERT OR IGNORE INTO governance_revision VALUES(1,0);
+                CREATE TABLE IF NOT EXISTS access_requests (
+                    id TEXT PRIMARY KEY, client_id TEXT NOT NULL, project_id TEXT NOT NULL,
+                    project_name TEXT NOT NULL, actions TEXT NOT NULL, reason TEXT NOT NULL,
+                    expires_in_seconds INTEGER NOT NULL, expires_at REAL NOT NULL,
+                    idempotency_key TEXT NOT NULL, revision INTEGER NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('pending','approved','denied')),
+                    created_at TEXT NOT NULL, reviewed_at TEXT,
+                    UNIQUE(client_id,idempotency_key)
+                );
                 CREATE INDEX IF NOT EXISTS memories_project_idx ON memories(project_id,scope,updated_at);
                 CREATE INDEX IF NOT EXISTS access_logs_project_client_idx ON access_logs(project_id,client_id,created_at DESC);
             """)
+
+    def _init_governance_triggers(self) -> None:
+        # A monotonic revision catches real policy/identity changes, including
+        # grant/revoke ABA. Capture heartbeats and timestamp-only writes are safe.
+        # cwd_or_repo is last-observed capture metadata: worktrees sharing a
+        # binding have one project identity, independent of their local paths.
+        policy_columns = {
+            "projects": ("id", "name", "binding_key"),
+            "project_permissions": ("client_id", "project_id", "action", "allowed"),
+            "permissions": ("client_id", "scope", "allowed"),
+            "scope_capabilities": ("client_id", "scope", "action", "allowed"),
+        }
+        with self._connection() as db:
+            # Replace older unconditional UPDATE triggers atomically, so other
+            # processes never observe a gap in revision enforcement on upgrade.
+            db.execute("BEGIN IMMEDIATE")
+            for table, columns in policy_columns.items():
+                db.execute(f"DROP TRIGGER IF EXISTS governance_{table}_update")
+                for operation in ("INSERT", "UPDATE", "DELETE"):
+                    condition = ""
+                    if operation == "UPDATE":
+                        condition = "WHEN " + " OR ".join(f"OLD.{column} IS NOT NEW.{column}" for column in columns)
+                    db.execute(f"""CREATE TRIGGER IF NOT EXISTS governance_{table}_{operation.lower()}
+                        AFTER {operation} ON {table} {condition} BEGIN
+                        UPDATE governance_revision SET revision=revision+1 WHERE id=1; END""")
+
+    @staticmethod
+    def _access_request_value(row: sqlite3.Row, revision: int) -> dict[str, object]:
+        value = dict(row)
+        value["actions"] = json.loads(str(value["actions"]))
+        if value["status"] == "pending":
+            if float(value["expires_at"]) <= time.time():
+                value["status"] = "expired"
+            elif value["revision"] != revision:
+                value["status"] = "stale"
+        return value
+
+    def create_access_request(self, *, client_id: str, project_id: str,
+                              actions: list[str], reason: str, idempotency_key: str,
+                              expires_in_seconds: int = 86400) -> dict[str, object]:
+        """Propose explicit project grants without changing any permissions."""
+        if not isinstance(client_id, str) or not client_id.strip() or len(client_id) > 160:
+            raise ValueError("A bounded client id is required")
+        if not isinstance(project_id, str) or not project_id or len(project_id) > 160:
+            raise ValueError("An exact project id is required")
+        if not isinstance(actions, list) or not actions or len(actions) > 3 or any(
+            not isinstance(action, str) or action not in {"read", "write", "delete"} for action in actions
+        ) or len(set(actions)) != len(actions):
+            raise ValueError("Choose unique read, write, and/or delete actions")
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
+            raise ValueError("A reason of 1 to 1000 characters is required")
+        if contains_secret(reason):
+            raise ValueError("Reason must not contain credentials or secrets")
+        if not isinstance(idempotency_key, str) or not idempotency_key.strip() or len(idempotency_key) > 128:
+            raise ValueError("An idempotency key of 1 to 128 characters is required")
+        if type(expires_in_seconds) is not int or not 60 <= expires_in_seconds <= 604800:
+            raise ValueError("Request expiry must be between 60 seconds and 7 days")
+        client_id, reason, idempotency_key = client_id.strip(), reason.strip(), idempotency_key.strip()
+        encoded_actions = json.dumps(sorted(actions))
+        with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            revision = int(db.execute("SELECT revision FROM governance_revision WHERE id=1").fetchone()[0])
+            previous = db.execute("SELECT * FROM access_requests WHERE client_id=? AND idempotency_key=?",
+                                  (client_id, idempotency_key)).fetchone()
+            if previous:
+                if (previous["project_id"], previous["actions"], previous["reason"], previous["expires_in_seconds"]) != (
+                    project_id, encoded_actions, reason, expires_in_seconds
+                ):
+                    raise ValueError("Idempotency key already identifies a different request")
+                return self._access_request_value(previous, revision)
+            project = db.execute("SELECT name FROM projects WHERE id=?", (project_id,)).fetchone()
+            if project is None:
+                raise ValueError("Unknown project; requests must name an existing project id")
+            count = db.execute("SELECT COUNT(*) FROM access_requests WHERE client_id=? AND status='pending' AND expires_at>? AND revision=?",
+                               (client_id, time.time(), revision)).fetchone()[0]
+            if count >= 20:
+                raise ValueError("Review or expire existing requests before creating more")
+            request_id = str(uuid.uuid4())
+            db.execute("""INSERT INTO access_requests VALUES(?,?,?,?,?,?,?,?,?,?,'pending',?,NULL)""",
+                       (request_id, client_id, project_id, project["name"], encoded_actions, reason,
+                        expires_in_seconds, time.time() + expires_in_seconds, idempotency_key, revision, now_iso()))
+            row = db.execute("SELECT * FROM access_requests WHERE id=?", (request_id,)).fetchone()
+            return self._access_request_value(row, revision)
+
+    def get_access_request(self, request_id: str, *, client_id: str | None = None) -> dict[str, object]:
+        with self._connection() as db:
+            row = db.execute("SELECT * FROM access_requests WHERE id=?", (request_id,)).fetchone()
+            if row is None or (client_id is not None and row["client_id"] != client_id):
+                raise ValueError("Access request not found")
+            revision = int(db.execute("SELECT revision FROM governance_revision WHERE id=1").fetchone()[0])
+            return self._access_request_value(row, revision)
+
+    def list_access_requests(self, *, status: str | None = "pending") -> list[dict[str, object]]:
+        """Owner transport only; never register this as an MCP tool."""
+        if status not in {None, "pending", "approved", "denied", "expired", "stale"}:
+            raise ValueError("Unknown request status")
+        with self._connection() as db:
+            revision = int(db.execute("SELECT revision FROM governance_revision WHERE id=1").fetchone()[0])
+            values = [self._access_request_value(row, revision) for row in db.execute(
+                "SELECT * FROM access_requests ORDER BY created_at DESC LIMIT 500")]
+            return [value for value in values if status is None or value["status"] == status]
+
+    def deny_access_request(self, request_id: str) -> dict[str, object]:
+        """Owner transport only. Denial creates no grants."""
+        with self._connection() as db:
+            db.execute("UPDATE access_requests SET status='denied',reviewed_at=? WHERE id=? AND status='pending'",
+                       (now_iso(), request_id))
+        return self.get_access_request(request_id)
+
+    def approve_access_request(self, request_id: str, *, ticket: str,
+                               authority: OwnerVerificationAuthority) -> dict[str, object]:
+        """Apply precisely the reviewed proposal with a one-use owner capability."""
+        if not isinstance(authority, OwnerVerificationAuthority):
+            raise PermissionError("A trusted owner verification authority is required")
+        with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM access_requests WHERE id=?", (request_id,)).fetchone()
+            if row is None:
+                raise ValueError("Access request not found")
+            revision = int(db.execute("SELECT revision FROM governance_revision WHERE id=1").fetchone()[0])
+            request = self._access_request_value(row, revision)
+            authority.consume(ticket, request)
+            if request["status"] != "pending":
+                raise ValueError("Request is no longer pending; create a new request for review")
+            if db.execute("SELECT 1 FROM projects WHERE id=?", (row["project_id"],)).fetchone() is None:
+                raise ValueError("Project no longer exists")
+            for action in request["actions"]:
+                db.execute("""INSERT INTO project_permissions VALUES(?,?,?,1,?)
+                    ON CONFLICT(client_id,project_id,action) DO UPDATE SET allowed=1,updated_at=excluded.updated_at""",
+                           (row["client_id"], row["project_id"], action, now_iso()))
+            db.execute("UPDATE access_requests SET status='approved',reviewed_at=? WHERE id=?",
+                       (now_iso(), request_id))
+        return self.get_access_request(request_id)
+
+    def owner_permission_snapshot(self, client_id: str, action: str, *,
+                                  project_id: str | None = None,
+                                  scope: str | None = None) -> dict[str, object]:
+        """Owner-only review context for a direct increase; not an MCP operation."""
+        self._validate_action(action)
+        if not isinstance(client_id, str) or not client_id.strip() or len(client_id) > 160:
+            raise ValueError("A bounded client id is required")
+        if (project_id is None) == (scope is None):
+            raise ValueError("Choose exactly one project or memory area")
+        with self._connection() as db:
+            # Keep the target and revision in one consistent read transaction.
+            db.execute("BEGIN")
+            revision = int(db.execute("SELECT revision FROM governance_revision WHERE id=1").fetchone()[0])
+            value: dict[str, object] = {
+                "id": str(uuid.uuid4()), "status": "pending", "client_id": client_id.strip(),
+                "actions": [action], "revision": revision,
+            }
+            if project_id is not None:
+                project = db.execute("SELECT name FROM projects WHERE id=?", (project_id,)).fetchone()
+                if project is None:
+                    raise ValueError("Project not found")
+                value.update(project_id=project_id, project_name=project["name"])
+                row = db.execute("SELECT allowed FROM project_permissions WHERE client_id=? AND project_id=? AND action=?",
+                                 (client_id.strip(), project_id, action)).fetchone()
+            else:
+                if scope not in ALLOWED_SCOPES:
+                    raise ValueError("Unknown memory area")
+                value["scope"] = scope
+                if action == "read":
+                    row = db.execute("SELECT allowed FROM permissions WHERE client_id=? AND scope=?",
+                                     (client_id.strip(), scope)).fetchone()
+                else:
+                    row = db.execute("SELECT allowed FROM scope_capabilities WHERE client_id=? AND scope=? AND action=?",
+                                     (client_id.strip(), scope, action)).fetchone()
+            value["current_allowed"] = bool(row and row["allowed"])
+            return value
+
+    def apply_owner_permission_change(self, snapshot: dict[str, object], *, ticket: str,
+                                      authority: OwnerVerificationAuthority) -> dict[str, object]:
+        """Atomically apply a verified owner increase, rejecting concurrent changes."""
+        if not isinstance(authority, OwnerVerificationAuthority):
+            raise PermissionError("A trusted owner verification authority is required")
+        with self._connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            authority.consume(ticket, snapshot)
+            revision = int(db.execute("SELECT revision FROM governance_revision WHERE id=1").fetchone()[0])
+            if snapshot.get("status") != "pending" or snapshot.get("revision") != revision:
+                raise ValueError("Permissions changed during verification; review the change again")
+            client_id = snapshot.get("client_id")
+            actions = snapshot.get("actions")
+            if not isinstance(client_id, str) or not client_id.strip() or not isinstance(actions, list) or len(actions) != 1:
+                raise ValueError("Invalid owner permission snapshot")
+            action = actions[0]
+            self._validate_action(action)
+            project_id, scope = snapshot.get("project_id"), snapshot.get("scope")
+            if (project_id is None) == (scope is None):
+                raise ValueError("Choose exactly one project or memory area")
+            if project_id is not None:
+                project = db.execute("SELECT name FROM projects WHERE id=?", (project_id,)).fetchone()
+                if project is None or project["name"] != snapshot.get("project_name"):
+                    raise ValueError("Project changed during verification")
+                current = db.execute("SELECT allowed FROM project_permissions WHERE client_id=? AND project_id=? AND action=?",
+                                     (client_id, project_id, action)).fetchone()
+            else:
+                if scope not in ALLOWED_SCOPES:
+                    raise ValueError("Unknown memory area")
+                if action == "read":
+                    current = db.execute("SELECT allowed FROM permissions WHERE client_id=? AND scope=?",
+                                         (client_id, scope)).fetchone()
+                else:
+                    current = db.execute("SELECT allowed FROM scope_capabilities WHERE client_id=? AND scope=? AND action=?",
+                                         (client_id, scope, action)).fetchone()
+            if type(snapshot.get("current_allowed")) is not bool or bool(current and current["allowed"]) != snapshot["current_allowed"]:
+                raise ValueError("Permissions changed during verification")
+            if not snapshot["current_allowed"]:
+                timestamp = now_iso()
+                if project_id is not None:
+                    db.execute("""INSERT INTO project_permissions VALUES(?,?,?,1,?)
+                        ON CONFLICT(client_id,project_id,action) DO UPDATE SET allowed=1,updated_at=excluded.updated_at""",
+                               (client_id, project_id, action, timestamp))
+                elif action == "read":
+                    db.execute("""INSERT INTO permissions VALUES(?,?,1,?) ON CONFLICT(client_id,scope)
+                        DO UPDATE SET allowed=1,updated_at=excluded.updated_at""", (client_id, scope, timestamp))
+                else:
+                    db.execute("""INSERT INTO permissions VALUES(?,?,0,?) ON CONFLICT(client_id,scope) DO NOTHING""",
+                               (client_id, scope, timestamp))
+                    db.execute("""INSERT INTO scope_capabilities VALUES(?,?,?,1,?)
+                        ON CONFLICT(client_id,scope,action) DO UPDATE SET allowed=1,updated_at=excluded.updated_at""",
+                               (client_id, scope, action, timestamp))
+            return {**snapshot, "status": "approved", "allowed": True}
 
     def set_capture_enabled(self, enabled: bool) -> None:
         with self._connection() as db:
@@ -248,6 +487,11 @@ class MemoryStore:
         return bool(row and row["value"] == "on")
 
     def ensure_project(self, *, name: str, binding_key: str, cwd_or_repo: str) -> dict[str, object]:
+        """Resolve stable binding identity; preserve an existing owner's display name.
+
+        Capture hooks supply inferred directory names and must not rename projects.
+        The latest observed path is metadata, not a new permission identity.
+        """
         clean_name = " ".join(name.split()).strip()[:160] or "Inbox"
         clean_binding = binding_key.strip()[:1000]
         clean_location = cwd_or_repo.strip()[:1000]
@@ -259,7 +503,7 @@ class MemoryStore:
             db.execute(
                 """INSERT INTO projects(id,name,binding_key,cwd_or_repo,created_at,updated_at)
                    VALUES(?,?,?,?,?,?) ON CONFLICT(binding_key) DO UPDATE SET
-                   name=excluded.name,cwd_or_repo=excluded.cwd_or_repo,updated_at=excluded.updated_at""",
+                   cwd_or_repo=excluded.cwd_or_repo,updated_at=excluded.updated_at""",
                 (project_id, clean_name, clean_binding, clean_location, timestamp, timestamp),
             )
             row = db.execute("SELECT * FROM projects WHERE binding_key=?", (clean_binding,)).fetchone()

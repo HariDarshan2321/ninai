@@ -39,6 +39,7 @@ else:
         bootstrap.chmod(0o755)
         for name, body in {
             "uname": "printf 'Darwin\\n'",
+            "xcrun": "if [ \"$1\" = --find ]; then echo /synthetic/swiftc; else for output do :; done; printf '#!/bin/sh\\nexit 0\\n' > \"$output\"; chmod 755 \"$output\"; fi",
             "sips": "exit 0", "iconutil": "exit 0", "xattr": "exit 0", "codesign": "exit 0", "open": "exit 0",
         }.items():
             path = directory / name

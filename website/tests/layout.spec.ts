@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 for (const width of [320, 390, 768, 1440]) {
   test(`public pages stay aligned at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    for (const path of ["/", "/install/", "/local/", "/privacy/", "/compatibility/", "/terms/", "/start/", "/research/"]) {
+    for (const path of ["/", "/install/", "/local/", "/privacy/", "/compatibility/", "/terms/", "/start/", "/research/", "/support/"]) {
       const response = await page.goto(`http://127.0.0.1:3034${path}`);
       expect(response?.ok(), path).toBeTruthy();
       await expect(page.locator("h1"), path).toHaveCount(1);

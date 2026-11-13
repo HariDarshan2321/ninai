@@ -28,6 +28,9 @@ test("guide rejects an unassigned save, contains keyboard focus, and saves once 
   await expect(page.locator("#add-close")).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(page.locator("#add-submit")).toBeFocused();
+  if (await page.locator("#new-project-details").getAttribute("open") === null) {
+    await page.getByText("Create a project", { exact: true }).click();
+  }
   await page.getByLabel("Project name", { exact: true }).fill("Browser first success");
   await page.getByRole("button", { name: "Create project", exact: true }).click();
   await page.getByRole("button", { name: "Save memory", exact: true }).click();
@@ -176,7 +179,8 @@ test("assistant cards collapse controls while retaining a live grant summary", a
   await page.keyboard.press("Enter");
   await expect(read).toBeVisible();
   await expect(read).not.toBeChecked();
-  await read.check();
+  await read.click();
+  await expect(read).toBeChecked();
   await expect(read).toBeEnabled();
   await expect(card.locator(".client-card__granted")).toContainText(/Access grants: [1-9]\d* read/);
   await card.locator(":scope > summary").click();
@@ -282,16 +286,16 @@ test("an older search response cannot replace the latest search results", async 
 });
 
 test("page load failures offer a working retry", async ({ page }) => {
-  let failed = false;
+  let failSources = true;
   await page.goto(desktop);
   await page.route("**/__test_bridge__", async route => {
-    if (route.request().postDataJSON().method === "sources" && !failed) {
-      failed = true;
+    if (route.request().postDataJSON().method === "sources" && failSources) {
       await route.fulfill({ json: { ok: false, error: "Synthetic origins failure" } });
     } else await route.continue();
   });
   await page.getByRole("button", { name: /^Origins\b/ }).click();
   await expect(page.getByText("Synthetic origins failure", { exact: true })).toBeVisible();
+  failSources = false;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.getByText("This page groups memories by where Ninai received them. Only sources already present on this computer appear here.", { exact: true })).toBeVisible();
 });

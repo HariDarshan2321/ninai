@@ -28,7 +28,7 @@ export default function InstallPage() {
               <a className="button button--acid" href={signupUrl}>Get Mac setup instructions ↗</a>
               <a className="button button--ink" href={signinUrl}>I already have an account</a>
             </div>
-            <p className="install-note">The official installer currently builds Ninai from source and requires Python 3.11 or newer. A signed, notarized Mac package is not available yet. Your local memories are not uploaded to your account.</p>
+            <p className="install-note">The official installer currently builds Ninai from source and requires Python 3.11 or newer and Apple Command Line Tools. A signed, notarized Mac package is not available yet. Your local memories are not uploaded to your account.</p>
           </div>
         </div>
       </section>

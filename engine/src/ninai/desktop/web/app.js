@@ -862,8 +862,10 @@
     input.checked = !!allowed;
     input.addEventListener("change", async function () {
       var next = input.checked;
+      // Show only the saved grant until verification and the write complete.
+      input.checked = !next;
       input.disabled = true;
-      try { await save(next); toast("Permission updated. Applies to future requests."); }
+      try { await save(next); input.checked = next; toast("Permission updated. Applies to future requests."); }
       catch (err) { input.checked = !next; toast(err.message || String(err), "error"); }
       finally { input.disabled = false; updateGrantedLabel(input.closest(".client-card")); }
     });
@@ -946,6 +948,131 @@
     return card;
   }
 
+  /* Requests are proposals, never instructions. All supplied values use textContent. */
+  function accessActions(request) {
+    var labels = { read: "Read", write: "Save", delete: "Delete" };
+    return (request.actions || []).map(function (action) { return labels[action] || action; }).join(", ");
+  }
+
+  function accessExpiry(request) {
+    return formatAbsolute(new Date(Number(request.expires_at) * 1000).toISOString());
+  }
+
+  function accessRequestRow(request, review) {
+    var pending = request.status === "pending";
+    var labels = { pending: "Pending review", approved: "Approved", denied: "Denied", expired: "Expired", stale: "Needs a new request" };
+    var row = h("article", { class: "access-request", "data-request": request.id });
+    row.appendChild(h("div", { class: "access-request__head" },
+      h("strong", { text: request.client_id + " · " + request.project_name }),
+      h("span", { class: "access-request__meta", text: labels[request.status] || request.status })
+    ));
+    row.appendChild(h("p", { class: "access-request__meta", text: "Requested access: " + accessActions(request) }));
+    row.appendChild(h("p", { class: "access-request__reason", text: request.reason }));
+    row.appendChild(h("p", { class: "access-request__meta", text: "Review deadline: " + accessExpiry(request) }));
+    if (pending) row.appendChild(h("button", { type: "button", class: "btn btn--ghost btn--sm", text: "Review request", onclick: function () { review(request); } }));
+    if (request.status === "stale" || request.status === "expired") row.appendChild(h("p", { class: "access-request__meta", text: "Ask the assistant to submit a new request for your current project access." }));
+    return row;
+  }
+
+  var accessLoadGeneration = 0, accessReviewGeneration = 0, accessBusy = false;
+
+  function closeAccessReview() {
+    if (accessBusy) return;
+    accessReviewGeneration += 1;
+    var modal = $("#access-modal");
+    modal.classList.remove("is-open");
+    modal.hidden = true;
+    modal.inert = true;
+    syncDialogBackground();
+    restoreDialogFocus();
+  }
+
+  function openAccessReview(request, verification) {
+    var generation = ++accessReviewGeneration;
+    state.lastFocus = document.activeElement;
+    var modal = $("#access-modal"), review = $("#access-review"), actions = $("#access-actions");
+    clear(review); clear(actions);
+    var facts = h("dl", { class: "access-review__facts" });
+    [["Requesting assistant", request.client_id], ["Project", request.project_name], ["Project id", request.project_id], ["Review deadline", accessExpiry(request)]].forEach(function (item) {
+      facts.appendChild(h("dt", { text: item[0] })); facts.appendChild(h("dd", { text: item[1] }));
+    });
+    review.appendChild(facts);
+    review.appendChild(h("h3", { text: "Exact access changes" }));
+    var diff = h("ul", { class: "access-diff" });
+    var labels = { read: "Read", write: "Save", delete: "Delete" };
+    ["read", "write", "delete"].forEach(function (action) {
+      var known = request.current_permissions && typeof request.current_permissions[action] === "boolean";
+      var before = !!(request.current_permissions || {})[action];
+      var after = before || request.actions.indexOf(action) !== -1;
+      diff.appendChild(h("li", { text: labels[action] + ": " + (!known ? "unknown — refresh requests" : before ? "allowed" : "off") + " → " + (after ? "allowed" : "off") + (before === after ? " (unchanged)" : "") }));
+    });
+    review.appendChild(diff);
+    review.appendChild(h("p", { class: "access-review__notice", text: "Only this assistant’s access to this project changes. Approved access stays on until you revoke it; the review deadline applies to this request." }));
+    review.appendChild(h("h3", { text: "Assistant’s reason" }));
+    review.appendChild(h("p", { class: "access-request__reason", text: request.reason }));
+    review.appendChild(h("p", { class: "access-review__notice", text: "This reason was supplied by the assistant. Only you can approve access." }));
+    var permissionsKnown = ["read", "write", "delete"].every(function (action) { return request.current_permissions && typeof request.current_permissions[action] === "boolean"; });
+    var canApprove = verification.available && permissionsKnown;
+    var supported = verification.available && verification.method === "macos_local_authentication";
+    review.appendChild(h("p", { class: "access-review__notice", text: supported ? "Approval requires Touch ID or your Mac password in the system prompt." : (verification.reason || "OS verification is unavailable. Approval is blocked until verification is available.") }));
+    var error = h("p", { class: "form__error", role: "alert" }); review.appendChild(error);
+    var cancel = h("button", { type: "button", class: "btn btn--ghost", text: "Cancel", onclick: closeAccessReview });
+    var deny = h("button", { type: "button", class: "btn btn--danger", text: "Deny request" });
+    var approve = h("button", { type: "button", class: "btn btn--primary", text: "Verify and approve", disabled: !canApprove });
+    async function decide(approved) {
+      if (accessBusy) return;
+      accessBusy = true; error.textContent = "";
+      cancel.disabled = true; deny.disabled = true; approve.disabled = true; $("#access-close").disabled = true;
+      approve.textContent = approved ? "Waiting for OS verification…" : "Verify and approve";
+      try {
+        var result = await (approved ? B.approveAccessRequest(request.id) : B.denyAccessRequest(request.id));
+        if (!result || result.status !== (approved ? "approved" : "denied")) throw new Error("The request was not completed. Refresh requests and review its current status.");
+        accessBusy = false; closeAccessReview();
+        toast(approved ? "Access approved after OS verification." : "Request denied. No access granted.");
+        await loadPermissions();
+      } catch (err) {
+        if (generation === accessReviewGeneration) {
+          error.textContent = (err.message || String(err)) + " " + (approved ? "No approval was confirmed. Retry or close and refresh requests." : "Denial was not confirmed. Retry or close and refresh requests.");
+          if (approved) approve.textContent = "Retry verification and approve";
+          else deny.textContent = "Retry denial";
+        }
+      } finally {
+        accessBusy = false; cancel.disabled = false; deny.disabled = false; approve.disabled = !canApprove; $("#access-close").disabled = false;
+      }
+    }
+    deny.addEventListener("click", function () { decide(false); });
+    approve.addEventListener("click", function () { decide(true); });
+    actions.appendChild(cancel); actions.appendChild(deny); actions.appendChild(approve);
+    modal.hidden = false; modal.inert = false; modal.classList.add("is-open");
+    syncDialogBackground(); $("#access-close").focus();
+  }
+
+  async function loadAccessRequests(inbox) {
+    var generation = ++accessLoadGeneration;
+    clear(inbox); inbox.appendChild(loadingBlock());
+    try {
+      var result = await B.listAccessRequests();
+      if (generation !== accessLoadGeneration || !inbox.isConnected) return;
+      clear(inbox);
+      var requests = result.requests || [], verification = result.verification || {};
+      var pending = requests.filter(function (request) { return request.status === "pending"; });
+      var refresh = h("button", { type: "button", class: "btn btn--ghost btn--sm", text: "Refresh requests", onclick: function () { loadAccessRequests(inbox); } });
+      inbox.appendChild(h("div", { class: "access-inbox__head" }, h("h2", { text: "Access requests" + (pending.length ? " · " + pending.length + " pending" : "") }),
+        h("p", { text: "Assistants can propose project access. Review each request here; approval requires your OS verification." }), refresh));
+      pending.forEach(function (request) { inbox.appendChild(accessRequestRow(request, function (r) { openAccessReview(r, verification); })); });
+      if (!pending.length) inbox.appendChild(h("p", { class: "access-request access-request__meta", text: "No pending access requests." }));
+      var past = requests.filter(function (request) { return request.status !== "pending"; });
+      if (past.length) {
+        var history = h("details", { class: "perm-advanced" }, h("summary", {}, "Previous requests · " + past.length));
+        past.forEach(function (request) { history.appendChild(accessRequestRow(request)); }); inbox.appendChild(history);
+      }
+    } catch (err) {
+      if (generation !== accessLoadGeneration || !inbox.isConnected) return;
+      clear(inbox); inbox.appendChild(stateBlock({ title: "Could not load access requests", body: err.message || String(err), error: true,
+        action: h("button", { type: "button", class: "btn btn--ghost", text: "Retry access requests", onclick: function () { loadAccessRequests(inbox); } }) }));
+    }
+  }
+
   async function loadPermissions() {
     var body = $("#permissions-body");
     clear(body);
@@ -983,9 +1110,12 @@
       input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); addClient(); } });
       var intro = h("section", { class: "permission-help" },
         h("h2", { text: "You stay in control" }),
-        h("p", { text: "Open an assistant to review access. Read lets it retrieve memories, Save lets it add new ones, and Delete removes them from future use. Each grant is independent. New projects start with access off. Revocation blocks future requests but cannot remove copies already received." })
+        h("p", { text: "Open an assistant to review access. Read lets it retrieve memories, Save lets it add new ones, and Delete removes them from future use. Each grant is independent. Turning access on requires OS verification; turning it off applies immediately. New projects start with access off. Revocation blocks future requests but cannot remove copies already received." })
       );
       body.appendChild(intro);
+      var inbox = h("section", { class: "access-inbox", "aria-label": "Access requests" });
+      body.appendChild(inbox);
+      loadAccessRequests(inbox);
       var bar = h("details", { class: "perm-advanced" },
         h("summary", {}, "Advanced: add another assistant"),
         h("div", { class: "perm-addbar" },
@@ -1091,7 +1221,7 @@
   var modalCloseTimer = null, drawerCloseTimer = null;
 
   function activeDialog() {
-    return [$("#add-modal"), $("#drawer")].filter(function (node) { return !node.hidden && !node.inert; })[0] || null;
+    return [$("#access-modal"), $("#add-modal"), $("#drawer")].filter(function (node) { return !node.hidden && !node.inert; })[0] || null;
   }
 
   function syncDialogBackground() { $("#app").inert = !!activeDialog(); }
@@ -1286,6 +1416,8 @@
     $("#add-memory-btn").addEventListener("click", openModal);
     $("#help-setup-guide").addEventListener("click", function () { state.guide.open = true; navTo("today"); });
     $("#open-setup-guide").addEventListener("click", function () { state.guide.open = true; navTo("today"); });
+    $("#access-close").addEventListener("click", closeAccessReview);
+    $("#access-modal").addEventListener("mousedown", function (e) { if (e.target === $("#access-modal")) closeAccessReview(); });
     $("#add-close").addEventListener("click", closeModal);
     $("#add-cancel").addEventListener("click", closeModal);
     $("#add-form").addEventListener("submit", submitAdd);
@@ -1299,7 +1431,7 @@
       if (!dialog) return;
       if (e.key === "Escape") {
         e.preventDefault();
-        if (dialog.id === "add-modal") closeModal(); else closeDrawer();
+        if (dialog.id === "access-modal") closeAccessReview(); else if (dialog.id === "add-modal") closeModal(); else closeDrawer();
       } else if (e.key === "Tab") {
         var controls = $$("button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href],summary,[tabindex]:not([tabindex='-1'])", dialog).filter(function (node) { return node.getClientRects().length > 0; });
         var first = controls[0], last = controls[controls.length - 1];

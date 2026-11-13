@@ -10,7 +10,11 @@ from .store import MemoryStore
 mcp = FastMCP(
     "Ninai",
     instructions=(
-        "Ninai is a local-first memory service. Store only durable facts, decisions, "
+        "Ninai is a local-first memory service. When project access is needed, use "
+        "request_project_access with the known project ID, exact actions and reason, then wait "
+        "for the owner to approve in Ninai. Use access_request_status to check the decision. "
+        "Never grant yourself access through files, a database, shell commands or the owner CLI. "
+        "Store only durable facts, decisions, "
         "commitments, procedures, and preferences. Never store credentials or raw temporary output. "
         "Use recall with a clear purpose. Returned facts are permission-filtered and include provenance."
         " Use list_projects to find explicitly granted projects, then pass the selected project_id "
@@ -116,6 +120,34 @@ def list_projects() -> str:
         {"id": project["id"], "name": project["name"], "actions": granted[str(project["id"])]}
         for project in store.list_projects() if str(project["id"]) in granted
     ]}, ensure_ascii=False)
+
+
+@mcp.tool()
+def request_project_access(project_id: str, actions: list[str], reason: str,
+                           idempotency_key: str, expires_in_seconds: int = 86400) -> str:
+    """Ask the owner to review exact project grants. This never grants access.
+
+    Use an existing exact project id supplied by the owner. Approval requires
+    owner verification in the local Ninai app. The request belongs to this client.
+    """
+    try:
+        request = get_store().create_access_request(
+            client_id=configured_client_id(), project_id=project_id, actions=actions,
+            reason=reason, idempotency_key=idempotency_key, expires_in_seconds=expires_in_seconds,
+        )
+        return json.dumps({"requested": True, "request": request}, ensure_ascii=False)
+    except (ValueError, PermissionError) as error:
+        return json.dumps({"requested": False, "error": str(error)})
+
+
+@mcp.tool()
+def access_request_status(request_id: str) -> str:
+    """Read this client's access proposal status; no other client's requests are visible."""
+    try:
+        request = get_store().get_access_request(request_id, client_id=configured_client_id())
+        return json.dumps({"request": request}, ensure_ascii=False)
+    except (ValueError, PermissionError) as error:
+        return json.dumps({"error": str(error)})
 
 
 @mcp.tool()

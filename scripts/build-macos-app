@@ -3,8 +3,9 @@ set -eu
 
 REPO_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 ENGINE_DIR="$REPO_DIR/engine"
-BUILD_DIR="$REPO_DIR/build/macos"
-DIST_DIR="$REPO_DIR/dist/macos"
+BUILD_DIR=${NINAI_BUILD_DIR:-"$REPO_DIR/build/macos"}
+DIST_DIR=${NINAI_DIST_DIR:-"$REPO_DIR/dist/macos"}
+IDENTITY=${NINAI_CODESIGN_IDENTITY:-}
 
 case "$(uname -s)" in
   Darwin) ;;
@@ -26,6 +27,15 @@ if [ -z "$PYTHON_BIN" ]; then
   exit 1
 fi
 
+if [ -n "$IDENTITY" ]; then
+  case "$IDENTITY" in
+    "Developer ID Application: "*) ;;
+    *) echo "Use the full Developer ID Application certificate name." >&2; exit 1 ;;
+  esac
+  security find-identity -v -p codesigning | grep -F "\"$IDENTITY\"" >/dev/null || {
+    echo "The requested signing identity is unavailable." >&2; exit 1;
+  }
+fi
 mkdir -p "$BUILD_DIR" "$DIST_DIR"
 VENV_DIR="$BUILD_DIR/venv"
 "$PYTHON_BIN" -m venv "$VENV_DIR"
@@ -48,7 +58,22 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$ICONSET" -o "$ICON_FILE"
 
-"$VENV_DIR/bin/pyinstaller" \
+# LocalAuthentication owns the credential UI. Bundle a fixed native helper;
+# runtime approval never compiles code, searches PATH, or accepts a helper path.
+# A local prototype can use the existing ad-hoc signing path below.
+OWNER_AUTH_HELPER="$BUILD_DIR/ninai-owner-auth"
+xcrun swiftc -O -framework LocalAuthentication \
+  -target "$(uname -m)-apple-macos11.0" \
+  "$ENGINE_DIR/src/ninai/native/owner_auth.swift" \
+  -o "$OWNER_AUTH_HELPER"
+
+# PyInstaller signs nested binaries as it collects them, before signing the app.
+# Do not use codesign --deep to create a customer signature.
+set --
+if [ -n "$IDENTITY" ]; then
+  set -- --codesign-identity "$IDENTITY"
+fi
+"$VENV_DIR/bin/pyinstaller" "$@" \
   --noconfirm \
   --clean \
   --windowed \
@@ -56,6 +81,7 @@ iconutil -c icns "$ICONSET" -o "$ICON_FILE"
   --osx-bundle-identifier io.ninai.app \
   --icon "$ICON_FILE" \
   --collect-data ninai \
+  --add-binary "$OWNER_AUTH_HELPER:ninai/native" \
   --distpath "$DIST_DIR" \
   --workpath "$BUILD_DIR/work" \
   --specpath "$BUILD_DIR/spec" \
@@ -66,7 +92,10 @@ iconutil -c icns "$ICONSET" -o "$ICON_FILE"
 # build has a valid ad-hoc signature. Release builds still require Developer ID
 # signing and notarization below.
 xattr -cr "$DIST_DIR/Ninai.app"
-codesign --force --deep --sign - "$DIST_DIR/Ninai.app"
+if [ -z "$IDENTITY" ]; then
+  codesign --force --deep --sign - "$DIST_DIR/Ninai.app"
+fi
+codesign --verify --deep --strict --verbose=2 "$DIST_DIR/Ninai.app"
 
 ARCHIVE="$DIST_DIR/Ninai-macOS.zip"
 rm -f "$ARCHIVE"

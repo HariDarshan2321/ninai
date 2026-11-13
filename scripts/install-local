@@ -92,6 +92,12 @@ if [[ -z "${python_cmd}" ]] || ! command -v "${python_cmd}" >/dev/null 2>&1 || !
   exit 1
 fi
 
+if ! command -v xcrun >/dev/null 2>&1 || ! xcrun --find swiftc >/dev/null 2>&1; then
+  printf '%s\n' 'This source installer needs Apple Command Line Tools to build secure owner verification.' \
+    'Install them with xcode-select --install, complete Apple setup, then rerun. Existing app and memories were kept.' >&2
+  exit 1
+fi
+
 # An update may replace only an existing Ninai installation. Keep the data
 # directory separate from the replaceable application, including symlink paths.
 if [[ -L "${install_dir}" || ( -e "${install_dir}" && ! -x "${install_dir}/venv/bin/ninai" ) ]]; then
@@ -268,6 +274,10 @@ app_build="${install_dir}/.app-build"
 icon_source=$("${install_dir}/venv/bin/python" -c 'from importlib.resources import files; print(files("ninai.desktop").joinpath("web", "ninai-app-icon.svg"))')
 app_entry=$("${install_dir}/venv/bin/python" -c 'import ninai.desktop.app as app; print(app.__file__)')
 mkdir -p "${iconset}" "${app_build}/work" "${app_build}/spec"
+owner_auth_source=$("${install_dir}/venv/bin/python" -c 'from importlib.resources import files; print(files("ninai").joinpath("native", "owner_auth.swift"))')
+owner_auth_helper="${app_build}/ninai-owner-auth"
+xcrun swiftc -O -framework LocalAuthentication -target "$(uname -m)-apple-macos11.0" "${owner_auth_source}" -o "${owner_auth_helper}"
+chmod 755 "${owner_auth_helper}"
 for size in 16 32 128 256 512; do
   sips -s format png -z "${size}" "${size}" "${icon_source}" \
     --out "${iconset}/icon_${size}x${size}.png" >/dev/null
@@ -282,6 +292,7 @@ rm -rf "${iconset}"
   --noconfirm --clean --windowed --name Ninai \
   --osx-bundle-identifier io.ninai.app \
   --icon "${icon_file}" --collect-data ninai \
+  --add-binary "${owner_auth_helper}:ninai/native" \
   --distpath "${install_dir}" --workpath "${app_build}/work" \
   --specpath "${app_build}/spec" "${app_entry}"
 xattr -cr "${app_bundle}"

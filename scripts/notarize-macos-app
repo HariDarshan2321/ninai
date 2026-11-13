@@ -1,0 +1,26 @@
+#!/bin/sh
+# Owner-operated release gate. Credentials must already exist in the keychain.
+set -eu
+APP=${1:?Usage: notarize-macos-app /absolute/path/Ninai.app keychain-profile}
+PROFILE=${2:?A notarytool keychain profile is required}
+case "$APP" in /*/Ninai.app) ;; *) echo 'Expected an absolute Ninai.app path' >&2; exit 1 ;; esac
+codesign --verify --deep --strict --verbose=2 "$APP"
+codesign -dv --verbose=4 "$APP" 2>&1 | grep '^Authority=Developer ID Application:' >/dev/null || {
+  echo 'Developer ID Application signature required; refusing ad-hoc build.' >&2; exit 1;
+}
+codesign -dv --verbose=4 "$APP" 2>&1 | grep 'flags=.*runtime' >/dev/null || {
+  echo 'Hardened runtime required.' >&2; exit 1;
+}
+OUT=$(dirname "$APP")
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$TMP/submission.zip"
+xcrun notarytool submit "$TMP/submission.zip" --keychain-profile "$PROFILE" --wait
+xcrun stapler staple "$APP"
+xcrun stapler validate "$APP"
+codesign --verify --deep --strict --verbose=2 "$APP"
+spctl --assess --type execute --verbose=4 "$APP"
+# Repack after stapling; ZIPs cannot themselves carry a stapled ticket.
+ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/Ninai-macOS-notarized.zip"
+(cd "$OUT" && shasum -a 256 Ninai-macOS-notarized.zip > Ninai-macOS-notarized.zip.sha256)
+echo "Verified notarized artifact: $OUT/Ninai-macOS-notarized.zip"

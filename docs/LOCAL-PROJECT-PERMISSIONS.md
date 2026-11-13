@@ -14,6 +14,16 @@ New automatic tool-outcome captures use that same repository/path identity and a
 
 In the desktop app, create a project when adding a memory, select it, then open Connected assistants to enable the actions each assistant needs. The advanced controls manage Save/Delete for existing unassigned areas. Turning off Read prevents future reads; turn off Save and Delete separately to remove those capabilities too.
 
+## Assistant requests and owner verification
+
+An assistant can propose exact Read, Save (`write`), and Delete grants for an existing named project with `request_project_access`. The request is bound to its configured client; the assistant cannot choose another client's identity. The request includes a reason, expiry, and idempotency key and changes no permissions. `access_request_status` returns only that client's own request.
+
+The owner reviews the client, named project, current permissions, and requested actions in the local app. Approval requires a fresh macOS account-owner check through the OS dialog. Cancelling, failing, or lacking verification leaves access unchanged. Only the exact proposed actions are granted; Save or Delete does not implicitly include Read. Requests expire within seven days. A project or permission change makes an outstanding proposal stale, so it must be proposed and reviewed again.
+
+The approval ticket stays in the desktop process, expires after 60 seconds, and can be used once for the exact reviewed snapshot. It is never accepted from JavaScript or exposed through MCP. Direct increases through the app's permission switches also require fresh verification; revocation is immediate. No Ninai PIN or account password is stored.
+
+The CLI remains an unrestricted local-owner administration tool for compatibility. Its grant commands do not perform the app's OS verification. An assistant working through MCP must use the request workflow and must never run CLI grants or modify the vault to approve its own request. This is a transport boundary, not a sandbox against software with unrestricted shell or filesystem access under the same OS account.
+
 ## CLI example
 
 Create a named project and use the returned ID in subsequent commands:

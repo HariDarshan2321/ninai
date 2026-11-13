@@ -1,0 +1,22 @@
+{
+  "name": "ninai",
+  "version": "0.1.2",
+  "description": "Source-backed project continuity across ChatGPT, Claude, and Codex.",
+  "author": {
+    "name": "Ninai",
+    "email": "hello@ninai.io",
+    "url": "https://ninai.io"
+  },
+  "homepage": "https://ninai.io",
+  "repository": "https://github.com/HariDarshan2321/ninai",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "context",
+    "continuity",
+    "provenance"
+  ],
+  "displayName": "Ninai",
+  "icon": "./assets/ninai-app-icon.png",
+  "privacyPolicyUrl": "https://ninai.io/privacy/"
+}

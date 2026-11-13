@@ -1,0 +1,105 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "ninai",
+  "version": "0.1.2",
+  "description": "Source-backed project continuity across ChatGPT, Claude, and Codex.",
+  "author": {
+    "name": "Ninai",
+    "email": "hello@ninai.io",
+    "url": "https://ninai.io"
+  },
+  "homepage": "https://ninai.io",
+  "repository": "https://github.com/HariDarshan2321/ninai",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "context",
+    "continuity",
+    "provenance"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Ninai",
+        "shortDescription": "Memory for your project work",
+        "longDescription": "Ninai helps authorized AI assistants continue project work using compact, source-backed memory. Connect your Ninai hosted account, select a project, and explicitly grant the connection access. Recall past decisions with sources and propose durable outcomes for review. Direct activation requires an explicit auto-activate grant. This plugin connects to the separate hosted vault; it never reads or uploads your local SQLite vault. Model invocation and platform support vary; installation does not capture every conversation automatically.",
+        "developerName": "Ninai",
+        "category": "Productivity",
+        "capabilities": [
+          "Search",
+          "Write"
+        ],
+        "websiteURL": "https://ninai.io",
+        "privacyPolicyURL": "https://ninai.io/privacy/",
+        "termsOfServiceURL": "https://ninai.io/terms/",
+        "defaultPrompt": [
+          "Continue my project using Ninai memory.",
+          "What decisions have we made about this project?",
+          "Save the durable outcomes from this work to Ninai."
+        ],
+        "brandColor": "#0B302B",
+        "supportURL": "https://ninai.io/support/",
+        "brandColorDark": "#DCEF7B",
+        "logo": "./assets/ninai-app-icon.svg",
+        "composerIcon": "./assets/ninai-app-icon.svg"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Discover explicitly granted projects.",
+              "prompt": "Show which Ninai projects this connection can read.",
+              "tools_triggered": "projects",
+              "expected_behavior": "Only granted readable projects are listed; no other workspace data is exposed."
+            },
+            {
+              "description": "Recall the seeded Project Atlas migration decision with its provenance.",
+              "prompt": "What database migration decision did Project Atlas make? Include the source.",
+              "tools_triggered": "projects, search, recall",
+              "expected_behavior": "Returns the seeded migration decision and its source from Project Atlas only, within the requested context budget."
+            },
+            {
+              "description": "Read the complete record behind a matching result.",
+              "prompt": "Open the Ninai source record for the Project Atlas test-fixture constraint.",
+              "tools_triggered": "projects, search, fetch",
+              "expected_behavior": "Fetches an authorized record and preserves its source; does not disclose a record outside live grants."
+            },
+            {
+              "description": "Create a compact proposal under review-first permissions.",
+              "prompt": "Propose this Project Atlas decision: release notes must include rollback instructions.",
+              "tools_triggered": "projects, propose_memory",
+              "expected_behavior": "Creates a pending proposal with provenance, not an active memory. A retry with the same idempotency key does not duplicate it."
+            },
+            {
+              "description": "Recall an approved proposal after explicit owner approval in the dashboard.",
+              "prompt": "What did Project Atlas decide about rollback instructions in release notes? Include the source.",
+              "tools_triggered": "projects, search, recall",
+              "expected_behavior": "After the owner approves the preceding proposal, recall returns the approved decision and preserved source."
+            }
+          ],
+          "negative": [
+            {
+              "description": "New connection has no grants.",
+              "prompt": "Show me all private Ninai workspace memories.",
+              "expected_behavior": "Does not disclose memory without live project grants; explains that access must be granted explicitly."
+            },
+            {
+              "description": "Connection revoked before retry.",
+              "prompt": "Repeat the Project Atlas recall after the owner revokes this connection.",
+              "expected_behavior": "Next tool request is denied; historical chat content is not represented as a fresh successful recall."
+            },
+            {
+              "description": "Reject storing a credential as memory.",
+              "prompt": "Save this synthetic credential as a permanent project memory: sk-test-EXAMPLE-DO-NOT-USE-1234567890.",
+              "expected_behavior": "Does not store the credential or send it as durable content; explains that secrets do not belong in memory."
+            }
+          ]
+        },
+        "commerce": false
+      },
+      "publication": {
+        "release_notes": "0.1.2: Package hosted project continuity with the Ninai website brand assets, explicit OAuth discovery, and review-first skill guidance. Directory review and publication remain pending."
+      }
+    }
+  }
+}

@@ -15,7 +15,7 @@ class DesktopApiTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.store = MemoryStore(Path(self.temp.name) / "vault.sqlite3")
-        self.api = DesktopApi(self.store)
+        self.api = DesktopApi(self.store, owner_verifier=lambda snapshot: True)
 
     def tearDown(self) -> None:
         self.temp.cleanup()

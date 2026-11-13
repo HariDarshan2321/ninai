@@ -20,6 +20,8 @@ from ..models import (
     ALLOWED_SENSITIVITIES,
 )
 from ..store import MemoryStore
+from ..governance import OwnerVerificationAuthority
+from ..owner_verification import check_owner_verification, verify_owner
 
 # Default clients shown on the Permissions screen even before they appear in the
 # vault, so the owner can pre-authorize the assistants Ninai targets first.
@@ -124,8 +126,61 @@ class DesktopApi:
     as the local operator (no client_id), i.e. with full owner access.
     """
 
-    def __init__(self, store: MemoryStore | None = None) -> None:
-        self.store = store or MemoryStore()
+    def __init__(self, store: MemoryStore | None = None, *, owner_verifier=None) -> None:
+        self._store = store or MemoryStore()
+        self._test_verifier = owner_verifier is not None
+        self._owner_verifier = owner_verifier or self._native_verify
+        self._approval_authority = OwnerVerificationAuthority(self._owner_verifier)
+
+    @staticmethod
+    def _native_verify(snapshot: dict) -> bool:
+        actions = ", ".join(str(action) for action in snapshot.get("actions", []))
+        client = str(snapshot.get("client_id", "assistant"))[:40]
+        project = str(snapshot.get("project_name") or snapshot.get("scope") or snapshot.get("project_id", ""))[:100]
+        verify_owner(f"Allow {client} to {actions} in {project} using Ninai.")
+        return True
+
+    def _verification_status(self) -> dict:
+        if self._test_verifier:
+            return {"available": True, "method": "test_verifier",
+                    "reason": "Verification is simulated in this isolated test fixture."}
+        return check_owner_verification()
+
+    def list_access_requests(self) -> dict[str, Any]:
+        try:
+            requests = self._store.list_access_requests(status=None)
+            for request in requests:
+                permissions = self._store.project_permissions(str(request["client_id"]))
+                request["current_permissions"] = {action: any(
+                    item["project_id"] == request["project_id"] and item["action"] == action and item["allowed"]
+                    for item in permissions) for action in ("read", "write", "delete")}
+            return _ok({"requests": requests, "verification": self._verification_status()})
+        except Exception as error:
+            return _err(str(error))
+
+    def approve_access_request(self, request_id: str) -> dict[str, Any]:
+        try:
+            snapshot = self._store.get_access_request(request_id)
+            ticket = self._approval_authority.verify(snapshot)
+            return _ok(self._store.approve_access_request(
+                request_id, ticket=ticket, authority=self._approval_authority))
+        except Exception as error:
+            return _err(str(error))
+
+    def deny_access_request(self, request_id: str) -> dict[str, Any]:
+        try:
+            return _ok(self._store.deny_access_request(request_id))
+        except Exception as error:
+            return _err(str(error))
+
+    def _grant_owner_permission(self, client_id: str, action: str, *, project_id=None, scope=None) -> None:
+        snapshot = self._store.owner_permission_snapshot(
+            client_id, action, project_id=project_id, scope=scope)
+        if snapshot["current_allowed"]:
+            return  # A no-op must never restore a concurrently revoked grant.
+        ticket = self._approval_authority.verify(snapshot)
+        self._store.apply_owner_permission_change(
+            snapshot, ticket=ticket, authority=self._approval_authority)
 
     # -- reference data -----------------------------------------------------
 
@@ -134,7 +189,7 @@ class DesktopApi:
             return _ok(
                 {
                     "app_version": __version__,
-                    "live_memory_count": self.store.owner_memory_count(),
+                    "live_memory_count": self._store.owner_memory_count(),
                     "scopes": sorted(ALLOWED_SCOPES),
                     "memory_types": sorted(ALLOWED_MEMORY_TYPES),
                     "sensitivities": sorted(ALLOWED_SENSITIVITIES),
@@ -155,20 +210,20 @@ class DesktopApi:
 
     def list_memories(self, limit: int = 200) -> dict[str, Any]:
         try:
-            return _ok(self.store.list_memories(limit=int(limit)))
+            return _ok(self._store.list_memories(limit=int(limit)))
         except Exception as error:
             return _err(str(error))
 
     def search(self, query: str, scope: str | None = None,
                memory_type: str | None = None) -> dict[str, Any]:
         try:
-            return _ok(self.store.owner_search_memories(query, scope=scope, memory_type=memory_type))
+            return _ok(self._store.owner_search_memories(query, scope=scope, memory_type=memory_type))
         except Exception as error:
             return _err(str(error))
 
     def get_memory(self, memory_id: str) -> dict[str, Any]:
         try:
-            memory = self.store.explain(memory_id)
+            memory = self._store.explain(memory_id)
             return _ok(memory) if memory else _err("Memory not found")
         except Exception as error:
             return _err(str(error))
@@ -183,7 +238,7 @@ class DesktopApi:
         project_id: str | None = None,
     ) -> dict[str, Any]:
         try:
-            memory = self.store.remember(
+            memory = self._store.remember(
                 content,
                 memory_type=memory_type,
                 scope=scope,
@@ -208,7 +263,7 @@ class DesktopApi:
                 "confidence",
             }
             fields = {k: v for k, v in (changes or {}).items() if k in allowed}
-            updated = self.store.update(memory_id, **fields)
+            updated = self._store.update(memory_id, **fields)
             return _ok(updated) if updated else _err("Memory not found")
         except ValueError as error:
             return _err(str(error))
@@ -217,7 +272,7 @@ class DesktopApi:
 
     def delete_memory(self, memory_id: str) -> dict[str, Any]:
         try:
-            return _ok({"forgotten": self.store.forget(memory_id)})
+            return _ok({"forgotten": self._store.forget(memory_id)})
         except Exception as error:
             return _err(str(error))
 
@@ -225,7 +280,7 @@ class DesktopApi:
 
     def today(self) -> dict[str, Any]:
         try:
-            memories = self.store.list_memories(limit=1000)
+            memories = self._store.list_memories(limit=1000)
             recent = sorted(
                 memories, key=lambda memory: str(memory["updated_at"]), reverse=True
             )[:10]
@@ -247,7 +302,7 @@ class DesktopApi:
     def sources(self) -> dict[str, Any]:
         try:
             groups: dict[str, dict[str, Any]] = {}
-            for memory in self.store.list_memories(limit=1000):
+            for memory in self._store.list_memories(limit=1000):
                 scheme = _source_scheme(str(memory["source_uri"]))
                 group = groups.setdefault(
                     scheme, {"scheme": scheme, "count": 0, "last_seen": ""}
@@ -265,13 +320,13 @@ class DesktopApi:
 
     def list_projects(self) -> dict[str, Any]:
         try:
-            return _ok(self.store.list_projects())
+            return _ok(self._store.list_projects())
         except Exception as error:
             return _err(str(error))
 
     def setup_status(self, project_id: str, client_id: str) -> dict[str, Any]:
         try:
-            return _ok(self.store.project_setup_status(project_id, client_id))
+            return _ok(self._store.project_setup_status(project_id, client_id))
         except Exception as error:
             return _err(str(error))
 
@@ -279,7 +334,7 @@ class DesktopApi:
         try:
             if not name or not name.strip():
                 return _err("Give the project a name.")
-            return _ok(self.store.ensure_project(
+            return _ok(self._store.ensure_project(
                 name=name, binding_key=f"app://project/{uuid.uuid4()}", cwd_or_repo=""
             ))
         except Exception as error:
@@ -288,7 +343,7 @@ class DesktopApi:
     def get_project_permissions(self, client_id: str) -> dict[str, Any]:
         try:
             projects: dict[str, dict[str, Any]] = {}
-            for item in self.store.project_permissions(client_id):
+            for item in self._store.project_permissions(client_id):
                 project_id = str(item["project_id"])
                 entry = projects.setdefault(project_id, {
                     "project_id": project_id, "can_read": False,
@@ -305,16 +360,16 @@ class DesktopApi:
         try:
             _require_boolean(allowed)
             if allowed:
-                self.store.grant_project(client_id, project_id, action)
+                self._grant_owner_permission(client_id, action, project_id=project_id)
             else:
-                self.store.revoke_project(client_id, project_id, action)
+                self._store.revoke_project(client_id, project_id, action)
             return _ok({"allowed": bool(allowed)})
         except Exception as error:
             return _err(str(error))
 
     def get_capabilities(self, client_id: str) -> dict[str, Any]:
         try:
-            permissions = {str(item["scope"]): item for item in self.store.permissions(client_id)}
+            permissions = {str(item["scope"]): item for item in self._store.permissions(client_id)}
             return _ok({scope: {
                 "read": bool(permissions.get(scope, {}).get("allowed", False)),
                 "write": bool(permissions.get(scope, {}).get("can_write", False)),
@@ -328,14 +383,17 @@ class DesktopApi:
     ) -> dict[str, Any]:
         try:
             _require_boolean(allowed)
-            self.store.set_scope_capability(client_id, scope, action, allowed)
+            if allowed:
+                self._grant_owner_permission(client_id, action, scope=scope)
+            else:
+                self._store.set_scope_capability(client_id, scope, action, False)
             return _ok({"allowed": bool(allowed)})
         except Exception as error:
             return _err(str(error))
 
     def list_clients(self) -> dict[str, Any]:
         try:
-            seen = list(self.store.clients())
+            seen = list(self._store.clients())
             for default in DEFAULT_CLIENTS:
                 if default not in seen:
                     seen.append(default)
@@ -372,7 +430,7 @@ class DesktopApi:
 
     def get_permissions(self, client_id: str) -> dict[str, Any]:
         try:
-            granted = self.store.allowed_scopes(client_id)
+            granted = self._store.allowed_scopes(client_id)
             return _ok(
                 {scope: (scope in granted) for scope in sorted(ALLOWED_SCOPES)}
             )
@@ -384,49 +442,44 @@ class DesktopApi:
     ) -> dict[str, Any]:
         try:
             _require_boolean(allowed)
-            client_id = (client_id or "").strip()
-            if not client_id:
-                return _err("Client id cannot be empty")
             if allowed:
-                self.store.grant(client_id, scope)
+                self._grant_owner_permission(client_id, "read", scope=scope)
             else:
-                self.store.revoke(client_id, scope)
+                self._store.revoke(client_id, scope)
             return _ok({"client_id": client_id, "scope": scope, "allowed": bool(allowed)})
-        except ValueError as error:
-            return _err(str(error))
-        except Exception as error:  # pragma: no cover - defensive
+        except Exception as error:
             return _err(str(error))
 
     # -- activity -----------------------------------------------------------
 
     def list_logs(self, limit: int = 100) -> dict[str, Any]:
         try:
-            return _ok(self.store.list_logs(limit=int(limit)))
+            return _ok(self._store.list_logs(limit=int(limit)))
         except Exception as error:
             return _err(str(error))
 
     def list_sessions(self, limit: int = 100) -> dict[str, Any]:
         try:
-            return _ok(self.store.list_sessions(limit=int(limit)))
+            return _ok(self._store.list_sessions(limit=int(limit)))
         except Exception as error:
             return _err(str(error))
 
     def delete_session(self, session_id: str) -> dict[str, Any]:
         try:
-            return _ok({"deleted": self.store.delete_session(session_id)})
+            return _ok({"deleted": self._store.delete_session(session_id)})
         except Exception as error:
             return _err(str(error))
 
     def capture_status(self) -> dict[str, Any]:
         try:
-            return _ok({"enabled": self.store.capture_enabled()})
+            return _ok({"enabled": self._store.capture_enabled()})
         except Exception as error:
             return _err(str(error))
 
     def set_capture_enabled(self, enabled: bool) -> dict[str, Any]:
         try:
             _require_boolean(enabled)
-            self.store.set_capture_enabled(enabled)
-            return _ok({"enabled": self.store.capture_enabled()})
+            self._store.set_capture_enabled(enabled)
+            return _ok({"enabled": self._store.capture_enabled()})
         except Exception as error:
             return _err(str(error))

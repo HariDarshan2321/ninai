@@ -121,3 +121,13 @@ incompatible downgrade must stop with a recoverable explanation.
 
 The natural-prompt gate is documented in
 [IMPLICIT-CONTINUITY-ACCEPTANCE.md](IMPLICIT-CONTINUITY-ACCEPTANCE.md).
+
+## Packaged development regression tooling
+
+Isolated packaged build, Mac prior-vault smoke, Windows bundled preview installer,
+and native Windows installer-regression workflow are now prepared. See
+[MACOS-RELEASE.md](MACOS-RELEASE.md) and [WINDOWS-PREVIEW.md](WINDOWS-PREVIEW.md)
+for exact commands and limits. Unsigned/ad-hoc CI artifacts do not establish
+publisher identity or complete the signed customer upgrade gate. The workflows
+never publish installers or broaden assistant grants. Mac app replacement and
+Windows native UI/clean-machine acceptance remain explicit manual gates.
