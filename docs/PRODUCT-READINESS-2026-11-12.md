@@ -117,3 +117,17 @@ Revocation blocks future retrieval, not copies an assistant has already received
 [Customer upgrades](CUSTOMER-UPGRADES.md),
 [natural-prompt acceptance](IMPLICIT-CONTINUITY-ACCEPTANCE.md),
 [Render rollout/rollback and storage runbook](RENDER-OPERATIONS.md).
+
+## Live release verification — 13 November 2026
+
+- Code `ef42bd27d4b6d44d630c8cb0718b896957e27ef7` was pushed to `main`.
+- [GitHub validation](https://github.com/HariDarshan2321/ninai/actions/runs/43378174323)
+  succeeded; Vercel also reported success.
+- Render dashboard identifies the same commit as Live; public `/health` reports
+  version0.1.1 and that exact revision, and `/ready` returns HTTP200.
+- The live service is on approved paid0.5c-512mb compute with one instance.
+- Auto-deploy was found set to On Commit, then changed and confirmed to
+  After CI Checks Pass. Existing /ready health-check configuration was confirmed.
+- No database plan, storage allocation, external access rule, or workspace
+  subscription was changed. A production restore or clean-machine signed/native
+  installer acceptance has not been performed.
