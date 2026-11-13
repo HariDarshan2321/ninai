@@ -22,6 +22,14 @@ what works now from the release work still required.
    recall before continuing work. If setup fails, read its recovery message
    rather than repeatedly deleting or replacing folders.
 
+Before replacement, the Mac installer now creates a private, consistent SQLite
+recovery snapshot in the memory folder’s `recovery/` directory. It includes
+committed WAL data and validates the snapshot. Failure stops replacement.
+Snapshots are not restored over subsequent writes or removed automatically; keep
+them until verification and manage their disk usage. Unattended updates preserve
+the capture setting, and capture changes happen only after connector setup
+succeeds. Symbolic-link database paths are rejected.
+
 The Mac installer separates replaceable application files from memory, retains
 its previous app during replacement, and restores app/configuration backups on
 setup failure where possible. This is not a full database rollback system or a
@@ -43,7 +51,20 @@ be selected again. Preserve existing grants; never silently broaden them.
 These are installed artifacts, separate from the cloud URL. Existing users need
 the updated integration package and an assistant restart/reload. Updating the
 backend alone cannot install a missing continuity skill or local lifecycle hook.
-Ninai does not yet provide a unified customer-facing integration updater.
+For Codex cloud continuity, Ninai0.1.1 includes an explicit offline installer:
+
+```sh
+~/.ninai-app/venv/bin/ninai integration-skill install --client codex
+```
+
+For another installation, run `ninai integration-skill install --client codex`.
+It installs the bundled workflow in Codex's user skill directory, updates only
+untouched Ninai-owned files, and refuses edited/unrelated/symlinked files or a
+newer installed skill. It does not change connection credentials or memory
+permissions. If a two-file update is interrupted, it stops for manual review
+rather than trusting mismatched ownership metadata. No update runs in the
+background. Other assistants and cloud-only setups without Ninai installed do
+not gain this workflow from an HTTP URL alone; they need separate acceptance.
 
 ### Windows
 
@@ -51,21 +72,25 @@ There is a preview installer, but Windows install/upgrade/rollback has not been
 accepted on a real clean Windows machine. Do not present it as a supported
 production upgrade route. See [WINDOWS-PREVIEW.md](WINDOWS-PREVIEW.md).
 
-## Required product flow — not implemented yet
+## Update checks now implemented; signed installation remains pending
 
-The app needs an **App updates** view showing the installed version/build,
-latest supported release, release notes, and whether the assistant integration
-also needs updating. Start with an explicit **Check for updates** action; do not
-send memories, project names, or prompts in an update request. Offline or failed
-checks must say “could not check”, not “you are up to date”.
+The app’s **Help & feedback → Updating Ninai and recovering data** section
+shows the running package version and an explicit **Check for updates** action.
+It fetches only public GitHub release metadata, with bounded response size and
+network timeout; no memories, project names, credentials, or prompts are sent.
+It distinguishes current, newer, unpublished, development-ahead and failed checks.
+Offline or failed checks never report that the app is up to date. Release links
+are constrained to this repository. No request runs automatically on startup.
+
+The checker offers release notes and a manual guide. It does not download,
+execute, install, or verify a signed artifact. Package and plugin versions are
+now `0.1.1`; this is a code version, not proof of a signed public release. The cloud setup explains the explicit Codex skill-install command. Showing
+installed integration versions separately and a complete cloud-only novice
+installation flow remain open work.
 
 Offer **Update and restart** only after a platform has a tested, signed update
-artifact and recovery mechanism. Until then, show the accurate manual route.
-Use immutable versioned releases and authenticated/signed release metadata;
-a moving `main` archive is not a reliable release identity. Record installed
-build and integration versions. Current packages and the plugin still use
-`0.1.0`, so publishing changed contents under that same version is insufficient
-for reliable update detection.
+artifact and recovery mechanism. Use immutable versioned releases and verified
+release metadata; a moving `main` archive is not a reliable release identity.
 
 Before replacement: finish active work, create a consistent database backup,
 validate artifact integrity/platform, and preserve settings and client identity.

@@ -291,6 +291,18 @@ class ControlAppTest(unittest.TestCase):
         paths.feed(page)
         self.assertEqual(paths.cloud_buttons, [0], 'Cloud setup must be discoverable outside advanced disclosures')
 
+    def test_control_requires_dashboard_client_even_for_valid_owner_identity(self):
+        from ninai_cloud.auth import AuthSettings
+        settings = AuthSettings(issuer="https://issuer.test", audience="ninai", resource="https://api.test/mcp",
+            jwks_uri="https://issuer.test/jwks", control_client_id="a-different-dashboard-client")
+        endpoint = ControlApp(self.service, Verifier(), settings).handle
+        client = TestClient(Starlette(routes=[Route("/api/control/{path:path}", endpoint, methods=["GET", "POST"])]))
+        response = client.get("/api/control/export", headers=self.auth)
+        self.assertEqual(response.status_code, 403)
+        response = client.post("/api/control/connections/c2/grants", headers=self.auth, json={"can_read": True})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.service.calls, [])
+
     def test_dashboard_oauth_login_uses_authorization_code_pkce(self):
         from ninai_cloud.auth import AuthSettings
         settings = AuthSettings(

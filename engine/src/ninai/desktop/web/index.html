@@ -73,6 +73,10 @@
           <span class="nav__name">Sharing history</span>
           <span class="nav__count" data-count="activity" hidden></span>
         </button>
+        <button class="nav__item" type="button" data-screen="help">
+          <span class="nav__glyph" aria-hidden="true">?</span>
+          <span class="nav__name">Help &amp; feedback</span>
+        </button>
       </nav>
 
       <div class="sidebar__foot">
@@ -81,7 +85,7 @@
           <summary class="foot-label">Stored on this device</summary>
           <p class="foot-value" id="vault-path">local</p>
         </details>
-        <a class="foot-link" href="mailto:hello@ninai.io?subject=Ninai%20feedback" target="_blank" rel="noreferrer">Help &amp; feedback</a>
+
       </div>
     </aside>
 
@@ -111,6 +115,7 @@
             </button>
           </div>
         </header>
+        <p class="screen__sub">Short facts, decisions, and preferences saved for future use. Open a memory to see its origin, edit it, or delete it.</p>
         <div class="mem-toolbar">
           <div class="search">
             <svg class="search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
@@ -168,6 +173,53 @@
           </div>
         </header>
         <div id="activity-body"></div>
+      </section>
+      <section class="screen" id="screen-help" role="region" aria-labelledby="help-title" tabindex="-1">
+        <header class="screen__head"><div>
+          <p class="screen__eyebrow">Get started or get unstuck</p>
+          <h1 class="screen__title" id="help-title">Help &amp; feedback</h1>
+          <p class="screen__sub">Ninai saves useful context on this computer and shares it with assistants you authorize.</p>
+        </div></header>
+        <section class="help-start">
+          <h2>Your first shared memory</h2>
+          <p>Save a decision in a named project, choose an assistant's Read access, then ask that assistant to recall it. The setup guide walks through each step and checks the result.</p>
+          <button class="btn btn--primary" type="button" id="help-setup-guide">Open setup guide</button>
+        </section>
+        <div class="help-topics">
+          <details><summary>What is on each page?</summary>
+            <dl><dt>Home</dt><dd>Your setup progress, recent memories, and archived sessions.</dd>
+              <dt>Memories</dt><dd>Search, add, edit, and delete saved facts and decisions. Each memory keeps its origin.</dd>
+              <dt>Origins</dt><dd>See where existing memories came from. This does not connect new apps.</dd>
+              <dt>Agent sessions</dt><dd>Choose whether completed Claude Code and Codex sessions are archived on this computer. Archives are separate from compact memories.</dd>
+              <dt>Assistants</dt><dd>Review connection status and control each assistant's access to projects and other memory areas.</dd>
+              <dt>Sharing history</dt><dd>Inspect memory requests and which memory IDs Ninai returned.</dd></dl>
+          </details>
+          <details><summary>My assistant cannot find a memory</summary>
+            <ol><li>Check the memory is saved in Memories and note its project or memory area.</li><li>In Assistants, open the assistant and check its connection status and Read access for that project or area.</li><li>Restart the assistant after changing its connection setup, then ask it to make a fresh Ninai tool call.</li><li>Check Sharing history to see what the fresh request returned.</li></ol>
+            <p>A configured connection is not proof of a successful tool call. The setup guide checks actual sharing history.</p>
+          </details>
+          <details><summary>What do Read, Save, and Delete allow?</summary>
+            <p>Read retrieves existing memories. Save adds new memories. Delete removes memories from future use. These permissions are independent; enabling one does not enable the others.</p>
+            <p>Named projects have separate grants. Other memory areas cover memories outside named projects, including older, unassigned project memories. Turning access off affects future requests; an assistant may still hold earlier copies.</p>
+          </details>
+          <details><summary>Where is my data and how do I protect it?</summary>
+            <p>This local app stores its vault on this computer. It does not automatically upload or sync it to hosted Ninai. The storage location is shown below.</p>
+            <p id="help-vault-path" class="help-path"></p>
+            <p>The desktop app has owner access to your vault. Sensitivity labels are informational and the vault is not encrypted by Ninai. Use your device's access controls and disk encryption, and avoid storing credentials.</p>
+          </details>
+          <details><summary>Updating Ninai and recovering data</summary>
+            <p id="help-version"></p>
+            <div id="help-update-controls"></div>
+            <p>Before reinstalling or updating, close Ninai and back up the vault folder shown above. Keep the database and any companion files together. Updates must preserve your memories and explicit permission choices.</p>
+            <p>If an update fails, keep your existing vault and backup. Contact support with the error and version before replacing files. Do not send your vault or credentials.</p>
+          </details>
+        </div>
+        <section class="help-start">
+          <h2>Contact us</h2>
+          <p>Describe what you tried, what you expected, and what happened. Include your Ninai version and operating system. Remove private memories and credentials from screenshots.</p>
+          <a class="btn btn--ghost" href="mailto:hello@ninai.io?subject=Ninai%20feedback" target="_blank" rel="noreferrer">Email help &amp; feedback</a>
+          <p class="screen__sub">Opens your email app. Nothing is sent automatically.</p>
+        </section>
       </section>
     </main>
   </div>

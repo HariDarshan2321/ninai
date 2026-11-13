@@ -35,12 +35,12 @@ def main() -> int:
     if not executable:
         parser.error('Codex CLI is required')
     database_url = bounded_database_url(args.database_url)
-    evidence = Path(tempfile.mkdtemp(prefix='ninai-implicit-cloud-'))
+    evidence = Path(tempfile.mkdtemp(prefix='ninai-implicit-cloud-')).resolve()
     evidence.chmod(0o700)
     if args.with_continuity_skill:
-        skill = evidence / '.agents' / 'skills' / 'project-continuity'
-        skill.mkdir(parents=True)
-        shutil.copyfile(Path(__file__).resolve().parents[1] / 'plugins/ninai/skills/project-continuity/SKILL.md', skill / 'SKILL.md')
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'engine' / 'src'))
+        from ninai.integration_skill import install_continuity_skill
+        install_continuity_skill(target_root=evidence / '.agents' / 'skills')
     print(json.dumps({'evidence_dir': str(evidence), 'mode': 'cloud-only', 'continuity_skill': args.with_continuity_skill}), flush=True)
     fixture = None
     checks = {}

@@ -31,7 +31,7 @@ class BootstrapIntegrationTest(unittest.TestCase):
                 "SELECT provider,client_type FROM client_connections WHERE workspace_id=%s ORDER BY provider",
                 (result["workspace"],),
             ).fetchall()
-            self.assertEqual(clients, [("anthropic", "claude-code"), ("openai", "codex")])
+            self.assertEqual(clients, [("anthropic", "claude-code"), ("ninai", "control-owner"), ("openai", "codex")])
             grants = db.execute(
                 "SELECT count(*) FROM client_scope_grants WHERE workspace_id=%s AND scope_id=%s "
                 "AND can_read AND can_propose AND can_auto_activate",
@@ -45,7 +45,9 @@ class BootstrapIntegrationTest(unittest.TestCase):
         self.assertEqual(hashes, {
             hashlib.sha256(result["tokens"]["claude"].encode()).hexdigest(),
             hashlib.sha256(result["tokens"]["codex"].encode()).hexdigest(),
+            hashlib.sha256(result["tokens"]["operator"].encode()).hexdigest(),
         })
+        self.assertEqual(result["control_pat_sha256"], hashlib.sha256(result["tokens"]["operator"].encode()).hexdigest())
         self.assertTrue(all(raw not in hashes for raw in result["tokens"].values()))
 
     @staticmethod

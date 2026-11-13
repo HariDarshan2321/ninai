@@ -79,6 +79,12 @@ class HostedMCPToolsTest(unittest.TestCase):
         self.assertLessEqual(result["count"], 12)
         self.assertLessEqual(result["estimated_tokens"], MAX_RECALL_TOKENS)
         self.assertEqual(result["max_tokens"], MAX_RECALL_TOKENS)
+    def test_recall_does_not_raise_a_small_requested_budget(self) -> None:
+        packet = self.tools.recall("", "small budget", max_tokens=1)
+        self.assertEqual(packet["max_tokens"], 1)
+        self.assertEqual(packet["facts"], [])
+        self.assertEqual(packet["estimated_tokens"], 0)
+
     def test_write_modes_are_distinct_and_source_backed(self) -> None:
         values = dict(content="Nova uses PostgreSQL", memory_type="decision", scope_kind="project",
                       scope_id="project", source_uri="codex://session/1", idempotency_key="request-1")
@@ -174,6 +180,8 @@ class HostedMCPToolsTest(unittest.TestCase):
             health = client.get("/health")
             self.assertEqual(health.status_code, 200)
             self.assertEqual(health.json()["status"], "ok")
+            self.assertEqual(health.json()["version"], "0.1.1")
+            self.assertEqual(health.headers["cache-control"], "no-store")
             readiness = client.get("/ready")
             self.assertEqual(readiness.status_code, 503)
             self.assertEqual(readiness.json()["status"], "unavailable")

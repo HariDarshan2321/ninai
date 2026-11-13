@@ -61,8 +61,9 @@
     call: call,
     // Convenience typed wrappers around the contract.
     meta: function () { return call("meta"); },
+    checkForUpdates: function () { return call("check_for_updates"); },
     listMemories: function (limit) { return call("list_memories", limit == null ? 200 : limit); },
-    search: function (query) { return call("search", query); },
+    search: function (query, scope, type) { return call("search", query, scope || null, type || null); },
     getMemory: function (id) { return call("get_memory", id); },
     addMemory: function (content, type, scope, source, sensitivity, projectId) {
       return call("add_memory", content, type, scope, source, sensitivity, projectId || null);

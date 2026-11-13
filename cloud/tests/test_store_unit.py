@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from ninai_cloud.migrations import migration_files
 from ninai_cloud.postgres_store import (AuthorizationError, PostgresStore, Principal,
                                         _contains_secret, _looks_conflicting, _normalize,
-                                        _request_hash)
+                                        _request_hash, _normalize_transcript)
 
 
 class _Result:
@@ -35,6 +35,15 @@ class HostedStoreUnitTest(unittest.TestCase):
         self.assertEqual(_normalize("  Project\n Nova   decision "), "Project Nova decision")
         self.assertEqual(_request_hash({"b": 2, "a": 1}), _request_hash({"a": 1, "b": 2}))
         self.assertTrue(_contains_secret("Authorization: Bearer abcdefghijklmnopqrstuvwxyz"))
+
+    def test_hosted_credentials_are_filtered_in_content_and_transcripts(self) -> None:
+        for secret in ("ninai_pat_" + "a" * 43, "sk-proj-" + "a" * 80,
+                       "sk-ant-api03-" + "a" * 80):
+            self.assertTrue(_contains_secret(secret))
+            self.assertNotIn(secret, _normalize_transcript("assistant: " + secret))
+        self.assertIsNone(_normalize_transcript('[]\n42\nnull'))
+        self.assertEqual(_normalize_transcript('[]\n{"role":"user","content":"durable fact"}'),
+                         "user: durable fact")
 
     def test_create_validates_before_opening_database(self) -> None:
         store = PostgresStore("unused", connect=lambda: self.fail("database opened"))

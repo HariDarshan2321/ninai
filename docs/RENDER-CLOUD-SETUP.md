@@ -68,8 +68,8 @@ uv run --with jsonschema python scripts/validate_render_example.py \
   --schema-file /path/to/render-schema.json
 ```
 
-The reviewed schema on 11 November 2026 had SHA-256
-`8a3fb8da6b4f55fe686fbefa790e011d3dd7895f013f355953c572a21ab6494a`.
+The reviewed schema on 12 November 2026 had SHA-256
+`6c6721a602ef6d368d5c9384c473cefaae99980e43dd4b1adcf8a2f258fc54f4`.
 Validation proves the example structure and local safeguards, not deployment,
 provider settings, billing approval or production readiness.
 
@@ -88,3 +88,11 @@ Anonymous HTTP 200 health/discovery and HTTP 401 without credentials are useful
 preflight checks. They do not prove signup, consent, connector compatibility,
 memory access, a hosting plan or recovery. Local PAT protocol tests do not
 replace this real OAuth journey.
+
+## Repeatable cloud releases
+
+Follow [application upgrades and rollback](RENDER-OPERATIONS.md#application-upgrades-and-rollback)
+for each hosted release. It includes prior-deploy evidence, schema compatibility,
+real OAuth acceptance, rollback and restoration of CI-gated deploys. The optional
+Blueprint cannot configure the existing service's Git-provider integration,
+prove a paid service upgrade, or complete recovery and cold-start acceptance.

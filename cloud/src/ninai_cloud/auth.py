@@ -366,6 +366,13 @@ class OAuthControlTokenVerifier(TokenVerifier):
             claims = self.validator.validate(token)
         except AuthenticationError:
             return None
+        # MCP client tokens delegate narrowly scoped memory capabilities. They
+        # must never bootstrap an account or reach the owner control API, which
+        # can export the vault and grant additional scopes.
+        client_id = claims.get(self.settings.oauth_client_claim) or claims.get("azp")
+        if (not self.settings.control_client_id or
+                client_id != self.settings.control_client_id):
+            return None
         try:
             user_id = self.identities.resolve_user(claims, create=True)
             workspace_id = self.identities.workspace_for(
@@ -380,7 +387,7 @@ class OAuthControlTokenVerifier(TokenVerifier):
             if isinstance(claims.get(name), str):
                 trusted[name] = claims[name]
         return AccessToken(
-            token=token, client_id=str(claims.get("client_id") or claims.get("azp") or user_id),
+            token=token, client_id=client_id,
             scopes=[], expires_at=int(claims["exp"]) if claims.get("exp") is not None else None,
             resource=self.settings.resource, subject=str(claims.get("sub")), claims=trusted,
         )

@@ -14,8 +14,13 @@ scripts/ninai-cloud-local doctor
 scripts/ninai-cloud-local bootstrap --email you@example.com
 ```
 
-The bootstrap command prints the Claude and Codex development tokens once.
-Keep them out of shell history and source control. The compose defaults are
+The bootstrap command prints separate Claude, Codex and owner operator tokens
+once, plus `control_pat_sha256`. Keep them out of shell history and source control.
+For the local owner dashboard, set `NINAI_CONTROL_PAT_SHA256` to that digest in
+the environment used by Compose, then run `scripts/ninai-cloud-local start` to
+recreate the service with the new setting. Open `/control` and use only
+`tokens.operator` in the self-hosted access-token field. Keep it out of assistant
+and editor configurations; give those only their respective Claude/Codex tokens. The compose defaults are
 intentionally development-only (`ninai-local-dev-only`) and may be overridden
 with `NINAI_DEV_DB_PASSWORD`, `NINAI_DEV_DB_PORT`, and
 `NINAI_DEV_CLOUD_PORT`. The MCP endpoint is `http://localhost:8000/mcp` by
@@ -60,6 +65,8 @@ and credentials with:
 
 ```bash
 DATABASE_URL=postgresql://... ninai-cloud-bootstrap --email you@example.com
+# Set NINAI_CONTROL_PAT_SHA256 in the service environment to the bootstrap
+# control_pat_sha256 value before starting the owner dashboard.
 NINAI_AUTH_MODE=pat NINAI_PUBLIC_RESOURCE_URL=https://ninai.example/mcp ninai-cloud-mcp
 ```
 
@@ -68,6 +75,33 @@ digests. Tokens expire (90 days by default), and token, client, membership, or
 workspace revocation takes effect on the next request. Use a different token for
 Claude and Codex, keep them out of source control, and terminate TLS at the server
 or a trusted reverse proxy.
+
+The bootstrap also creates a distinct `operator_client` with no memory grants.
+Use its one-time `tokens.operator` only in the owner dashboard at `/control`.
+Set the server environment `NINAI_CONTROL_PAT_SHA256` to the returned
+`control_pat_sha256` and restart the service. The setting accepts comma-separated
+SHA-256 hex digests for explicitly approved operator PATs. Its empty default
+blocks PAT dashboard access while agent PATs continue to work for scoped MCP
+requests. Never put the operator PAT into Claude, Codex, editor settings or chat,
+and never allowlist an existing agent PAT to restore dashboard access.
+Operator PATs still require active membership, workspace, connection and
+owner/admin role checks; the allowlist does not bypass revocation.
+
+For an existing private PAT workspace, provision a separate operator credential
+with the existing workspace and active owner/admin user UUIDs:
+
+```bash
+# DATABASE_URL is already supplied securely in the operator environment.
+ninai-cloud-bootstrap --operator-workspace WORKSPACE_UUID --operator-user OWNER_USER_UUID
+```
+
+This adds only a dedicated operator connection and PAT; it does not create a new
+workspace or grant memory access. Set its returned digest in
+`NINAI_CONTROL_PAT_SHA256`, restart the service, and keep the operator token in
+the owner dashboard only. Do not pass `--email` in this mode. A normal bootstrap
+with `--email` creates a new workspace and does not adopt an existing one.
+For rotation, configure only approved operator digests and revoke the old token;
+removing a digest blocks its dashboard access on the next request.
 
 ### Machine clients (PAT in OAuth mode)
 

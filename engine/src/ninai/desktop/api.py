@@ -9,6 +9,8 @@ import uuid
 from typing import Any
 from urllib.parse import urlsplit
 
+from .. import __version__
+from ..updates import check_for_updates
 from ..config import database_path
 from ..connectors import status as editor_status
 from ..connectors import configure as configure_editor
@@ -131,6 +133,8 @@ class DesktopApi:
         try:
             return _ok(
                 {
+                    "app_version": __version__,
+                    "live_memory_count": self.store.owner_memory_count(),
                     "scopes": sorted(ALLOWED_SCOPES),
                     "memory_types": sorted(ALLOWED_MEMORY_TYPES),
                     "sensitivities": sorted(ALLOWED_SENSITIVITIES),
@@ -144,6 +148,9 @@ class DesktopApi:
         except Exception as error:  # pragma: no cover - defensive
             return _err(str(error))
 
+    def check_for_updates(self) -> dict[str, Any]:
+        return _ok(check_for_updates())
+
     # -- memories -----------------------------------------------------------
 
     def list_memories(self, limit: int = 200) -> dict[str, Any]:
@@ -152,20 +159,10 @@ class DesktopApi:
         except Exception as error:
             return _err(str(error))
 
-    def search(self, query: str) -> dict[str, Any]:
+    def search(self, query: str, scope: str | None = None,
+               memory_type: str | None = None) -> dict[str, Any]:
         try:
-            text = (query or "").strip()
-            if not text:
-                return _ok(self.store.list_memories(limit=200))
-            # Owner-side content match across all scopes. (recall() is the
-            # scope-gated path for AI clients; the owner sees everything.)
-            lowered = text.lower()
-            matches = [
-                memory
-                for memory in self.store.list_memories(limit=1000)
-                if lowered in str(memory["content"]).lower()
-            ]
-            return _ok(matches)
+            return _ok(self.store.owner_search_memories(query, scope=scope, memory_type=memory_type))
         except Exception as error:
             return _err(str(error))
 

@@ -9,6 +9,10 @@ class LocalHostedStackTests(unittest.TestCase):
         self.assertIn("service_completed_successfully", compose)
         self.assertIn('"ninai_cloud.migrations"', compose)
         self.assertIn("NINAI_AUTH_MODE: pat", compose)
+        self.assertIn("NINAI_CONTROL_PAT_SHA256: ${NINAI_CONTROL_PAT_SHA256:-}", compose)
+        for name, default in (("MEMORIES", "10000"), ("WRITES", "20000"), ("SESSIONS", "1000")):
+            setting = f"NINAI_MAX_WORKSPACE_{name}"
+            self.assertIn(setting + ": ${" + setting + ":-" + default + "}", compose)
         self.assertIn("NINAI_PUBLIC_RESOURCE_URL:-http://localhost:", compose)
         self.assertIn("/health", compose)
         active = "\n".join(line for line in compose.splitlines() if not line.lstrip().startswith("#"))

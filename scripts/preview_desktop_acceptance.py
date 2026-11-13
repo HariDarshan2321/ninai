@@ -24,7 +24,7 @@ from ninai.store import MemoryStore
 
 WEB = ROOT / "engine" / "src" / "ninai" / "desktop" / "web"
 METHODS = frozenset({
-    "meta", "list_memories", "search", "get_memory", "add_memory", "update_memory",
+    "meta", "check_for_updates", "list_memories", "search", "get_memory", "add_memory", "update_memory",
     "delete_memory", "today", "sources", "list_projects", "create_project",
     "get_project_permissions", "set_project_permission", "get_capabilities", "set_capability",
     "list_clients", "assistant_statuses", "get_permissions", "set_permission", "list_logs",

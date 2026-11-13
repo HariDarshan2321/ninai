@@ -1754,3 +1754,39 @@ select.form__control {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Keep permission controls behind native, keyboard-operable disclosure. */
+.client-grid { grid-template-columns: 1fr; align-items: start; }
+.client-card__head { cursor: pointer; list-style: none; border-bottom: 0; }
+.client-card__head::-webkit-details-marker { display: none; }
+.client-card__head::before { content: "›"; font-size: 1.4rem; line-height: 1; }
+.client-card[open] > .client-card__head { border-bottom: 1px solid var(--line); }
+.client-card[open] > .client-card__head::before { transform: rotate(90deg); }
+.client-card__head:focus-visible, .help-topics summary:focus-visible, .perm-advanced summary:focus-visible {
+  outline: 2px solid var(--signal); outline-offset: -3px;
+}
+.client-card__granted { color: var(--text-muted); font-family: var(--font-sans); font-size: 0.78rem; }
+.client-card__disclosure { color: var(--text-muted); font-size: 0.75rem; }
+.client-card__id { overflow-wrap: anywhere; min-width: 0; }
+.permission-action { min-height: 36px; }
+.help-start { padding: 20px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); margin-bottom: 24px; }
+.help-start h2 { margin: 0 0 12px; font-size: 1.1rem; }
+.help-start p, .help-topics p, .help-topics li, .help-topics dd { font-size: 0.9rem; line-height: 1.65; color: var(--text-muted); }
+.help-topics { margin-bottom: 24px; }
+.help-topics > details { border-bottom: 1px solid var(--line); padding: 18px 0; }
+.help-topics summary { cursor: pointer; font-weight: 600; line-height: 1.5; }
+.help-topics dt { font-weight: 600; margin-top: 14px; }
+.help-topics dd { margin: 4px 0 0; }
+.help-path { overflow-wrap: anywhere; font-family: var(--font-mono); }
+@media (max-width: 520px) {
+  .client-card__granted { flex-basis: 100%; margin-left: 0; }
+}
+@media (max-width: 880px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { min-width: 0; }
+  .nav { min-width: 0; flex: 1; }
+  .nav__item { flex-shrink: 0; width: auto; }
+}
+.sidebar__foot .btn { color: var(--sidebar-text); border-color: var(--sidebar-line); }
+
+.badge--project { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

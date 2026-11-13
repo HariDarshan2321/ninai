@@ -63,6 +63,25 @@ class DesktopApiTest(unittest.TestCase):
         self.assertFalse(res["ok"])
         self.assertIn("secret", res["error"].lower())
 
+    def test_owner_search_finds_old_memories_and_exact_counts_beyond_ui_limit(self):
+        old = self.api.add_memory("Straße archive %_", scope="personal")["data"]["id"]
+        with self.store._connection() as db:
+            db.executemany("""INSERT INTO memories
+                (id, content, memory_type, scope, source_uri, importance, confidence, created_at, updated_at)
+                VALUES(?, 'newer note', 'fact', 'work', 'synthetic://owner-search', .5, 1, '2099-01-01', '2099-01-01')""",
+                [(f"new-{index}",) for index in range(1100)])
+        result = self.api.search("STRASSE archive %_")
+        self.assertTrue(result["ok"])
+        self.assertEqual([row["id"] for row in result["data"]], [old])
+        self.assertEqual(len(self.api.search("")["data"]), 200)
+        self.assertEqual([row["id"] for row in self.api.search("", "personal", "fact")["data"]], [old])
+        self.assertFalse(self.api.search("", "not-an-area")["ok"])
+        self.assertEqual(self.api.meta()["data"]["live_memory_count"], 1101)
+        self.api.delete_memory(old)
+        self.assertEqual(self.api.search("STRASSE")["data"], [])
+        self.assertEqual(self.api.meta()["data"]["live_memory_count"], 1100)
+        self.assertFalse(self.api.search("x" * 1001)["ok"])
+
     def test_update_and_delete_memory(self) -> None:
         memory_id = self.api.add_memory("draft note", scope="project")["data"]["id"]
         updated = self.api.update_memory(

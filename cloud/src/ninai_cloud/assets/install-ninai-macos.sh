@@ -106,6 +106,8 @@ application = Path(os.environ["NINAI_INSTALL_DIR"]).resolve()
 if os.environ.get("NINAI_DATA_DIR") and not Path(os.environ["NINAI_DATA_DIR"]).is_absolute():
     raise SystemExit("Use an absolute NINAI_DATA_DIR so every assistant uses the same memory directory. Existing files were kept.")
 data = Path(os.environ.get("NINAI_DATA_DIR", str(Path.home() / ".ninai"))).resolve()
+if (data / "ninai.sqlite3").is_symlink():
+    raise SystemExit("The memory database must not be a symbolic link. Existing files were kept.")
 if application == data or application in data.parents or data in application.parents:
     raise SystemExit("Choose separate installation and memory directories. Updates must never replace saved memories. Existing files were kept.")
 PY
@@ -195,6 +197,59 @@ finish_install() {
 }
 trap finish_install EXIT
 
+create_recovery_snapshot() {
+  "${python_cmd}" - <<'PY'
+import os
+import sqlite3
+import tempfile
+import time
+from pathlib import Path
+from urllib.parse import quote
+
+data = Path(os.environ.get("NINAI_DATA_DIR", str(Path.home() / ".ninai"))).resolve()
+source = data / "ninai.sqlite3"
+if source.exists():
+    backups = data / "recovery"
+    if backups.is_symlink():
+        raise SystemExit("Recovery folder must not be a symbolic link. Existing app and memories were kept.")
+    backups.mkdir(mode=0o700, exist_ok=True)
+    if backups.stat().st_uid != os.getuid():
+        raise SystemExit("Recovery folder is not owned by this user. Existing app and memories were kept.")
+    backups.chmod(0o700)
+    fd, temporary = tempfile.mkstemp(prefix=".snapshot-", dir=backups)
+    os.close(fd)
+    destination = Path(temporary)
+    reader = writer = None
+    try:
+        deadline = time.monotonic() + 30
+        reader = sqlite3.connect("file:" + quote(str(source), safe="/") + "?mode=ro", uri=True, timeout=5)
+        writer = sqlite3.connect(destination)
+        def progress(status, remaining, total):
+            if time.monotonic() > deadline:
+                raise TimeoutError("Recovery snapshot timed out. Close connected assistants and try again.")
+        reader.backup(writer, pages=128, progress=progress, sleep=0.1)
+        if writer.execute("PRAGMA quick_check").fetchone() != ("ok",):
+            raise RuntimeError("Recovery snapshot validation failed. Existing app and memories were kept.")
+        writer.close()
+        writer = None
+        destination.chmod(0o600)
+        final = backups / ("before-update-" + time.strftime("%Y%m%d-%H%M%S") + "-" + destination.name.removeprefix(".snapshot-") + ".sqlite3")
+        destination.replace(final)
+        print("Recovery snapshot saved at " + str(final))
+        print("Keep it until the updated app and assistants are verified. Older recovery snapshots are not removed automatically.")
+    finally:
+        if writer is not None:
+            writer.close()
+        if reader is not None:
+            reader.close()
+        destination.unlink(missing_ok=True)
+PY
+}
+
+# Take a consistent SQLite snapshot before diagnostics can migrate a database.
+# A failed snapshot stops replacement; it is never restored over newer writes.
+create_recovery_snapshot
+
 if [[ -d "${install_dir}" ]]; then
   backup_dir="${install_dir}.previous.$$"
   mv "${install_dir}" "${backup_dir}"
@@ -245,15 +300,10 @@ if [[ "${session_capture}" == "ask" ]]; then
       *) session_capture="on" ;;
     esac
   else
-    session_capture="off"
+    # An unattended update must preserve the owner's existing capture choice.
+    session_capture="keep"
   fi
 fi
-if [[ "${session_capture}" == "on" ]]; then
-  "${install_dir}/venv/bin/ninai" capture enable >/dev/null
-else
-  "${install_dir}/venv/bin/ninai" capture disable >/dev/null
-fi
-
 merge_hooks() {
   target="$1"
   provider="$2"
@@ -463,6 +513,13 @@ case "${client}" in
     ;;
 esac
 
+# Do not change capture preferences until connector configuration has succeeded.
+if [[ "${session_capture}" == "on" ]]; then
+  "${install_dir}/venv/bin/ninai" capture enable >/dev/null
+elif [[ "${session_capture}" == "off" ]]; then
+  "${install_dir}/venv/bin/ninai" capture disable >/dev/null
+fi
+
 install_complete=1
 printf '\nNinai is ready.\n'
 open "${app_bundle}" >/dev/null 2>&1 || true
@@ -472,7 +529,9 @@ if [[ "${client}" == "none" ]]; then
 else
   printf 'Configured assistants: %s. Verify tools in each assistant, then choose memory access in Ninai. New access stays off until you grant it.\n' "${client}"
 fi
-if [[ "${session_capture}" == "on" ]]; then
+if [[ "${session_capture}" == "keep" ]]; then
+  printf '%s\n' 'Automatic local session capture: previous setting kept (new installations start disabled)'
+elif [[ "${session_capture}" == "on" ]]; then
   printf '%s\n' 'Automatic local session capture: enabled'
 else
   printf '%s\n' 'Automatic local session capture: disabled (enable it later in Ninai settings)'

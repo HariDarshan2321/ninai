@@ -1,6 +1,6 @@
 /* ==========================================================================
    Ninai desktop — application logic
-   Vanilla JS, no build step. Renders five screens over the Python bridge:
+   Vanilla JS, no build step. Renders screens over the Python bridge:
    Today, Memories, Sources, Sessions, Permissions, Activity.
    ========================================================================== */
 (function () {
@@ -155,6 +155,16 @@
       h("span", { class: "badge__dot" }), label);
   }
 
+  function rememberProjects(projects) {
+    (projects || []).forEach(function (project) { state.projectNames[project.id] = project.name; });
+  }
+
+  function memoryLocationBadge(mem) {
+    if (!mem.project_id) return scopeBadge(mem.scope);
+    return h("span", { class: "badge badge--scope badge--project", title: "Project id: " + mem.project_id,
+      text: "Project: " + (state.projectNames[mem.project_id] || mem.project_id) });
+  }
+
   function memoryAreaLabel(scope) {
     return scope === "project" ? "Project memories" : (SCOPE_LABEL[scope] || humanize(scope));
   }
@@ -207,6 +217,7 @@
     meta: null,
     screen: "today",
     memories: [],
+    projectNames: Object.create(null),
     filters: { query: "", scope: "", type: "" },
     lastFocus: null,
     modalGeneration: 0,
@@ -215,6 +226,7 @@
     guide: { open: true, step: 0, project: "", client: "" }
   };
 
+  var expandedClients = Object.create(null);
   var extraClients = []; // client ids added this session but not yet persisted
 
   function setCount(name, n) {
@@ -233,7 +245,8 @@
     sources: loadSources,
     sessions: loadSessions,
     permissions: loadPermissions,
-    activity: loadActivity
+    activity: loadActivity,
+    help: loadHelp
   };
 
   async function loadSessions() {
@@ -247,7 +260,12 @@
       var consent = h("section", { class: "today-group" },
         h("div", { class: "today-group__head" }, h("h2", { text: "Automatic archive" })),
         h("p", { class: "state__body", text: capture.enabled ? "Enabled — connected Claude Code and Codex sessions are stored locally." : "Disabled — no lifecycle transcript is archived." }),
-        h("button", { class: "btn btn--primary", type: "button", text: capture.enabled ? "Disable archive" : "Enable archive", onclick: async function () { await B.setCaptureEnabled(!capture.enabled); loadSessions(); } })
+        h("button", { class: "btn btn--primary", type: "button", text: capture.enabled ? "Disable archive" : "Enable archive", onclick: async function () {
+          this.disabled = true;
+          try { await B.setCaptureEnabled(!capture.enabled); await loadSessions(); }
+          catch (err) { toast(err.message || String(err), "error"); }
+          finally { this.disabled = false; }
+        } })
       );
       body.appendChild(consent);
       if (!sessions.length) body.appendChild(stateBlock({ title: "No archived sessions", body: "Enable capture, then finish a Claude Code or Codex session." }));
@@ -263,7 +281,10 @@
               sourceTag(s.source_uri), formatRelative(s.updated_at),
               h("button", { class: "btn btn--danger", type: "button", text: "Delete archive", onclick: async function () {
                 if (!window.confirm("Delete this archived session from Ninai on this device?")) return;
-                await B.deleteSession(s.id); toast("Session archive deleted."); loadSessions();
+                this.disabled = true;
+                try { await B.deleteSession(s.id); toast("Session archive deleted."); await loadSessions(); }
+                catch (err) { toast(err.message || String(err), "error"); }
+                finally { this.disabled = false; }
               } })
             )
           ));
@@ -272,7 +293,7 @@
       }
       setCount("sessions", sessions.length);
     } catch (err) {
-      clear(body); body.appendChild(stateBlock({ title: "Could not load sessions", body: err.message, error: true }));
+      showError(body, err);
     }
   }
 
@@ -290,6 +311,31 @@
     var active = $("#screen-" + name);
     if (active) active.focus({ preventScroll: true });
     LOADERS[name]();
+  }
+
+  function loadHelp() {
+    $("#help-vault-path").textContent = state.meta.vault_path || "Storage location unavailable";
+    $("#help-version").textContent = "Installed version: " + (state.meta.app_version || "unavailable");
+    var controls = $("#help-update-controls");
+    if (controls.childNodes.length) return;
+    var result = h("p", { role: "status", "aria-live": "polite" });
+    var button = h("button", { type: "button", class: "btn btn--ghost", text: "Check for updates", onclick: async function () {
+      button.disabled = true;
+      result.textContent = "Checking published releases…";
+      try {
+        var update = await B.checkForUpdates();
+        clear(result);
+        result.appendChild(document.createTextNode(update.message));
+        if (update.release_url && /^https:\/\/github\.com\/HariDarshan2321\/ninai\/releases\/tag\/v[0-9A-Za-z.+-]+$/.test(update.release_url)) {
+          result.appendChild(h("a", { href: update.release_url, target: "_blank", rel: "noreferrer", text: " Read release notes" }));
+        }
+      } catch (err) { result.textContent = "Could not check for updates: " + (err.message || String(err)) + ". Try again when connected."; }
+      finally { button.disabled = false; }
+    } });
+    controls.appendChild(h("p", { text: "Checking contacts GitHub for public release information. No memories are sent. Updates are installed manually." }));
+    controls.appendChild(button);
+    controls.appendChild(result);
+    controls.appendChild(h("a", { href: "https://github.com/HariDarshan2321/ninai/blob/main/docs/CUSTOMER-UPGRADES.md", target: "_blank", rel: "noreferrer", text: "Read the update and recovery guide" }));
   }
 
   /* ---- Home ------------------------------------------------------------- */
@@ -328,6 +374,7 @@
     if (!guide.open) return section;
     var records = await Promise.all([B.listProjects(), B.listClients()]);
     var projects = records[0] || [], clients = records[1] || [];
+    rememberProjects(projects);
     if (!projects.some(function (p) { return p.id === guide.project; })) guide.project = "";
     if (clients.indexOf(guide.client) < 0) guide.client = "";
     section.appendChild(h("p", { class: "setup-guide__intro", text: "Save one decision, choose who can read it, and test it in your assistant. Progress is checked against saved memories, permissions, and sharing history." }));
@@ -393,7 +440,7 @@
     return h("article", { class: "today-item" + (kind === "decision" ? " today-item--decision" : "") },
       h("p", { class: "today-item__content", text: mem.content }),
       h("div", { class: "today-item__meta" },
-        scopeBadge(mem.scope),
+        memoryLocationBadge(mem),
         sourceTag(mem.source_uri)
       )
     );
@@ -491,28 +538,20 @@
     ));
     row.appendChild(h("div", { class: "mem-row__badges" },
       typeBadge(mem.memory_type),
-      scopeBadge(mem.scope),
+      memoryLocationBadge(mem),
       sensitivityBadge(mem.sensitivity)
     ));
     row.addEventListener("click", function () { openDrawer(mem.id, row); });
     return row;
   }
 
-  function applyFilters(list) {
-    return list.filter(function (m) {
-      if (state.filters.scope && m.scope !== state.filters.scope) return false;
-      if (state.filters.type && m.memory_type !== state.filters.type) return false;
-      return true;
-    });
-  }
-
   function renderMemList() {
     var body = $("#mem-body");
     clear(body);
-    var filtered = applyFilters(state.memories);
+    var filtered = state.memories;
     var countEl = $("#mem-count");
     countEl.textContent = filtered.length + (filtered.length === 1 ? " memory" : " memories");
-    if (!state.filters.query) setCount("memories", state.memories.length);
+    if (state.memories.length >= 200) body.appendChild(h("p", { class: "screen__sub", text: "Showing the latest 200 memories matching your search and selected filters. Narrow your search to find older or more specific results." }));
 
     if (!filtered.length) {
       var filtering = state.filters.query || state.filters.scope || state.filters.type;
@@ -529,15 +568,21 @@
     body.appendChild(list);
   }
 
+  var memoryLoadGeneration = 0;
   async function loadMemories() {
+    var generation = ++memoryLoadGeneration;
     var body = $("#mem-body");
     clear(body);
     body.appendChild(loadingBlock());
     try {
-      var list = await B.search(state.filters.query || "");
+      var result = await Promise.all([B.search(state.filters.query || "", state.filters.scope, state.filters.type), B.listProjects().catch(function () { return []; })]);
+      if (generation !== memoryLoadGeneration) return;
+      var list = result[0];
+      rememberProjects(result[1]);
       state.memories = Array.isArray(list) ? list : [];
       renderMemList();
     } catch (err) {
+      if (generation !== memoryLoadGeneration) return;
       showError(body, err);
     }
   }
@@ -545,6 +590,7 @@
   var searchTimer = null;
   function onSearchInput(e) {
     state.filters.query = e.target.value.trim();
+    memoryLoadGeneration++;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(loadMemories, 220);
   }
@@ -568,11 +614,12 @@
     body.appendChild(h("p", { class: "drawer__content", text: mem.content }));
     body.appendChild(h("div", { class: "drawer__badges" },
       typeBadge(mem.memory_type),
-      scopeBadge(mem.scope),
+      memoryLocationBadge(mem),
       sensitivityBadge(mem.sensitivity)
     ));
 
     var prov = h("div", { class: "prov" });
+    if (mem.project_id) prov.appendChild(provRow("Project", state.projectNames[mem.project_id] || mem.project_id));
     prov.appendChild(provRow("Importance", Number(mem.importance).toFixed(2)));
     prov.appendChild(provRow("Confidence", Number(mem.confidence).toFixed(2)));
     prov.appendChild(provRow("Source", sourceTag(mem.source_uri), true));
@@ -733,7 +780,7 @@
 
   function sourceCard(src) {
     return h("article", { class: "source-card" },
-      h("div", { class: "source-card__scheme", text: src.scheme }),
+      h("div", { class: "source-card__scheme", title: "Source scheme: " + src.scheme, text: src.scheme === "app" ? "Added in Ninai" : src.scheme }),
       h("div", { class: "source-card__count" }, numberFmt(src.count), h("small", {}, src.count === 1 ? "memory" : "memories")),
       h("div", { class: "source-card__seen" }, "Last seen " + (src.last_seen ? formatRelative(src.last_seen) : "—"))
     );
@@ -771,14 +818,15 @@
 
   /* ---- Permissions ------------------------------------------------------ */
 
-  function grantedCount(card) {
-    return $$('.switch[aria-checked="true"]', card).length;
-  }
-
   function updateGrantedLabel(card) {
-    var total = $$(".switch", card).length;
     var label = $(".client-card__granted", card);
-    if (label) label.textContent = grantedCount(card) + " of " + total + " other areas readable";
+    var counts = ["Read", "Save", "Delete"].map(function (action) {
+      return $$("input[data-action='" + action + "']", card).filter(function (input) { return input.checked; }).length
+        + (action === "Read" ? $$('.switch[aria-checked="true"]', card).length : 0);
+    });
+    if (label) label.textContent = counts.some(function (count) { return count > 0; })
+      ? "Access grants: " + counts[0] + " read · " + counts[1] + " save · " + counts[2] + " delete"
+      : "No memory access";
   }
 
   function scopeSwitch(clientId, scope, allowed) {
@@ -810,31 +858,35 @@
   }
 
   function permissionToggle(clientId, name, action, allowed, save) {
-    var input = h("input", { type: "checkbox", "aria-label": action + " " + name + " for " + clientId });
+    var input = h("input", { type: "checkbox", "data-action": action, "aria-label": action + " " + name + " for " + clientId });
     input.checked = !!allowed;
     input.addEventListener("change", async function () {
       var next = input.checked;
       input.disabled = true;
       try { await save(next); toast("Permission updated. Applies to future requests."); }
       catch (err) { input.checked = !next; toast(err.message || String(err), "error"); }
-      finally { input.disabled = false; }
+      finally { input.disabled = false; updateGrantedLabel(input.closest(".client-card")); }
     });
     return h("label", { class: "permission-action" }, input, action);
   }
 
   function clientCard(clientId, perms, assistantStatus, projects, projectPermissions, capabilities) {
-    var card = h("article", { class: "client-card" });
+    var card = h("details", { class: "client-card", "data-client": clientId });
+    card.open = !!expandedClients[clientId];
+    card.addEventListener("toggle", function () { expandedClients[clientId] = card.open; });
     var stateName = assistantStatus ? assistantStatus.status : "custom";
     var stateLabel = assistantStatus
       ? ({ connected: "Connected", configured: "Configured", needs_attention: "Needs attention", not_installed: "Not installed" }[stateName] || "Check status")
       : "Custom";
-    var head = h("div", { class: "client-card__head" },
+    var head = h("summary", { class: "client-card__head" },
       markSvg("nav__glyph"),
       h("span", { class: "client-card__id", text: assistantStatus ? assistantStatus.name : clientId }),
       h("span", { class: "connection-state is-" + stateName, text: stateLabel }),
-      h("span", { class: "client-card__granted" })
+      h("span", { class: "client-card__granted" }),
+      h("span", { class: "client-card__disclosure", text: "Review access" })
     );
     card.appendChild(head);
+    card.appendChild(h("p", { class: "client-card__status-copy", text: "Assistant id: " + clientId + ". Connection setup and memory access are separate." }));
     if (assistantStatus) {
       card.appendChild(h("p", { class: "client-card__status-copy", text: assistantStatus.message }));
       if ((clientId === "cursor" || clientId === "vscode") && assistantStatus.installed) {
@@ -864,7 +916,7 @@
       card.appendChild(h("div", { class: "project-permission" }, h("strong", { text: project.name }), actions));
     });
     var otherAreas = h("details", { class: "perm-advanced" }, h("summary", {}, "Read other memory areas"));
-    otherAreas.open = state.meta.scopes.some(function (scope) { return !!perms[scope]; });
+    // Keep optional areas collapsed even when access is already granted.
     otherAreas.appendChild(h("p", { class: "client-card__status-copy", text: "Optional: share memories outside named projects. You can complete the setup guide using only your chosen project." }));
     state.meta.scopes.forEach(function (scope) {
       var allowed = !!perms[scope];
@@ -910,6 +962,7 @@
       setCount("permissions", clients.length);
 
       var projects = Array.isArray(result[2]) ? result[2] : [];
+      rememberProjects(projects);
       var permsList = await Promise.all(clients.map(function (c) {
         return Promise.all([B.getPermissions(c), B.getProjectPermissions(c), B.getCapabilities(c)]);
       }));
@@ -930,7 +983,7 @@
       input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); addClient(); } });
       var intro = h("section", { class: "permission-help" },
         h("h2", { text: "You stay in control" }),
-        h("p", { text: "Choose what each assistant may read, save, or delete. Named projects have separate permissions, all off by default. Changes apply to future requests; they cannot remove copies an assistant already received." })
+        h("p", { text: "Open an assistant to review access. Read lets it retrieve memories, Save lets it add new ones, and Delete removes them from future use. Each grant is independent. New projects start with access off. Revocation blocks future requests but cannot remove copies already received." })
       );
       body.appendChild(intro);
       var bar = h("details", { class: "perm-advanced" },
@@ -1150,6 +1203,7 @@
   async function loadProjectOptions(selectedId) {
     var generation = state.modalGeneration;
     var projects = await B.listProjects();
+    rememberProjects(projects);
     if (generation !== state.modalGeneration || $("#add-modal").hidden || $("#add-modal").inert) return;
     var select = $("#add-project");
     var selected = selectedId || select.value;
@@ -1173,13 +1227,14 @@
       title: "Something went wrong",
       body: (err && err.message) ? err.message : String(err)
     }));
+    container.appendChild(h("button", { type: "button", class: "btn btn--ghost", text: "Try again", onclick: function () { LOADERS[state.screen](); } }));
   }
 
   function refreshCounts() {
     Promise.all([B.today(), B.listSessions(5)]).then(function (result) {
       setCount("today", (result[0].recent_memories || []).length + (result[1] || []).length);
     }).catch(function () {});
-    B.listMemories(1000).then(function (l) { setCount("memories", (l || []).length); }).catch(function () {});
+    B.meta().then(function (meta) { setCount("memories", meta.live_memory_count); }).catch(function () {});
     B.sources().then(function (l) { setCount("sources", (l || []).length); }).catch(function () {});
     B.listClients().then(function (l) {
       var n = (l || []).length;
@@ -1225,10 +1280,11 @@
     });
 
     $("#mem-search").addEventListener("input", onSearchInput);
-    $("#filter-scope").addEventListener("change", function (e) { state.filters.scope = e.target.value; renderMemList(); });
-    $("#filter-type").addEventListener("change", function (e) { state.filters.type = e.target.value; renderMemList(); });
+    $("#filter-scope").addEventListener("change", function (e) { state.filters.scope = e.target.value; clearTimeout(searchTimer); loadMemories(); });
+    $("#filter-type").addEventListener("change", function (e) { state.filters.type = e.target.value; clearTimeout(searchTimer); loadMemories(); });
 
     $("#add-memory-btn").addEventListener("click", openModal);
+    $("#help-setup-guide").addEventListener("click", function () { state.guide.open = true; navTo("today"); });
     $("#open-setup-guide").addEventListener("click", function () { state.guide.open = true; navTo("today"); });
     $("#add-close").addEventListener("click", closeModal);
     $("#add-cancel").addEventListener("click", closeModal);

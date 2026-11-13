@@ -47,8 +47,12 @@ class MemoryStore:
         os.chmod(self.path, 0o600)
         for suffix in ("-wal", "-shm"):
             sidecar = Path(f"{self.path}{suffix}")
-            if sidecar.exists():
+            try:
                 os.chmod(sidecar, 0o600)
+            except FileNotFoundError:
+                # SQLite may remove a sidecar when the last other connection
+                # closes between initialization and chmod. Other errors surface.
+                pass
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
@@ -954,6 +958,32 @@ class MemoryStore:
                 LIMIT ?
                 """,
                 (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def owner_memory_count(self) -> int:
+        """Owner UI inventory; agent reads must use permission-filtered recall."""
+        with self._connection() as db:
+            return int(db.execute("SELECT count(*) FROM memories WHERE deleted_at IS NULL").fetchone()[0])
+
+    def owner_search_memories(self, query: str, limit: int = 200, *, scope: str | None = None,
+                              memory_type: str | None = None) -> list[dict[str, object]]:
+        """Search all live owner memories, returning a bounded latest-first view."""
+        if not isinstance(query, str) or len(query) > 1000:
+            raise ValueError("Search must be text of at most 1,000 characters.")
+        if scope is not None and scope not in ALLOWED_SCOPES:
+            raise ValueError("Choose a valid memory area.")
+        if memory_type is not None and memory_type not in ALLOWED_MEMORY_TYPES:
+            raise ValueError("Choose a valid memory type.")
+        with self._connection() as db:
+            db.create_function("ninai_casefold", 1, lambda value: str(value).casefold(), deterministic=True)
+            rows = db.execute(
+                """SELECT * FROM memories WHERE deleted_at IS NULL
+                   AND instr(ninai_casefold(content), ?) > 0
+                   AND (? IS NULL OR scope=?) AND (? IS NULL OR memory_type=?)
+                   ORDER BY updated_at DESC, id LIMIT ?""",
+                (query.strip().casefold(), scope, scope, memory_type, memory_type,
+                 max(1, min(int(limit), 200))),
             ).fetchall()
         return [dict(row) for row in rows]
 

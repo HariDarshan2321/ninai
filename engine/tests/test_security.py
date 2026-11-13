@@ -12,6 +12,10 @@ class SecurityFilterTest(unittest.TestCase):
     # scanning from flagging the deliberately realistic test fixtures while the
     # assembled string still exercises the detection regexes.
     SECRETS = {
+        "ninai_pat": "ninai_" + "pat_" + "synthetic012345678901234567890123",
+        "openai_project": "sk-" + "proj-" + "synthetic012345678901234567890123",
+        "openai_service": "sk-" + "svcacct-" + "synthetic012345678901234567890123",
+        "anthropic": "sk-" + "ant-" + "synthetic012345678901234567890123",
         "aws_access_key": "AKIA" + "IOSFODNN7EXAMPLE",
         "google_api_key": "AIza" + "SyB1234567890abcdefghijklmnopqrstuv",
         "github_fine_grained_pat": "github_" + "pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz012345",

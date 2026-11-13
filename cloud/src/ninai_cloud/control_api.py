@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import hmac
 import base64
 import html
 import re
@@ -24,7 +25,7 @@ from mcp.server.auth.provider import TokenVerifier
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
-from .postgres_store import AuthorizationError
+from .postgres_store import AuthorizationError, PostgresStore
 from .auth import AuthSettings
 from .control_ui import render_control_center
 from .admin_ui import ADMIN_HTML
@@ -458,6 +459,7 @@ class ControlService:
     def delete_session(self, identity: ControlIdentity, session_id: str) -> bool:
         with self._connect() as db:
             self._member(db, identity, admin=True)
+            PostgresStore._lock_workspace(db, identity.workspace_id)
             db.execute(
                 "DELETE FROM session_artifacts WHERE workspace_id=%s AND session_id=%s",
                 (identity.workspace_id, session_id),
@@ -542,6 +544,7 @@ class ControlService:
     def delete_workspace(self, identity: ControlIdentity, confirmation: str) -> bool:
         with self._connect() as db:
             workspace = self._member(db, identity, admin=True)
+            PostgresStore._lock_workspace(db, identity.workspace_id)
             if workspace["role"] != "owner":
                 raise AuthorizationError("Workspace owner role required")
             if confirmation != workspace["slug"]:
@@ -562,6 +565,13 @@ class ControlApp:
                  oauth_settings: AuthSettings | None = None) -> None:
         self.service, self.token_verifier = service, token_verifier
         self.oauth_settings = oauth_settings
+        # Self-hosted agent PATs are delegated memory credentials, even when
+        # their owning account is a workspace owner. Only a separately retained
+        # operator credential explicitly configured by digest may use control.
+        self._control_pat_hashes = tuple(value.strip().lower() for value in
+            os.environ.get("NINAI_CONTROL_PAT_SHA256", "").split(",") if value.strip())
+        if any(not re.fullmatch(r"[0-9a-f]{64}", value) for value in self._control_pat_hashes):
+            raise ValueError("NINAI_CONTROL_PAT_SHA256 must contain SHA-256 hex digests")
         self._installer = files("ninai_cloud.assets").joinpath("install-ninai-macos.sh").read_bytes()
         self._installer_sha256 = hashlib.sha256(self._installer).hexdigest()
 
@@ -761,11 +771,15 @@ class ControlApp:
         ).partition(" ")
         if not separator or scheme.lower() != "bearer" or not credential.strip():
             raise AuthenticationError("A Bearer authorization header is required")
+        if getattr(self.service, "self_hosted", False):
+            digest = hashlib.sha256(credential.strip().encode()).hexdigest()
+            if not any(hmac.compare_digest(digest, allowed) for allowed in self._control_pat_hashes):
+                raise AuthenticationError("A separately configured owner control credential is required")
         token = await self.token_verifier.verify_token(credential.strip())
         if token is None:
             raise AuthenticationError("Bearer token validation failed")
-        if platform_admin and self.oauth_settings and token.client_id != self.oauth_settings.control_client_id:
-            raise AuthorizationError("Platform administration requires a dashboard sign-in")
+        if self.oauth_settings and token.client_id != self.oauth_settings.control_client_id:
+            raise AuthorizationError("Control administration requires a dashboard sign-in")
         return self._token_identity(token)
 
     @staticmethod
@@ -798,6 +812,8 @@ class ControlApp:
         query = parse_qs(request.url.query)
         raw = await request.body()
         data = json.loads(raw or b"{}") if raw else {}
+        if not isinstance(data, dict):
+            raise ValueError("Request body must be a JSON object")
         suffix = path.removeprefix("/api/control")
         if method == "GET" and suffix == "/account":
             result = {"user_id": identity.user_id, "platform_admin": self.service.is_platform_admin(identity)}

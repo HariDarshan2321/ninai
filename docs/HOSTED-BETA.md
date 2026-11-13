@@ -97,6 +97,17 @@ All write calls require `source_uri` and `idempotency_key`. Requests cannot choo
 
 OAuth is the default and is required for a normal multi-user hosted deployment. A private operator can explicitly set `NINAI_AUTH_MODE=pat`, run `ninai-cloud-bootstrap`, and receive separate opaque credentials for Claude and Codex. PAT plaintext is printed once and only its SHA-256 digest is stored. PAT mode has no browser login or refresh flow; it is intended for a trusted self-hosted beta, not as a substitute for public OAuth onboarding.
 
+Private PAT-mode dashboard access uses a separate owner credential. Bootstrap
+returns `tokens.operator`, a dedicated `operator_client` with no memory grants,
+and `control_pat_sha256`. Set `NINAI_CONTROL_PAT_SHA256` to that digest in the
+server environment and restart. Paste only the operator token into the owner
+dashboard's self-hosted access-token field. Keep it out of assistant and editor
+configuration; those receive only their own scoped MCP tokens. An empty operator
+digest setting blocks PAT dashboard access without disabling scoped MCP tokens.
+See [the hosted package setup](../cloud/README.md#self-hosted-personal-access-tokens)
+for private-server provisioning. Public hosted control remains OAuth-only and
+requires a token for the configured dashboard OAuth client.
+
 ## Self-hosted and manual-token setup
 
 The remaining examples are for operators and private self-hosting. Invitation

@@ -7,6 +7,8 @@ import re
 # formats to keep false positives (which would reject legitimate memories) low.
 # Generic high-entropy detection is intentionally omitted for that reason.
 _SECRET_PATTERNS = [
+    # Ninai hosted personal access tokens.
+    re.compile(r"\bninai_pat_[A-Za-z0-9_-]{20,}\b"),
     # Private key blocks.
     re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----", re.I),
     # Hyphenated provider keys (OpenAI-style, etc.).

@@ -14,6 +14,10 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="ninai", description="Ninai local memory CLI")
     sub = root.add_subparsers(dest="command", required=True)
 
+    skill = sub.add_parser("integration-skill", help="Install or update the Codex cloud continuity workflow")
+    skill.add_argument("action", choices=("install",))
+    skill.add_argument("--client", choices=("codex",), default="codex")
+
     permission = sub.add_parser("permission", help="Manage client memory scopes")
     permission_sub = permission.add_subparsers(dest="action", required=True)
     for action in ("grant", "revoke"):
@@ -67,6 +71,15 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = parser().parse_args()
+    if args.command == "integration-skill":
+        from .integration_skill import install_continuity_skill
+        try:
+            result = install_continuity_skill(args.client)
+        except (ValueError, OSError) as error:
+            print(f"Could not install the continuity skill: {error}", file=sys.stderr)
+            raise SystemExit(1) from error
+        print(json.dumps(result))
+        return
     store = MemoryStore()
 
     if args.command == "permission":

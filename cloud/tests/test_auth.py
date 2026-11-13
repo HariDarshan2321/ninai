@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import unittest
 import asyncio
+from dataclasses import replace
 import hashlib
 import time
 from contextlib import contextmanager
@@ -168,16 +169,30 @@ class AuthTest(unittest.TestCase):
 
     def test_control_oauth_verifier_allows_signed_first_workspace_identity(self):
         claims = {"sub": "auth0|external-user", "email": "owner@example.test", "name": "Owner",
-                  "exp": 2_000_000_000}
+                  "exp": 2_000_000_000, "azp": "dashboard-client"}
         validator = FakeValidator(claims)
         identities = FakeIdentities()
-        access = asyncio.run(OAuthControlTokenVerifier(validator, self.settings, identities)
+        settings = replace(self.settings, control_client_id="dashboard-client")
+        access = asyncio.run(OAuthControlTokenVerifier(validator, settings, identities)
                              .verify_token("signed.jwt"))
         self.assertEqual(access.claims, {"user_id": "user-uuid", "workspace_id": self.workspace_id,
                                          "email": "owner@example.test",
                                          "name": "Owner"})
         self.assertTrue(identities.created)
         self.assertEqual(validator.token, "signed.jwt")
+
+    def test_control_rejects_delegated_mcp_client_before_identity_bootstrap(self):
+        for configured, claims in (
+            ("dashboard-client", {"client_id": "delegated-mcp-client"}),
+            ("dashboard-client", {}),
+            (None, {"client_id": "delegated-mcp-client"}),
+        ):
+            identities = FakeIdentities()
+            verifier = OAuthControlTokenVerifier(
+                FakeValidator({"sub": "owner", "exp": 2_000_000_000, **claims}),
+                replace(self.settings, control_client_id=configured), identities)
+            self.assertIsNone(asyncio.run(verifier.verify_token("signed.jwt")))
+            self.assertIsNone(identities.created)
 
     def test_oversized_bearer_is_rejected_before_validation_or_database_access(self):
         resolver, db = self.resolver()

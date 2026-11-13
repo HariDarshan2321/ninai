@@ -34,7 +34,7 @@ localhost destinations, bootstraps a synthetic Atlas workspace, and creates one
 fresh ephemeral Codex process per natural prompt. It ignores user configuration
 and rules, disables apps and hooks, and configures only the synthetic HTTP server.
 By default it does not install a continuity skill. The optional
-`--with-continuity-skill` flag copies the repository skill into the temporary
+`--with-continuity-skill` flag installs the bundled repository skill with the real offline installer into the temporary
 workspace's `.agents/skills` directory to test implicit skill discovery; it does
 not name the skill in user prompts. Neither mode reads the user's local vault,
 inspects credentials, or modifies global configuration. The temporary server alone is
@@ -86,10 +86,10 @@ workspace cleanup completed. Evidence:
 `/var/folders/6x/8p3927h171s5rzgrvtrtcw340000gn/T/ninai-implicit-cloud-oqylf2jl`.
 
 This is one controlled Codex CLI run, not proof of desktop plugin installation,
-browser OAuth, other hosts, or a statistical reliability rate. Cloud setup currently
-provides connection commands without installing this skill; that distribution gap
-and the registered-connector metadata mismatch remain launch gates for the
-automatic-continuity promise. Changes in this report were tested locally and have
+browser OAuth, other hosts, or a statistical reliability rate. Cloud setup now explains the explicit `ninai integration-skill install --client codex`
+command for installed Ninai users. A URL alone still does not install it. The
+cloud-only novice distribution gap and registered-connector metadata mismatch
+remain launch gates for the automatic-continuity promise. Changes in this report were tested locally and have
 not been deployed as part of this check.
 
 Regression checks for this change: 121 cloud tests passed against disposable

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import math
+import re
 from dataclasses import asdict
 from typing import Any, Protocol
 
@@ -15,8 +16,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 
+from . import __version__
+
 from .postgres_store import (AuthorizationError, HostedMemory, HostedSession,
-                             IdempotencyConflict, PostgresStore, Principal)
+                             IdempotencyConflict, PostgresStore, Principal, StorageLimitError)
 from .policy import validate_memory_type
 from .control_api import ControlService, create_control_app
 from .auth import AuthSettings as HostedAuthSettings
@@ -158,7 +161,7 @@ class HostedMCPTools:
         if project_id is not None:
             project_id = _required_text(project_id, "project_id", MAX_IDENTIFIER_CHARS)
         max_items = max(1, min(int(max_items), MAX_RECALL_ITEMS))
-        max_tokens = max(100, min(int(max_tokens), MAX_RECALL_TOKENS))
+        max_tokens = max(0, min(int(max_tokens), MAX_RECALL_TOKENS))
         principal = self._authorized()
         candidates = self.store.search(
             principal, query, limit=max_items * 3, project_id=project_id
@@ -304,6 +307,8 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
             return operation(*args, **kwargs)
         except AuthorizationError as exc:
             return {"ok": False, "error": {"code": "forbidden", "message": str(exc)}}
+        except StorageLimitError as exc:
+            return {"ok": False, "error": {"code": "storage_limit", "message": str(exc)}}
         except IdempotencyConflict as exc:
             return {"ok": False, "error": {"code": "idempotency_conflict", "message": str(exc)}}
         except RateLimitError as exc:
@@ -458,7 +463,11 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> JSONResponse:
-        return JSONResponse({"status": "ok", "service": "ninai-cloud-mcp"})
+        info = {"status": "ok", "service": "ninai-cloud-mcp", "version": __version__}
+        revision = os.environ.get("RENDER_GIT_COMMIT", "")
+        if re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", revision):
+            info["revision"] = revision
+        return JSONResponse(info, headers={"Cache-Control": "no-store"})
 
     @mcp.custom_route("/ready", methods=["GET"])
     async def ready(_: Request) -> JSONResponse:

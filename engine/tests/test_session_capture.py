@@ -66,6 +66,13 @@ class SessionCaptureTest(unittest.TestCase):
         self.assertNotIn("abcdefghijklmnopqrstuvwxyz012345", str(packet))
         self.assertIn("[REDACTED_SECRET]", str(packet))
 
+    def test_json_scalars_and_arrays_are_not_conversation_messages(self):
+        for value in ('null', '[]', '12', 'true', '\"not a transcript\"'):
+            with self.subTest(value=value):
+                self.assertIsNone(normalize_transcript(value))
+        mixed = 'null\n' + json.dumps({'role': 'user', 'content': 'Keep the project private'})
+        self.assertIn('Keep the project private', normalize_transcript(mixed))
+
     def test_jsonl_archive_excludes_tools_and_marks_context_untrusted(self) -> None:
         transcript = "\n".join((
             json.dumps({"role": "user", "content": "Decision: keep project isolation"}),

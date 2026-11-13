@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sqlite3
 import shlex
 import sys
 import tempfile
@@ -24,7 +25,7 @@ args=sys.argv[1:]
 if args[:2] == ['-m','venv']:
     target=Path(args[2])/'bin'; target.mkdir(parents=True)
     shutil.copy2(__file__,target/'python')
-    (target/'ninai').write_text('#!/bin/sh\\nexit 0\\n'); (target/'ninai').chmod(0o755)
+    (target/'ninai').write_text('#!/bin/sh\\n[ -z \"${TEST_COMMAND_LOG:-}\" ] || echo \"$*\" >> \"$TEST_COMMAND_LOG\"\\nexit 0\\n'); (target/'ninai').chmod(0o755)
     (target/'pyinstaller').write_text('#!/bin/sh\\nmkdir -p "$NINAI_INSTALL_DIR/Ninai.app"\\n'); (target/'pyinstaller').chmod(0o755)
 elif args[:2] == ['-m','pip']:
     pass
@@ -48,6 +49,45 @@ else:
         source = (ROOT / "scripts" / "install-local").read_text()
         start = source.index(f"\n{name}() {{") + 1
         return source[start:source.index("\n}\n", start) + 3]
+
+    def test_recovery_snapshot_includes_committed_wal_and_preserves_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data = Path(temporary)
+            source = data / "ninai.sqlite3"
+            db = sqlite3.connect(source)
+            try:
+                db.execute("PRAGMA journal_mode=WAL")
+                db.execute("CREATE TABLE payload(content TEXT)")
+                db.execute("INSERT INTO payload VALUES('committed memory and source')")
+                db.commit()
+                db.execute("INSERT INTO payload VALUES('not yet committed')")
+                command = 'python_cmd="$TEST_PYTHON"\n' + self.installer_function("create_recovery_snapshot") + '\ncreate_recovery_snapshot\n'
+                result = subprocess.run(["bash", "-c", command], env={**os.environ, "NINAI_DATA_DIR": str(data), "TEST_PYTHON": sys.executable}, capture_output=True, text=True, timeout=40)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                copies = list((data / "recovery").glob("*.sqlite3"))
+                self.assertEqual(len(copies), 1)
+                self.assertEqual(copies[0].stat().st_mode & 0o777, 0o600)
+                with sqlite3.connect(copies[0]) as snapshot:
+                    self.assertEqual(snapshot.execute("SELECT content FROM payload").fetchall(), [("committed memory and source",)])
+                    self.assertEqual(snapshot.execute("PRAGMA quick_check").fetchone(), ("ok",))
+                self.assertEqual(db.execute("SELECT count(*) FROM payload").fetchone(), (2,))
+            finally:
+                db.close()
+
+    def test_recovery_snapshot_rejects_corruption_and_symlink_destination(self):
+        for symlink in (False, True):
+            with self.subTest(symlink=symlink), tempfile.TemporaryDirectory() as temporary:
+                data = Path(temporary)
+                (data / "ninai.sqlite3").write_bytes(b"not a valid database")
+                if symlink:
+                    target = data / "unrelated"
+                    target.mkdir()
+                    (data / "recovery").symlink_to(target)
+                command = 'python_cmd="$TEST_PYTHON"\n' + self.installer_function("create_recovery_snapshot") + '\ncreate_recovery_snapshot\n'
+                result = subprocess.run(["bash", "-c", command], env={**os.environ, "NINAI_DATA_DIR": str(data), "TEST_PYTHON": sys.executable}, capture_output=True, text=True, timeout=40)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual((data / "ninai.sqlite3").read_bytes(), b"not a valid database")
+                self.assertEqual(list((data / "recovery").glob("*.sqlite3")), [])
 
     def test_failed_connector_restores_prior_settings_and_installation(self) -> None:
         for client, stage in ((client, stage) for client in ("claude", "codex") for stage in ("add", "hooks", "fresh")):
@@ -86,13 +126,14 @@ elif 'add' in sys.argv:
                 cli.chmod(0o755)
                 environment = {**os.environ, "HOME": str(home), "TEST_CONFIG": str(config),
                                "NINAI_INSTALL_DIR": str(install), "NINAI_PYTHON": str(binary / "python-bootstrap"),
-                               "TEST_FAILURE_STAGE": stage,
+                               "TEST_FAILURE_STAGE": stage, "TEST_COMMAND_LOG": str(root / "calls.log"),
                                "TEST_REAL_PYTHON": sys.executable,
                                "PATH": str(binary) + ":/usr/bin:/bin"}
                 environment.pop("CLAUDE_CONFIG_DIR", None)
                 environment.pop("CODEX_HOME", None)
                 result = subprocess.run(["bash", str(ROOT / "scripts/install-local"), "--client", "claude-code" if client == "claude" else "codex", "--session-capture", "off"], env=environment, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 1 if stage == "hooks" else 9, result.stderr)
+                self.assertNotIn("capture ", (root / "calls.log").read_text())
                 if stage == "fresh":
                     self.assertFalse(config.exists())
                     self.assertFalse(hooks.exists())
@@ -139,7 +180,7 @@ elif 'add' in sys.argv:
                 self.assertEqual(target.read_text(), malformed)
 
     def test_installer_refuses_unrelated_or_overlapping_directories_without_changes(self) -> None:
-        for kind in ("unrelated", "inside-data", "contains-data", "symlink", "relative-data"):
+        for kind in ("unrelated", "inside-data", "contains-data", "symlink", "relative-data", "database-symlink"):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 home = root / "home"
@@ -156,6 +197,10 @@ elif 'add' in sys.argv:
                 data = application / "data" if kind == "contains-data" else root
                 if kind == "relative-data":
                     data = Path("relative-vault")
+                if kind == "database-symlink":
+                    data = root / "safe-looking-memory-folder"
+                    data.mkdir()
+                    (data / "ninai.sqlite3").symlink_to(marker)
                 target = application
                 if kind == "symlink":
                     target = root / "app-link"

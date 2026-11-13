@@ -81,6 +81,8 @@ def normalize_transcript(raw: str) -> str | None:
                 if isinstance((value := item.get(key)), dict)
             )
         for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
             role = str(candidate.get("role", "")).lower()
             if role not in {"user", "assistant"}:
                 continue

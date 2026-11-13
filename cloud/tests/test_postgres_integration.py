@@ -6,6 +6,10 @@ import unittest
 import uuid
 import asyncio
 import hashlib
+import json
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -15,7 +19,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from ninai_cloud.migrations import apply_migrations
 from ninai_cloud.auth import AuthSettings, AuthenticationError, PATTokenVerifier, PrincipalResolver
 from ninai_cloud.control_api import ControlIdentity, ControlService
-from ninai_cloud.postgres_store import AuthorizationError, IdempotencyConflict, PostgresStore, Principal
+from ninai_cloud.postgres_store import AuthorizationError, IdempotencyConflict, PostgresStore, Principal, StorageLimitError
 
 
 DATABASE_URL = os.environ.get("NINAI_TEST_DATABASE_URL", "")
@@ -62,6 +66,180 @@ class PostgresLifecycleTest(unittest.TestCase):
                 db.execute(f"DELETE FROM {table} WHERE workspace_id=%s" if table not in {"users", "workspaces"} else
                            ("DELETE FROM workspaces WHERE id=%s" if table == "workspaces" else "DELETE FROM users WHERE id=%s"),
                            (self.workspace if table != "users" else self.user,))
+
+    def test_read_grants_enforce_memory_type_for_search_and_fetch(self) -> None:
+        created = self.store.create_memory(self.principal, content="Durable deployment decision",
+            memory_type="decision", scope_kind="project", scope_id=self.project,
+            source_uri="test://scope", idempotency_key="type-filter", activate=True)
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("UPDATE client_scope_grants SET memory_types=ARRAY['fact'] WHERE workspace_id=%s",
+                       (self.workspace,))
+        self.assertIsNone(self.store.get_memory(self.principal, created.id))
+        self.assertEqual(self.store.search(self.principal, ""), [])
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("UPDATE client_scope_grants SET memory_types=ARRAY['decision'] WHERE workspace_id=%s",
+                       (self.workspace,))
+        self.assertEqual(self.store.get_memory(self.principal, created.id).id, created.id)
+        self.assertEqual([m.id for m in self.store.search(self.principal, "")], [created.id])
+
+    def test_type_restricted_memory_grant_does_not_disclose_raw_session_archive(self) -> None:
+        control = ControlService(self.store._connection)
+        control.update_capture_settings(ControlIdentity(self.user, self.workspace), {"archive_sessions": True})
+        self.store.capture_session(self.principal, provider="codex", external_session_id="typed",
+            project_id=self.project, title="Typed", source_uri="ignored://", status="completed",
+            transcript="A private historical conversation")
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("UPDATE client_scope_grants SET memory_types=ARRAY['fact'] WHERE workspace_id=%s",
+                       (self.workspace,))
+        with self.assertRaises(AuthorizationError):
+            self.store.session_context(self.principal, project_id=self.project)
+
+    def test_workspace_quota_is_atomic_and_idempotent_retries_still_work(self) -> None:
+        self.store.storage_limits["memories"] = 1
+        barrier = Barrier(2)
+        def write(index):
+            barrier.wait(timeout=5)
+            try:
+                return self.store.create_memory(self.principal, content=f"Unique durable claim {index}",
+                    memory_type="fact", scope_kind="project", scope_id=self.project,
+                    source_uri="test://quota", idempotency_key=f"quota-{index}")
+            except StorageLimitError:
+                return None
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(write, [1, 2]))
+        self.assertEqual(sum(row is not None for row in results), 1)
+        index = 1 if results[0] else 2
+        retry = self.store.create_memory(self.principal, content=f"Unique durable claim {index}",
+            memory_type="fact", scope_kind="project", scope_id=self.project,
+            source_uri="test://quota", idempotency_key=f"quota-{index}")
+        self.assertEqual(retry.id, next(row.id for row in results if row))
+        self.store.storage_limits["idempotency_keys"] = 1
+        with self.assertRaises(StorageLimitError):
+            self.store.create_memory(self.principal, content=f"Unique durable claim {index}",
+                memory_type="fact", scope_kind="project", scope_id=self.project,
+                source_uri="test://quota", idempotency_key="new-key-same-memory")
+
+    def test_concurrent_identical_retries_resolve_to_one_memory(self) -> None:
+        barrier = Barrier(2)
+        def write(_):
+            barrier.wait(timeout=5)
+            return self.store.create_memory(self.principal, content="One durable retry claim",
+                memory_type="fact", scope_kind="project", scope_id=self.project,
+                source_uri="test://retry", idempotency_key="concurrent-identical")
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(write, [1, 2]))
+        self.assertEqual(results[0].id, results[1].id)
+        with self.psycopg.connect(DATABASE_URL) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM memory_sources WHERE workspace_id=%s", (self.workspace,)).fetchone()[0], 1)
+
+    def test_session_delete_retention_budget_and_metadata_secret_boundaries(self) -> None:
+        control = ControlService(self.store._connection)
+        identity = ControlIdentity(self.user, self.workspace)
+        control.update_capture_settings(identity, {"archive_sessions": True, "retention_days": 1})
+        values = dict(provider="codex", external_session_id="retention-check", project_id=self.project,
+                      title="界" * 200, source_uri="ignored://source", status="completed",
+                      transcript='{"role":"assistant","content":"Durable context 界界界"}')
+        session = self.store.capture_session(self.principal, **values)
+        packet = self.store.session_context(self.principal, project_id=self.project, max_tokens=600)
+        actual = (len(json.dumps(packet["sessions"], default=str, ensure_ascii=False).encode()) + 3) // 4
+        self.assertEqual(packet["estimated_tokens"], actual)
+        self.assertLessEqual(actual, 600)
+        self.assertEqual(self.store.session_context(self.principal, project_id=self.project,
+                                                   max_tokens=1)["sessions"], [])
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("UPDATE sessions SET updated_at=now()-interval '2 days' WHERE workspace_id=%s",
+                       (self.workspace,))
+        # Expiry applies immediately on reads, without waiting for a later capture.
+        self.assertEqual(self.store.session_context(self.principal, project_id=self.project)["sessions"], [])
+        self.assertTrue(control.delete_session(identity, session.id))
+        with self.assertRaisesRegex(AuthorizationError, "deleted or expired"):
+            self.store.capture_session(self.principal, **values)
+        with self.psycopg.connect(DATABASE_URL) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM session_artifacts WHERE workspace_id=%s",
+                                       (self.workspace,)).fetchone()[0], 0)
+        with self.assertRaisesRegex(ValueError, "potential credential"):
+            self.store.capture_session(self.principal, **{**values, "external_session_id": "ninai_pat_" + "A" * 43})
+
+    def test_proposal_only_grant_cannot_activate_via_lifecycle(self) -> None:
+        created = self.store.create_memory(self.principal, content="Safe proposal",
+            memory_type="fact", scope_kind="project", scope_id=self.project,
+            source_uri="test://proposal", idempotency_key="lifecycle")
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("UPDATE client_scope_grants SET can_auto_activate=false WHERE workspace_id=%s", (self.workspace,))
+        with self.assertRaises(AuthorizationError):
+            self.store.transition(self.principal, created.id, "active")
+
+    def test_storage_retention_command_is_dry_run_then_explicit_apply(self) -> None:
+        from ninai_cloud.storage_admin import storage_report
+        control = ControlService(self.store._connection)
+        identity = ControlIdentity(self.user, self.workspace)
+        control.update_capture_settings(identity, {"archive_sessions": True, "retention_days": 1})
+        session = self.store.capture_session(self.principal, provider="codex",
+            external_session_id="maintenance", project_id=self.project, title="Maintenance",
+            source_uri="ignored://", status="completed", transcript="durable private session data")
+        self.store.record_disclosure(self.principal, tool_name="search", query="private query",
+            purpose="verify retention", returned_memory_ids=[])
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("UPDATE sessions SET updated_at=now()-interval '2 days' WHERE workspace_id=%s", (self.workspace,))
+        report = storage_report(self.store, self.workspace)
+        self.assertEqual(report["mode"], "dry_run")
+        self.assertEqual(report["session_artifacts_eligible_for_removal"], 1)
+        self.assertNotIn("private session data", str(report))
+        with self.psycopg.connect(DATABASE_URL) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM session_artifacts WHERE workspace_id=%s", (self.workspace,)).fetchone()[0], 1)
+        storage_report(self.store, self.workspace, apply_retention=True)
+        after = storage_report(self.store, self.workspace)
+        self.assertEqual(after["tables_before"]["session_artifacts"]["rows"], 0)
+        self.assertEqual(after["tables_before"]["disclosure_logs"]["rows"], 1)
+        self.assertEqual(after["tables_before"]["sessions"]["rows"], 1)
+        self.assertEqual(control.sessions(identity), [])
+
+    def test_agent_pat_cannot_use_owner_control_and_operator_is_live_checked(self) -> None:
+        from starlette.applications import Starlette
+        from starlette.routing import Route
+        from starlette.testclient import TestClient
+        from ninai_cloud.control_api import ControlApp
+        agent, operator = "ninai_pat_" + uuid.uuid4().hex, "ninai_pat_" + uuid.uuid4().hex
+        with self.psycopg.connect(DATABASE_URL) as db:
+            for raw in (agent, operator):
+                db.execute("""INSERT INTO personal_access_tokens
+                    (id,workspace_id,user_id,client_connection_id,token_hash,label,expires_at)
+                    VALUES(%s,%s,%s,%s,%s,'boundary test',now()+interval '1 hour')""",
+                    (str(uuid.uuid4()), self.workspace, self.user, self.client,
+                     hashlib.sha256(raw.encode()).hexdigest()))
+        service = ControlService(self.store._connection, self_hosted=True)
+        verifier = PATTokenVerifier(self.store._connection, "https://test.invalid/mcp")
+        with patch.dict(os.environ, {"NINAI_CONTROL_PAT_SHA256": hashlib.sha256(operator.encode()).hexdigest()}):
+            endpoint = ControlApp(service, verifier).handle
+        client = TestClient(Starlette(routes=[Route("/api/control/{path:path}", endpoint, methods=["GET", "POST"])]))
+        for path, method in (("export", "GET"), (f"connections/{self.client}/grants", "POST"),
+                             ("delete-workspace", "POST")):
+            response = client.request(method, "/api/control/" + path,
+                headers={"Authorization": "Bearer " + agent}, json={})
+            self.assertEqual(response.status_code, 401)
+        response = client.get("/api/control/export", headers={"Authorization": "Bearer " + operator})
+        self.assertEqual(response.status_code, 200)
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("UPDATE workspace_members SET revoked_at=now() WHERE workspace_id=%s AND user_id=%s",
+                       (self.workspace, self.user))
+        response = client.get("/api/control/export", headers={"Authorization": "Bearer " + operator})
+        self.assertEqual(response.status_code, 401)
+        # No opt-in hash means that even a valid owner PAT has no control access.
+        with patch.dict(os.environ, {"NINAI_CONTROL_PAT_SHA256": ""}):
+            disabled = ControlApp(service, verifier)
+        self.assertEqual(disabled._control_pat_hashes, ())
+
+    def test_existing_workspace_operator_credential_migration_has_no_memory_grants(self) -> None:
+        from ninai_cloud.bootstrap import issue_control_credential
+        result = issue_control_credential(DATABASE_URL, workspace_id=self.workspace, user_id=self.user)
+        self.assertEqual(result["workspace"], self.workspace)
+        raw = result["tokens"]["operator"]
+        self.assertEqual(result["control_pat_sha256"], hashlib.sha256(raw.encode()).hexdigest())
+        with self.psycopg.connect(DATABASE_URL) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM client_scope_grants WHERE client_connection_id=%s", (result["operator_client"],)).fetchone()[0], 0)
+            db.execute("UPDATE workspace_members SET revoked_at=now() WHERE workspace_id=%s AND user_id=%s", (self.workspace, self.user))
+        with self.assertRaisesRegex(ValueError, "active workspace owner"):
+            issue_control_credential(DATABASE_URL, workspace_id=self.workspace, user_id=self.user)
 
     def test_installer_download_audit_is_tenant_scoped_and_exported(self) -> None:
         control = ControlService(self.store._connection)
