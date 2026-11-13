@@ -4,6 +4,8 @@
 Run with the installed Ninai Python interpreter to check that installation.
 No host login, model call, global editor configuration, or existing vault is used.
 This does not verify an assistant application's tool consent or authentication.
+Owner presence is simulated only in this disposable transport fixture; native
+OS verification has separate tests and requires an interactive owner check.
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ from ninai.store import MemoryStore
 
 async def verify(directory: str) -> dict[str, object]:
     store = MemoryStore(Path(directory) / "ninai.sqlite3")
-    api = DesktopApi(store)
+    api = DesktopApi(store, owner_verifier=lambda snapshot: True)
     checks: dict[str, bool] = {}
 
     def require(name: str, condition: bool) -> None:
@@ -78,7 +80,8 @@ async def verify(directory: str) -> dict[str, object]:
     require("other_client_keeps_access", len((await recall("claude-code", project))["facts"]) == 1)
     data(api.set_project_permission("codex", project, "read", True))
     require("regrant_clears_current_revocation_proof", not data(api.setup_status(project, "codex"))["revocation_verified"])
-    return {"passed": True, "host_invocation": "not_run", "checks": checks}
+    return {"passed": True, "host_invocation": "not_run",
+            "owner_verification": "simulated_in_disposable_fixture", "checks": checks}
 
 
 def main() -> int:
