@@ -4,10 +4,11 @@
 
 Verified source revision **`5f5986a`**: application CI **43626656402** passed all
 jobs; the corrected `/start` and `/compatibility` pages are live on Vercel.
-Native installer run **43626656251** passed macOS; Windows was still building
-the current unsigned package at the last check. Render still reported `83b68b2`
-while waiting for checks. Confirm that native run and the subsequent cloud
-rollout before calling the updated hosted installer deployed. The actual owner
+Native installer run **43626656251** passed both macOS and Windows. Render
+automatically completed deployment `dep-dbsahuff3r2c73e6r70g` after checks passed;
+the dashboard reports **Deploy succeeded | Live**, `/health` reports `5f5986a`
+and `/ready` succeeds. The hosted installer asset is therefore on that revision.
+The actual owner
 app was replaced with the version-corrected build, reopened, and its native About
 panel verified as **Version 0.1.2 (0.1.2)**. Its prior bundle and fresh consistent
 vault snapshot were preserved; the installed Python runtime was updated too.

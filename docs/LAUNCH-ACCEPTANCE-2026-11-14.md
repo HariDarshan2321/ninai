@@ -89,7 +89,11 @@ installed About panel was checked as **Version 0.1.2 (0.1.2)**. Local follow-up
 checks passed **179 engine tests without skips and 35 browser tests**, plus
 the version-aware native upgrade smoke. Authentication migration preparation is
 in `AUTH0-PRODUCTION-HANDOFF.md`; no provider, DNS or auth environment was changed.
-These follow-up source changes still require their own remote CI/deploy results.
+Follow-up source `5f5986a` passed application CI `43626656402` and both native
+installer jobs in `43626656251`. The corrected public pages are live on Vercel.
+Render deployment `dep-dbsahuff3r2c73e6r70g` succeeded; `/health` reports the exact
+`5f5986a` revision and `/ready` succeeds. No authentication-provider settings,
+DNS or subscription were changed in this follow-up.
 
 1. **Real owner verification.** The latest development app is installed and its
    Assistants view was checked. Actual OS-authenticated owner approval still
