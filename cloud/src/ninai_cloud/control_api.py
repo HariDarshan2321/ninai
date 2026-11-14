@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from importlib.resources import files
 from typing import Any, Callable, ContextManager, Mapping
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from mcp.server.auth.provider import TokenVerifier
 from starlette.requests import Request
@@ -763,9 +763,15 @@ class ControlApp:
         authorization = request.headers.get("authorization", "")
         using_cookie = not authorization and bool(request.cookies.get(SESSION_COOKIE))
         if using_cookie and request.method.upper() != "GET":
-            expected = f"{request.url.scheme}://{request.url.netloc}"
+            # A reverse proxy may use an internal scheme/port in the ASGI URL.
+            # Compare against our configured public origin, never a forwarded
+            # header supplied by the caller. Keep the exact-origin CSRF check.
+            public_url = urlsplit(self.oauth_settings.control_base_url) if (
+                self.oauth_settings and self.oauth_settings.control_base_url
+            ) else request.url
+            expected = f"{public_url.scheme}://{public_url.netloc}"
             if request.headers.get("origin") != expected:
-                raise AuthenticationError("OAuth browser request failed origin validation")
+                raise AuthorizationError("This change could not be verified from this browser. Reload Ninai and try again.")
         scheme, separator, credential = (
             authorization or f"Bearer {request.cookies.get(SESSION_COOKIE, '')}"
         ).partition(" ")

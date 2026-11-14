@@ -421,10 +421,35 @@ class ControlAppTest(unittest.TestCase):
         client.cookies.set("__Host-ninai_access_token", "valid-token")
         self.assertEqual(client.get("/api/control/overview").status_code, 200)
         denied = client.post("/api/control/memories/m1/approve", json={})
-        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(denied.status_code, 403)
         allowed = client.post("/api/control/memories/m1/approve", json={},
                               headers={"Origin": "http://testserver"})
         self.assertEqual(allowed.status_code, 200)
+
+    def test_cookie_mutation_uses_configured_public_origin_behind_proxy(self):
+        from ninai_cloud.auth import AuthSettings
+        settings = AuthSettings(
+            issuer="https://tenant.auth0.com/", audience="https://api.example/mcp",
+            resource="https://api.example/mcp", jwks_uri="https://tenant.auth0.com/jwks",
+            control_client_id="dashboard-client", control_base_url="https://api.example",
+        )
+        endpoint = ControlApp(self.service, Verifier(), settings).handle
+        client = TestClient(Starlette(routes=[
+            Route("/api/control/{path:path}", endpoint, methods=["GET", "POST"]),
+        ]), base_url="http://internal-proxy:10000")
+        client.cookies.set("__Host-ninai_access_token", "valid-token")
+        allowed = client.post("/api/control/projects", json={"name": "Synthetic proxy test"},
+                              headers={"Origin": "https://api.example"})
+        self.assertEqual(allowed.status_code, 200)
+        for origin in (None, "null", "http://internal-proxy:10000", "https://api.example.evil.test"):
+            with self.subTest(origin=origin):
+                headers = {"X-Forwarded-Host": "api.example", "X-Forwarded-Proto": "https"}
+                if origin is not None:
+                    headers["Origin"] = origin
+                denied = client.post("/api/control/projects", json={"name": "Must not create"}, headers=headers)
+                self.assertEqual(denied.status_code, 403)
+                self.assertNotIn("session has expired", denied.text)
+        self.assertEqual(len(self.service.calls), 1)
 
     def test_overview_uses_only_token_identity(self):
         response = self.client.get(
