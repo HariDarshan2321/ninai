@@ -58,9 +58,14 @@ jobs:
 
   cloud:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep the baseline and the current Render major under regression.
+        postgres: [16, 18]
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:${{ matrix.postgres }}-alpine
         env:
           POSTGRES_DB: ninai_test
           POSTGRES_USER: ninai_test
