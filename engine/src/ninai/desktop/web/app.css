@@ -601,9 +601,11 @@ a.source-tag:hover {
   .setup-guide__head { align-items: flex-start; flex-wrap: wrap; }
 }
 @media (max-width: 560px) { .setup-guide__choices { grid-template-columns: 1fr; } }
-.permission-help { max-width: 760px; margin-bottom: 20px; padding: 22px 24px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); }
-.permission-help h2 { margin: 0 0 8px; font-size: 1.15rem; }
-.permission-help p { margin: 0; color: var(--text-muted); line-height: 1.5; }
+.permission-summary { margin: 0 0 6px; color: var(--text-muted); font-size: .85rem; line-height: 1.5; }
+.permission-help { max-width: 760px; margin-bottom: 16px; }
+.permission-help summary { padding: 8px 0; cursor: pointer; font-size: .85rem; font-weight: 600; }
+.permission-help summary:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+.permission-help p { margin: 4px 0 12px; color: var(--text-muted); font-size: .85rem; line-height: 1.5; }
 
 .today-group__head {
   display: flex;
@@ -1769,9 +1771,10 @@ select.form__control {
 .client-card__disclosure { color: var(--text-muted); font-size: 0.75rem; }
 .client-card__id { overflow-wrap: anywhere; min-width: 0; }
 .permission-action { min-height: 36px; }
-.access-inbox { margin-bottom: 24px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); overflow: hidden; }
-.access-inbox__head { padding: 20px 24px; }
-.access-inbox__head h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.access-inbox { margin-bottom: 20px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); overflow: hidden; }
+.access-inbox__head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; padding: 14px 18px; }
+.access-inbox__summary { flex: 1 1 230px; min-width: 0; }
+.access-inbox__head h2 { margin: 0 0 4px; font-size: 1rem; }
 .access-inbox__head p, .access-request__meta { margin: 0; color: var(--text-muted); font-size: .85rem; line-height: 1.5; }
 .access-request { padding: 16px 24px; border-top: 1px solid var(--line); }
 .access-request__head { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; }

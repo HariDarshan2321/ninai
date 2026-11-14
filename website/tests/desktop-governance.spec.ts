@@ -11,6 +11,23 @@ async function requests(page: Page, available = true) {
   await page.getByRole("button", { name: /^Assistants\b/ }).click();
   await page.getByRole("button", { name: "Review request", exact: true }).click();
 }
+test("assistant controls stay above the fold with keyboard-operable access help", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(desktop);
+  await page.getByRole("button", { name: /^Assistants\b/ }).click();
+  await expect(page.getByText("No pending access requests.", { exact: true })).toBeVisible();
+  await expect(page.locator('.client-card[data-client="claude-code"] > summary')).toBeInViewport({ ratio: 1 });
+  await expect(page.locator(".client-card[open]")).toHaveCount(0);
+  await expect(page.locator(".permission-help")).not.toHaveAttribute("open", "");
+  await expect(page.getByText("New access requires OS verification. Turning access off applies immediately.", { exact: true })).toBeVisible();
+  await page.locator(".permission-help > summary").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".permission-help")).toHaveAttribute("open", "");
+  await expect(page.locator(".permission-help p")).toContainText("cannot remove copies already received");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".permission-help")).not.toHaveAttribute("open", "");
+});
+
 test("request review shows exact access, safe text, and keyboard containment", async ({ page }) => {
   await requests(page);
   const modal = page.locator("#access-modal");

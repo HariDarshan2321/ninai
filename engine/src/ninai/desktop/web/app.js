@@ -1059,10 +1059,11 @@
       var requests = result.requests || [], verification = result.verification || {};
       var pending = requests.filter(function (request) { return request.status === "pending"; });
       var refresh = h("button", { type: "button", class: "btn btn--ghost btn--sm", text: "Refresh requests", onclick: function () { loadAccessRequests(inbox); } });
-      inbox.appendChild(h("div", { class: "access-inbox__head" }, h("h2", { text: "Access requests" + (pending.length ? " · " + pending.length + " pending" : "") }),
-        h("p", { text: "Assistants can propose project access. Review each request here; approval requires your OS verification." }), refresh));
+      inbox.appendChild(h("div", { class: "access-inbox__head" },
+        h("div", { class: "access-inbox__summary" },
+          h("h2", { text: "Access requests" + (pending.length ? " · " + pending.length + " pending" : "") }),
+          h("p", { text: pending.length ? "Review proposed access here. Approval requires your OS verification." : "No pending access requests." })), refresh));
       pending.forEach(function (request) { inbox.appendChild(accessRequestRow(request, function (r) { openAccessReview(r, verification); })); });
-      if (!pending.length) inbox.appendChild(h("p", { class: "access-request access-request__meta", text: "No pending access requests." }));
       var past = requests.filter(function (request) { return request.status !== "pending"; });
       if (past.length) {
         var history = h("details", { class: "perm-advanced" }, h("summary", {}, "Previous requests · " + past.length));
@@ -1110,10 +1111,11 @@
       }
       addBtn.addEventListener("click", addClient);
       input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); addClient(); } });
-      var intro = h("section", { class: "permission-help" },
-        h("h2", { text: "You stay in control" }),
+      var intro = h("details", { class: "permission-help" },
+        h("summary", { text: "How access works" }),
         h("p", { text: "Open an assistant to review access. Read lets it retrieve memories, Save lets it add new ones, and Delete removes them from future use. Each grant is independent. Turning access on requires OS verification; turning it off applies immediately. New projects start with access off. Revocation blocks future requests but cannot remove copies already received." })
       );
+      body.appendChild(h("p", { class: "permission-summary", text: "New access requires OS verification. Turning access off applies immediately." }));
       body.appendChild(intro);
       var inbox = h("section", { class: "access-inbox", "aria-label": "Access requests" });
       body.appendChild(inbox);
@@ -1125,21 +1127,23 @@
           input, addBtn
         )
       );
-      body.appendChild(bar);
 
       var refresh = h("button", {
         type: "button", class: "btn btn--ghost btn--sm", text: "Check connections again",
         onclick: loadPermissions
       });
-      body.appendChild(h("div", { class: "connection-refresh" }, refresh));
 
       if (!clients.length) {
-        body.appendChild(stateBlock({ title: "No clients yet", body: "Add a client id above to set what it may read." }));
+        body.appendChild(stateBlock({ title: "No assistants yet", body: "Add an assistant below to choose what it can use." }));
+        body.appendChild(bar);
+        body.appendChild(h("div", { class: "connection-refresh" }, refresh));
         return;
       }
       var grid = h("div", { class: "client-grid" });
       clients.forEach(function (c, i) { grid.appendChild(clientCard(c, permsList[i][0] || {}, statusById[c], projects, permsList[i][1] || [], permsList[i][2] || {})); });
       body.appendChild(grid);
+      body.appendChild(h("div", { class: "connection-refresh" }, refresh));
+      body.appendChild(bar);
     } catch (err) {
       showError(body, err);
     }

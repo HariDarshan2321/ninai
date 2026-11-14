@@ -68,9 +68,11 @@ not gain this workflow from an HTTP URL alone; they need separate acceptance.
 
 ### Windows
 
-There is a preview installer, but Windows install/upgrade/rollback has not been
-accepted on a real clean Windows machine. Do not present it as a supported
-production upgrade route. See [WINDOWS-PREVIEW.md](WINDOWS-PREVIEW.md).
+There is a preview installer. Native Windows Server 2022 CI has passed unsigned
+installation and prior-version upgrade/data-preservation regression. Clean
+Windows 11 user-interface, owner-verification and trusted-signature acceptance
+remain incomplete. Do not present it as a supported production upgrade route.
+See [WINDOWS-PREVIEW.md](WINDOWS-PREVIEW.md).
 
 ## Update checks now implemented; signed installation remains pending
 
@@ -84,7 +86,7 @@ are constrained to this repository. No request runs automatically on startup.
 
 The checker offers release notes and a manual guide. It does not download,
 execute, install, or verify a signed artifact. Package and plugin versions are
-now `0.1.1`; this is a code version, not proof of a signed public release. The cloud setup explains the explicit Codex skill-install command. Showing
+now `0.1.2`; this is a code version, not proof of a signed public release. The cloud setup explains the explicit Codex skill-install command. Showing
 installed integration versions separately and a complete cloud-only novice
 installation flow remain open work.
 
