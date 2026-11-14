@@ -24,7 +24,8 @@ for (const width of [1280, 390]) {
     expect(Math.abs(back!.y - next!.y)).toBeLessThan(1);
     if (width === 1280) expect(Math.abs(check!.y - back!.y)).toBeLessThan(1);
     else {
-      expect(back!.y - check!.y - check!.height).toBeGreaterThanOrEqual(16);
+      // A 16px CSS gap can produce fractional bounds across renderers.
+      expect(back!.y - check!.y - check!.height).toBeGreaterThanOrEqual(15.5);
       expect(Math.abs(back!.width - next!.width)).toBeLessThan(1);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
