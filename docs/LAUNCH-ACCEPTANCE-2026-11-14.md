@@ -64,6 +64,19 @@ automatic memory use.
   provenance and project isolation. All 177 engine tests passed with the native
   framework and no skips. Existing records were preserved; historical noise
   requires a separate owner-reviewed cleanup. See the capture-quality report.
+- The reported Home-screen issues have separate presentation fixes: the setup
+  action has explicit paragraph spacing and one primary action, with progress
+  and chapter navigation separated. Legacy tool captures show concise previews;
+  explicit captured errors are labelled for review, not presented as successful
+  outcomes. Exact stored text and provenance remain available in collapsed
+  original details. These changes neither rewrite memories nor change recall
+  permissions or retrieval semantics. Focused tests cover keyboard navigation,
+  desktop/mobile geometry, original-content equality and literal HTML safety.
+  The combined browser suite passed all 33 tests. The rebuilt development app
+  also passed the prior-version native upgrade smoke and was installed with a
+  fresh integrity-checked recovery snapshot and the previous app preserved.
+  The reported spacing and compact capture previews were checked in the actual
+  installed app. This does not complete OS-authenticated owner approval.
 
 ## Remaining acceptance gates
 

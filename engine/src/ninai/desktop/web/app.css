@@ -590,17 +590,33 @@ a.source-tag:hover {
 .setup-guide__chapter { width: 100%; height: 100%; text-align: left; border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--surface); color: var(--text-muted); font: inherit; font-size: .83rem; cursor: pointer; }
 .setup-guide__chapter[aria-current="step"] { border-color: var(--text); color: var(--text); font-weight: 650; }
 .setup-guide__chapter.is-complete { background: var(--surface-sunk); }
-.setup-guide__content { border-top: 1px solid var(--line); padding: 20px 0 8px; }
-.setup-guide__content h3 { margin: 6px 0 12px; font-size: 1.2rem; }
+.setup-guide__content { display: grid; justify-items: start; gap: 16px; border-top: 1px solid var(--line); padding: 20px 0 8px; }
+.setup-guide__content > * { margin: 0; min-width: 0; max-width: 100%; }
+.setup-guide__content h3 { margin: -8px 0 0; font-size: 1.2rem; }
+.setup-guide__content > .btn { margin-top: 4px; }
 .setup-guide__status { margin: 0; font-size: .8rem; font-weight: 650; }
 .setup-guide__hint { font-size: .83rem; }
-.setup-guide__footer { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 18px; }
+.setup-guide__details { color: var(--text-muted); font-size: .85rem; line-height: 1.6; }
+.setup-guide__details summary { cursor: pointer; font-weight: 600; }
+.setup-guide__details summary:focus-visible { outline: 2px solid var(--signal); outline-offset: 4px; }
+.setup-guide__details p { margin-top: 12px; }
+.setup-guide__request { display: grid; justify-items: start; gap: 12px; width: 100%; }
+.setup-guide__request label { margin-bottom: 0; }
+.setup-guide__request p { margin: 0; }
+.setup-guide__footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
+.setup-guide__navigation { display: flex; align-items: center; gap: 8px; }
+.setup-guide__footer .btn { min-height: 40px; }
 @media (max-width: 800px) {
   .setup-guide { padding: 20px; }
   .setup-guide__chapters { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .setup-guide__head { align-items: flex-start; flex-wrap: wrap; }
 }
-@media (max-width: 560px) { .setup-guide__choices { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .setup-guide__choices { grid-template-columns: 1fr; }
+  .setup-guide__footer { flex-direction: column; align-items: stretch; }
+  .setup-guide__footer > .btn { align-self: flex-start; }
+  .setup-guide__navigation .btn { flex: 1; }
+}
 .permission-summary { margin: 0 0 6px; color: var(--text-muted); font-size: .85rem; line-height: 1.5; }
 .permission-help { max-width: 760px; margin-bottom: 16px; }
 .permission-help summary { padding: 8px 0; cursor: pointer; font-size: .85rem; font-weight: 600; }
@@ -649,7 +665,14 @@ a.source-tag:hover {
 .today-item__content {
   font-size: 0.98rem;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
+
+.today-item--memory { width: 100%; min-width: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.today-item--memory .today-item__content { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.today-item--memory:hover { border-color: var(--line-strong); }
+.today-item--memory:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+.memory-capture__label { margin: 0 0 6px; font-size: .85rem; font-weight: 600; }
 
 .today-item__meta {
   display: flex;
@@ -773,7 +796,9 @@ a.source-tag:hover {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
 }
+.mem-row__preview { min-width: 0; }
 
 .mem-row__badges {
   display: flex;
@@ -1304,7 +1329,13 @@ a.source-tag:hover {
 .drawer__content {
   font-size: 1.05rem;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
+
+.memory-original { margin: 16px 0; }
+.memory-original summary { padding: 8px 0; cursor: pointer; font-weight: 600; }
+.memory-original summary:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+.memory-original__content { margin: 8px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font: .8rem/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .drawer__badges {
   display: flex;

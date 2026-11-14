@@ -182,13 +182,37 @@
     }, value);
   }
 
-  function sourceTag(uri) {
+  function sourceTag(uri, full, linked) {
     var value = uri || "app://manual";
+    var label = !full && /^claude-hook:\/\//i.test(value) ? "Assistant capture" : value;
     var isWeb = /^https?:\/\//i.test(value);
-    if (isWeb) {
-      return h("a", { class: "source-tag", href: value, target: "_blank", rel: "noreferrer noopener", title: value }, value);
+    if (isWeb && linked !== false) {
+      return h("a", { class: "source-tag", href: value, target: "_blank", rel: "noreferrer noopener", title: value }, label);
     }
-    return h("span", { class: "source-tag", title: value }, value);
+    return h("span", { class: "source-tag", title: value }, label);
+  }
+
+  function memoryPresentation(mem) {
+    var content = String(mem.content || "");
+    var capture = /^claude-hook:\/\//i.test(mem.source_uri || "") && /^Tool outcome from [^:]+:\s*([\s\S]*)$/.exec(content);
+    if (!capture) return { legacy: false, preview: content, label: content };
+    var original = capture[1].trim();
+    var jsonOutput = /^[{\[]/.test(original);
+    // Presentation only: recognize explicit JSON failure markers even when an
+    // older capture was truncated. Never infer a successful business outcome.
+    var failed = jsonOutput && /"(?:status|state)"\s*:\s*"(?:error|failed|failure|cancelled|canceled|timeout|denied)"|"(?:isError|is_error)"\s*:\s*true|"error"\s*:\s*(?:"[^"\s]|\{)/i.test(original);
+    if (failed) return {
+      legacy: true, label: "Captured tool error",
+      preview: "This capture contains a tool failure. Review the original details before relying on it."
+    };
+    if (jsonOutput) return {
+      legacy: true, label: "Captured assistant output",
+      preview: "Original tool output is available in details. Review it before using it as a memory."
+    };
+    var readable = original.replace(/(^|;\s*)([\w.]+)=/g, function (_, separator, field) {
+      return separator + humanize(field.split(".").pop()) + ": ";
+    }).replace(/\s+/g, " ");
+    return { legacy: true, label: "Assistant capture", preview: readable.length > 280 ? readable.slice(0, 277) + "…" : readable };
   }
 
   function confidenceEl(conf) {
@@ -343,7 +367,7 @@
   /* ---- Home ------------------------------------------------------------- */
 
   function setupRequest(guide, status, revocation) {
-    var block = h("div");
+    var block = h("div", { class: "setup-guide__request" });
     if (!guide.project || !guide.client || !status.memory_saved) {
       block.appendChild(h("p", { text: "Choose a project and assistant above, and save a decision first." }));
       return block;
@@ -352,7 +376,7 @@
     var request = h("textarea", { id: "setup-request", readonly: true, rows: "4", text: prompt, onclick: function () { this.select(); } });
     block.appendChild(h("label", { for: "setup-request", text: "Request to send to your assistant" }));
     block.appendChild(request);
-    block.appendChild(h("button", { type: "button", class: "btn btn--ghost", text: "Copy request", onclick: async function () {
+    block.appendChild(h("button", { type: "button", class: "btn " + (revocation ? "btn--ghost" : "btn--primary"), text: "Copy request", onclick: async function () {
       try {
         if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("Clipboard unavailable");
         await navigator.clipboard.writeText(prompt);
@@ -379,7 +403,7 @@
     rememberProjects(projects);
     if (!projects.some(function (p) { return p.id === guide.project; })) guide.project = "";
     if (clients.indexOf(guide.client) < 0) guide.client = "";
-    section.appendChild(h("p", { class: "setup-guide__intro", text: "Save one decision, choose who can read it, and test it in your assistant. Progress is checked against saved memories, permissions, and sharing history." }));
+    section.appendChild(h("p", { class: "setup-guide__intro", text: "Save a decision, give one assistant access, then check that it can recall it." }));
     var projectSelect = h("select", { id: "setup-project", onchange: function () { guide.project = this.value; loadToday(); } }, h("option", { value: "", text: "Choose a project" }));
     projects.forEach(function (p) { projectSelect.appendChild(h("option", { value: p.id, text: p.name })); });
     projectSelect.value = guide.project;
@@ -414,38 +438,53 @@
     content.appendChild(h("p", { class: "setup-guide__status", text: complete[guide.step] ? "Verified in Ninai" : "Waiting for this step" }));
     content.appendChild(h("h3", { text: names[guide.step] }));
     if (guide.step === 0) {
-      content.appendChild(h("p", { text: "Add a short decision under a named project, or create a project in the Add memory window. New projects start with assistant access off. Existing project permissions apply to any decision you add." }));
+      content.appendChild(h("p", { class: "setup-guide__instruction", text: "Write one decision you want your assistant to remember. Choose a project, or create one when you save." }));
       content.appendChild(h("button", { class: "btn btn--primary", type: "button", text: "Add a project decision", onclick: function () { openModal(guide.project, true); $("#add-type").value = "decision"; } }));
+      content.appendChild(h("details", { class: "setup-guide__details" },
+        h("summary", { text: "Who can read this?" }),
+        h("p", { text: "New projects start with assistant access off. If you choose an existing project, its current permissions apply to the decision you add." })
+      ));
     } else if (guide.step === 1) {
-      content.appendChild(h("p", { text: "Open your chosen assistant’s card. Under your project, enable Read. Save and Delete are separate choices; leave them off unless you need them. Follow the card’s instructions if its connection needs attention, then return here." }));
+      content.appendChild(h("p", { class: "setup-guide__instruction", text: "Open your assistant’s card and turn on Read for this project. Then return here." }));
       content.appendChild(h("button", { class: "btn btn--primary", type: "button", text: "Review connected assistants", onclick: function () { navTo("permissions"); } }));
+      content.appendChild(h("details", { class: "setup-guide__details" },
+        h("summary", { text: "About access and connection status" }),
+        h("p", { text: "Save and Delete are separate choices; leave them off unless you need them. If the connection needs attention, follow the assistant card’s instructions before testing." })
+      ));
     } else if (guide.step === 2) {
-      content.appendChild(h("p", { text: "Open the assistant you selected and send the request below. Return here and check progress. A configured connection alone does not verify recall: Ninai needs a real request that returns this project’s memory." }));
+      content.appendChild(h("p", { class: "setup-guide__instruction", text: "Send this request in your chosen assistant. After it replies, return here and choose Check progress." }));
       content.appendChild(setupRequest(guide, status, false));
       content.appendChild(h("button", { class: "btn btn--ghost", type: "button", text: "Inspect sharing history", onclick: function () { navTo("activity"); } }));
+      content.appendChild(h("p", { class: "setup-guide__hint", text: "Ninai verifies a real request that returns this project’s memory. A configured connection alone does not count." }));
     } else {
-      content.appendChild(h("p", { text: "After a successful recall, turn Read off for this project in Assistants. Ask the same assistant to call Ninai again. Already shared text cannot be taken back; this test checks that the next request receives no project memories." }));
+      content.appendChild(h("p", { class: "setup-guide__instruction", text: "Turn off Read for this project, then send the request below in the same assistant. Check progress after it replies." }));
       content.appendChild(h("button", { class: "btn btn--primary", type: "button", text: "Choose project access", onclick: function () { navTo("permissions"); } }));
       content.appendChild(setupRequest(guide, status, true));
-      content.appendChild(h("p", { class: "setup-guide__hint", text: "You can turn Read back on later. The guide never changes your permissions." }));
+      content.appendChild(h("p", { class: "setup-guide__hint", text: "This checks future requests; text already shared cannot be taken back. You can turn Read back on later. The guide never changes your permissions." }));
     }
     section.appendChild(content);
-    var check = h("button", { class: "btn btn--primary", type: "button", text: "Check progress", onclick: function () { loadToday(); } });
+    var check = h("button", { class: "btn btn--ghost btn--sm", type: "button", text: "Check progress", onclick: function () { loadToday(); } });
     section.appendChild(h("div", { class: "setup-guide__footer" }, check,
-      h("button", { class: "btn btn--ghost", type: "button", disabled: guide.step === 0, text: "Back", onclick: function () { guide.step -= 1; loadToday(); } }),
-      h("button", { class: "btn btn--ghost", type: "button", disabled: guide.step === 3, text: "Next chapter", onclick: function () { guide.step += 1; loadToday(); } })
+      h("nav", { class: "setup-guide__navigation", "aria-label": "Setup navigation" },
+        h("button", { class: "btn btn--ghost btn--sm", type: "button", disabled: guide.step === 0, text: "Back", onclick: function () { guide.step -= 1; loadToday(); } }),
+        h("button", { class: "btn btn--ghost btn--sm", type: "button", disabled: guide.step === 3, text: "Next chapter", onclick: function () { guide.step += 1; loadToday(); } }))
     ));
     return section;
   }
 
   function todayItem(mem, kind) {
-    return h("article", { class: "today-item" + (kind === "decision" ? " today-item--decision" : "") },
-      h("p", { class: "today-item__content", text: mem.content }),
+    var presentation = memoryPresentation(mem);
+    var card = h("button", { type: "button", class: "today-item today-item--memory" + (kind === "decision" ? " today-item--decision" : ""),
+      dataId: mem.id, "aria-label": "Open memory: " + presentation.label },
+      presentation.legacy ? h("p", { class: "memory-capture__label", text: presentation.label }) : null,
+      h("p", { class: "today-item__content", text: presentation.preview }),
       h("div", { class: "today-item__meta" },
         memoryLocationBadge(mem),
-        sourceTag(mem.source_uri)
+        sourceTag(mem.source_uri, false, false)
       )
     );
+    card.addEventListener("click", function () { openDrawer(mem.id, card); });
+    return card;
   }
 
   function todayGroup(title, items, kind) {
@@ -527,15 +566,18 @@
   /* ---- Memories --------------------------------------------------------- */
 
   function memRow(mem) {
+    var presentation = memoryPresentation(mem);
     var row = h("button", {
       type: "button",
       class: "mem-row",
       dataId: mem.id,
-      "aria-label": "Open memory: " + mem.content
+      "aria-label": "Open memory: " + presentation.label
     });
-    row.appendChild(h("p", { class: "mem-row__content", text: mem.content }));
+    row.appendChild(h("div", { class: "mem-row__preview" },
+      presentation.legacy ? h("p", { class: "memory-capture__label", text: presentation.label }) : null,
+      h("p", { class: "mem-row__content", text: presentation.preview })));
     row.appendChild(h("div", { class: "mem-row__meta" },
-      sourceTag(mem.source_uri),
+      sourceTag(mem.source_uri, false, false),
       confidenceEl(mem.confidence)
     ));
     row.appendChild(h("div", { class: "mem-row__badges" },
@@ -613,7 +655,14 @@
     clear(body);
     clear(actions);
 
-    body.appendChild(h("p", { class: "drawer__content", text: mem.content }));
+    var presentation = memoryPresentation(mem);
+    if (presentation.legacy) {
+      body.appendChild(h("h2", { class: "memory-capture__label", text: presentation.label }));
+      body.appendChild(h("p", { class: "drawer__content", text: presentation.preview }));
+      body.appendChild(h("details", { class: "memory-original" },
+        h("summary", { text: "Original details" }),
+        h("pre", { class: "memory-original__content", text: mem.content })));
+    } else body.appendChild(h("p", { class: "drawer__content", text: mem.content }));
     body.appendChild(h("div", { class: "drawer__badges" },
       typeBadge(mem.memory_type),
       memoryLocationBadge(mem),
@@ -624,7 +673,7 @@
     if (mem.project_id) prov.appendChild(provRow("Project", state.projectNames[mem.project_id] || mem.project_id));
     prov.appendChild(provRow("Importance", Number(mem.importance).toFixed(2)));
     prov.appendChild(provRow("Confidence", Number(mem.confidence).toFixed(2)));
-    prov.appendChild(provRow("Source", sourceTag(mem.source_uri), true));
+    prov.appendChild(provRow("Source", sourceTag(mem.source_uri, true), true));
     prov.appendChild(provRow("Created", formatAbsolute(mem.created_at)));
     prov.appendChild(provRow("Updated", formatAbsolute(mem.updated_at)));
     prov.appendChild(provRow("Read count", numberFmt(mem.access_count)));

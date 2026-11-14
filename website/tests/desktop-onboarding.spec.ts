@@ -3,6 +3,40 @@ import { test, expect, type Page } from "@playwright/test";
 const desktop = "http://127.0.0.1:58045/";
 const decision = "Browser regression: keep every migration reversible.";
 
+for (const width of [1280, 390]) {
+  test(`setup guide separates its main action and secondary navigation at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(desktop);
+    const guide = page.locator(".setup-guide");
+    const action = guide.getByRole("button", { name: "Add a project decision", exact: true });
+    await expect(action).toBeVisible();
+    await expect(guide.locator(".btn--primary")).toHaveCount(1);
+    await expect(guide.locator(".setup-guide__footer .btn--primary")).toHaveCount(0);
+    const instruction = await guide.locator(".setup-guide__instruction").boundingBox();
+    const button = await action.boundingBox();
+    expect(instruction).not.toBeNull();
+    expect(button).not.toBeNull();
+    expect(button!.y - instruction!.y - instruction!.height).toBeGreaterThanOrEqual(16);
+    const check = await guide.getByRole("button", { name: "Check progress", exact: true }).boundingBox();
+    const back = await guide.getByRole("button", { name: "Back", exact: true }).boundingBox();
+    const next = await guide.getByRole("button", { name: "Next chapter", exact: true }).boundingBox();
+    expect(check).not.toBeNull(); expect(back).not.toBeNull(); expect(next).not.toBeNull();
+    expect(Math.abs(back!.y - next!.y)).toBeLessThan(1);
+    if (width === 1280) expect(Math.abs(check!.y - back!.y)).toBeLessThan(1);
+    else {
+      expect(back!.y - check!.y - check!.height).toBeGreaterThanOrEqual(16);
+      expect(Math.abs(back!.width - next!.width)).toBeLessThan(1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const details = guide.locator(".setup-guide__details");
+    await expect(details).not.toHaveAttribute("open", "");
+    await details.locator("summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(details).toHaveAttribute("open", "");
+    await expect(details).toContainText("its current permissions apply");
+  });
+}
+
 async function startDecision(page: Page, projectName: string) {
   await page.goto(desktop);
   await page.getByRole("button", { name: "Add a project decision", exact: true }).click();
