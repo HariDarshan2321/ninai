@@ -47,6 +47,9 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The upgrade smoke archives the immutable 0.1.0 fixture from history.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
