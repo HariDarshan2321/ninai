@@ -52,13 +52,25 @@ automatic memory use.
   approval safeguards and 390px overflow checks. Desktop and mobile screenshots
   were reviewed against a disposable synthetic local vault, not the locked
   installed app or a real OS-authentication dialog.
+- Once the Mac became available, the final `bb88d2a` development bundle was
+  installed and reopened. Its bundled JavaScript/CSS matched source and its
+  ad-hoc signature passed verification. A fresh consistent SQLite recovery
+  snapshot passed integrity checking; the replaced app was preserved. The actual
+  installed Assistants page loaded the compact help/inbox and collapsed cards;
+  existing permission summaries remained unchanged. No grants were increased.
+- A current capture-quality bug was reproduced with synthetic data and fixed:
+  raw text/errors, SQL/query results and generic status/ID responses no longer
+  become durable memories. Compact successful decisions and commitments retain
+  provenance and project isolation. All 177 engine tests passed with the native
+  framework and no skips. Existing records were preserved; historical noise
+  requires a separate owner-reviewed cleanup. See the capture-quality report.
 
 ## Remaining acceptance gates
 
-1. **Installed Mac and real owner verification.** The latest development app is
-   staged privately, with a recovery copy of the installed app and vault. Final
-   replacement, visual acceptance and an actual OS-authenticated owner approval
-   await the unlocked Mac. A synthetic preview cannot substitute for this.
+1. **Real owner verification.** The latest development app is installed and its
+   Assistants view was checked. Actual OS-authenticated owner approval still
+   requires the owner's participation. Neither the installed-page visual check
+   nor a synthetic preview substitutes for that authentication test.
 2. **Dedicated cloud account and real assistant journey.** Complete sign-in,
    connect, explicit project grant, save, fresh-session recall, denial,
    revocation, reconnect and upgrade checks using synthetic review content.

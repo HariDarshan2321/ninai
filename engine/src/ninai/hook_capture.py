@@ -49,6 +49,54 @@ OUTCOME_FIELDS = {
     "url",
 }
 
+RESULT_ENVELOPES = {"result", "data", "structuredcontent", "structured_content"}
+DURABLE_FIELDS = {"assignee", "assigned", "commitment", "deadline", "decision", "due", "merged", "milestone", "owner"}
+DURABLE_STATES = {"assigned", "blocked", "closed", "completed", "done", "in_progress", "merged", "resolved"}
+FAILED_STATES = {"error", "failed", "failure", "cancelled", "canceled", "timeout", "denied"}
+
+
+def _decoded_response(value: Any) -> dict[str, Any] | None:
+    """Accept structured results, never promote arbitrary output text to memory."""
+    if isinstance(value, str):
+        if len(value) > 65536:
+            return None
+        try:
+            value = json.loads(value)
+        except (ValueError, RecursionError):
+            return None
+    return value if isinstance(value, dict) else None
+
+
+def _failed_response(value: Any, depth: int = 0) -> bool:
+    # Fail closed on excessively nested results and inspect MCP text envelopes
+    # as well as structuredContent. An attempted write is not a completed one.
+    if depth > 8:
+        return True
+    if isinstance(value, str):
+        decoded = _decoded_response(value)
+        return decoded is not None and _failed_response(decoded, depth + 1)
+    if isinstance(value, dict):
+        if len(value) > 100:
+            return True
+        for key, child in value.items():
+            name = str(key).lower()
+            if name in {"iserror", "is_error"} and child is True:
+                return True
+            if name in {"success", "ok"} and child is False:
+                return True
+            if name == "error" and child:
+                return True
+            if name in {"status", "state"} and isinstance(child, str) and child.lower() in FAILED_STATES:
+                return True
+            if isinstance(child, (dict, list)) or name in RESULT_ENVELOPES | {"text"}:
+                if _failed_response(child, depth + 1):
+                    return True
+    elif isinstance(value, list):
+        if len(value) > 100:
+            return True
+        return any(_failed_response(child, depth + 1) for child in value)
+    return False
+
 
 def compact_json(value: Any, max_chars: int = 2400) -> str:
     try:
@@ -60,9 +108,35 @@ def compact_json(value: Any, max_chars: int = 2400) -> str:
 
 
 def compact_outcome(event: dict[str, Any]) -> str | None:
+    response = _decoded_response(event.get("tool_response"))
+    if response is None or _failed_response(response):
+        return None
+    # Query rows are source material, even when columns happen to be called
+    # status, owner or id. Capture an explicit decision separately instead.
+    action = str(event.get("tool_name", "")).lower().split("__")[-1]
+    if re.search(r"(?:^|_)(?:query|queries|sql|select)(?:_|$)", action):
+        return None
+    result_fields: list[tuple[str, str]] = []
+    _collect_outcome_fields(response, result_fields)
+    meaningful = any(
+        key.split(".")[-1] in DURABLE_FIELDS
+        or (key.split(".")[-1] in {"status", "state"} and value.lower() in DURABLE_STATES)
+        for key, value in result_fields
+    )
+    input_fields: list[tuple[str, str]] = []
+    _collect_outcome_fields(event.get("tool_input", {}), input_fields)
+    mutating = re.match(r"(?:create|update|save|set|assign|resolve|close|merge|commit|schedule)(?:_|$)", action)
+    # A successful write may return only its new identity. Require a useful
+    # named outcome in its input as well; generic id/status is insufficient.
+    write_outcome = bool(mutating and result_fields and any(
+        key.split(".")[-1] in DURABLE_FIELDS | {"title", "summary"}
+        for key, _ in input_fields
+    ))
+    if not meaningful and not write_outcome:
+        return None
     fields: list[tuple[str, str]] = []
-    _collect_outcome_fields(event.get("tool_input", {}), fields)
-    _collect_outcome_fields(event.get("tool_response", {}), fields)
+    fields.extend(input_fields)
+    fields.extend(result_fields)
     if fields:
         unique: list[str] = []
         seen: set[tuple[str, str]] = set()
@@ -74,16 +148,6 @@ def compact_outcome(event: dict[str, Any]) -> str | None:
             unique.append(f"{key}={redact_secrets(value)}")
         return "; ".join(unique)[:2800]
 
-    response = event.get("tool_response")
-    if isinstance(response, str):
-        sentences = re.split(r"(?<=[.!?])\s+|\n+", response)
-        durable = [
-            redact_secrets(sentence.strip())
-            for sentence in sentences
-            if any(term in sentence.lower() for term in DURABLE_TERMS)
-        ]
-        if durable:
-            return " ".join(durable[:3])[:1200]
     return None
 
 
@@ -100,14 +164,17 @@ def _collect_outcome_fields(
             name = str(key).lower()
             path = f"{prefix}.{name}" if prefix else name
             if name in OUTCOME_FIELDS and not isinstance(child, (dict, list)):
-                compact = " ".join(str(child).split())[:320]
+                compact = " ".join(str(child).split())[:320] if child is not None else ""
                 if compact:
                     fields.append((path, compact))
-            elif isinstance(child, (dict, list)):
+            elif name in RESULT_ENVELOPES and isinstance(child, dict):
                 _collect_outcome_fields(child, fields, prefix=path)
-    elif isinstance(value, list):
-        for child in value[:3]:
-            _collect_outcome_fields(child, fields, prefix=prefix)
+            elif name == "content" and isinstance(child, list):
+                for block in child[:3]:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        decoded = _decoded_response(block.get("text"))
+                        if decoded is not None:
+                            _collect_outcome_fields(decoded, fields, prefix=path)
 
 
 def event_to_memory(event: dict[str, Any]) -> dict[str, Any] | None:
