@@ -27,6 +27,7 @@ if args[:2] == ['-m','venv']:
     shutil.copy2(__file__,target/'python')
     (target/'ninai').write_text('#!/bin/sh\\n[ -z \"${TEST_COMMAND_LOG:-}\" ] || echo \"$*\" >> \"$TEST_COMMAND_LOG\"\\nexit 0\\n'); (target/'ninai').chmod(0o755)
     (target/'pyinstaller').write_text('#!/bin/sh\\nmkdir -p "$NINAI_INSTALL_DIR/Ninai.app"\\n'); (target/'pyinstaller').chmod(0o755)
+    (target/'pyi-makespec').write_text('#!/bin/sh\\nmkdir -p "$NINAI_INSTALL_DIR/.app-build/spec"\\necho "app = BUNDLE(None)" > "$NINAI_INSTALL_DIR/.app-build/spec/Ninai.spec"\\n'); (target/'pyi-makespec').chmod(0o755)
 elif args[:2] == ['-m','pip']:
     pass
 elif args[:1] == ['-c'] and 'ninai-app-icon.svg' in args[1]:

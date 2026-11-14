@@ -288,13 +288,15 @@ done
 icon_file="${app_build}/Ninai.icns"
 iconutil -c icns "${iconset}" -o "${icon_file}"
 rm -rf "${iconset}"
-"${install_dir}/venv/bin/pyinstaller" \
-  --noconfirm --clean --windowed --name Ninai \
+"${install_dir}/venv/bin/pyi-makespec" \
+  --windowed --name Ninai \
   --osx-bundle-identifier io.ninai.app \
   --icon "${icon_file}" --collect-data ninai \
   --add-binary "${owner_auth_helper}:ninai/native" \
-  --distpath "${install_dir}" --workpath "${app_build}/work" \
   --specpath "${app_build}/spec" "${app_entry}"
+"${install_dir}/venv/bin/python" -m ninai.desktop.bundle_spec "${app_build}/spec/Ninai.spec"
+"${install_dir}/venv/bin/pyinstaller" --noconfirm --clean \
+  --distpath "${install_dir}" --workpath "${app_build}/work" "${app_build}/spec/Ninai.spec"
 xattr -cr "${app_bundle}"
 codesign --force --deep --sign - "${app_bundle}" >/dev/null
 rm -rf "${app_build}" "${install_dir}/Ninai"

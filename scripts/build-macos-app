@@ -73,19 +73,18 @@ set --
 if [ -n "$IDENTITY" ]; then
   set -- --codesign-identity "$IDENTITY"
 fi
-"$VENV_DIR/bin/pyinstaller" "$@" \
-  --noconfirm \
-  --clean \
+"$VENV_DIR/bin/pyi-makespec" "$@" \
   --windowed \
   --name Ninai \
   --osx-bundle-identifier io.ninai.app \
   --icon "$ICON_FILE" \
   --collect-data ninai \
   --add-binary "$OWNER_AUTH_HELPER:ninai/native" \
-  --distpath "$DIST_DIR" \
-  --workpath "$BUILD_DIR/work" \
   --specpath "$BUILD_DIR/spec" \
   "$ENGINE_DIR/src/ninai/desktop/app.py"
+"$VENV_DIR/bin/python" -m ninai.desktop.bundle_spec "$BUILD_DIR/spec/Ninai.spec"
+"$VENV_DIR/bin/pyinstaller" --noconfirm --clean \
+  --distpath "$DIST_DIR" --workpath "$BUILD_DIR/work" "$BUILD_DIR/spec/Ninai.spec"
 
 # File-provider metadata can make even ad-hoc signing fail on synced macOS
 # folders. Remove metadata from the generated artifact, then ensure the local

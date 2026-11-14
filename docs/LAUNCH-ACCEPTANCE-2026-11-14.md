@@ -80,6 +80,17 @@ automatic memory use.
 
 ## Remaining acceptance gates
 
+Follow-up review: CI `43625705610` at `c95774c` passed all jobs. The stale
+`/start` and compatibility-page cloud claims were corrected, and compatibility
+now explicitly records pending Cursor/VS Code agent acceptance. The Assistants
+refresh updates the setup guide's shared connection-status cache. Both Mac build
+paths now set package version in the generated spec before signing; the actual
+installed About panel was checked as **Version 0.1.2 (0.1.2)**. Local follow-up
+checks passed **179 engine tests without skips and 35 browser tests**, plus
+the version-aware native upgrade smoke. Authentication migration preparation is
+in `AUTH0-PRODUCTION-HANDOFF.md`; no provider, DNS or auth environment was changed.
+These follow-up source changes still require their own remote CI/deploy results.
+
 1. **Real owner verification.** The latest development app is installed and its
    Assistants view was checked. Actual OS-authenticated owner approval still
    requires the owner's participation. Neither the installed-page visual check

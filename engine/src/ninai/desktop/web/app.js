@@ -1133,6 +1133,7 @@
       var result = await Promise.all([B.listClients(), B.assistantStatuses(), B.listProjects()]);
       var clients = result[0];
       var statuses = Array.isArray(result[1]) ? result[1] : [];
+      state.assistantStatuses = statuses;
       var statusById = {};
       statuses.forEach(function (item) { statusById[item.id] = item; });
       clients = Array.isArray(clients) ? clients.slice() : [];

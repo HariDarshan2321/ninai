@@ -3,6 +3,21 @@ import { test, expect, type Page } from "@playwright/test";
 const desktop = "http://127.0.0.1:58045/";
 const decision = "Browser regression: keep every migration reversible.";
 
+test("setup guide uses the latest assistant status checked on Assistants", async ({ page }) => {
+  let checks = 0;
+  await page.route("**/__test_bridge__", async route => {
+    if (route.request().postDataJSON().method !== "assistant_statuses") return route.continue();
+    checks++;
+    await route.fulfill({ json: { ok: true, data: [{ id: "codex", name: "Codex", status: checks === 1 ? "needs_attention" : "configured", message: "Synthetic connection check" }] } });
+  });
+  await page.goto(desktop);
+  await expect(page.locator('#setup-assistant option[value="codex"]')).toHaveText("Codex — Needs attention");
+  await page.getByRole("button", { name: /^Assistants\b/ }).click();
+  await expect(page.locator('.client-card[data-client="codex"] > summary')).toContainText("Configured");
+  await page.getByRole("button", { name: /^Home\b/ }).click();
+  await expect(page.locator('#setup-assistant option[value="codex"]')).toHaveText("Codex — Configured");
+});
+
 for (const width of [1280, 390]) {
   test(`setup guide separates its main action and secondary navigation at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });

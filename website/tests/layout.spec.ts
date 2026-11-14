@@ -1,5 +1,13 @@
 import { test, expect } from "@playwright/test";
 
+test("setup choices describe live cloud separately from local memory", async ({ page }) => {
+  await page.goto("http://127.0.0.1:3034/start/");
+  await expect(page.getByRole("heading", { name: "Hosted memory", exact: true })).toBeVisible();
+  await expect(page.locator("main")).toContainText("Local memory is not transferred automatically.");
+  await expect(page.locator("main")).not.toContainText("Coming later");
+  await expect(page.getByRole("link", { name: "Sign in for setup ↗", exact: true })).toHaveAttribute("href", "https://app.ninai.io/control/login");
+});
+
 for (const width of [320, 390, 768, 1440]) {
   test(`public pages stay aligned at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });

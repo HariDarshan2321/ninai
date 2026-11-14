@@ -1,5 +1,31 @@
 # Ninai handoff — 14 November 2026
 
+## Follow-up to the external review
+
+CI run **43625705610** at `c95774c` passed, resolving the old 390px
+fractional-spacing failure. Subsequent review fixes in this checkout:
+
+- `/start` describes separate local and optional hosted memory rather than
+  incorrectly claiming hosted storage is unavailable.
+- Assistants refreshes the connection-status cache used by the Home guide;
+  a browser regression exercises a changed status across the two views.
+- Both Mac build paths set bundle metadata from engine version **before**
+  PyInstaller signs the app. Native short/build versions are now `0.1.2`, not
+  PyInstaller's default `0.0.0`. Upgrade smoke also checks the actual plist.
+- Local checks after these changes: **179 engine tests passed without skips;
+  35 browser tests passed**. Website build and validation passed, and the rebuilt
+  native app's version/signature were checked. Record installation/remote CI
+  separately; a local build is not evidence of a deployed update.
+- `docs/AUTH0-PRODUCTION-HANDOFF.md` prepares owned Google credentials first
+  and a separate optional domain migration. No external auth/DNS settings or
+  billing were changed. Do not equate missing application encryption with an
+  unverified claim that infrastructure has no at-rest encryption.
+
+These changes include the hosted installer asset, so **verify a fresh Render
+deployment after CI**. The older statement that no cloud files changed after
+`83b68b2` no longer applies once this follow-up is pushed. Treat the earlier
+commit references below as historical evidence; check current HEAD/run first.
+
 ## Start here
 
 The owner explicitly requested a handoff to another AI session. Finish the listed

@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import plistlib
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -34,6 +35,11 @@ def main() -> None:
     executable = args.app.resolve() / "Contents/MacOS/Ninai"
     if sys.platform != "darwin" or not executable.is_file():
         parser.error("Run on macOS with a built Ninai.app")
+    from ninai import __version__
+    with (args.app / "Contents/Info.plist").open("rb") as plist:
+        metadata = plistlib.load(plist)
+    assert metadata.get("CFBundleShortVersionString") == __version__, "Native bundle version differs from engine"
+    assert metadata.get("CFBundleVersion") == __version__, "Native build version differs from engine"
     with tempfile.TemporaryDirectory(prefix="ninai-old-new-") as temporary:
         fixture = Path(temporary)
         archive = fixture / "prior.tar"
