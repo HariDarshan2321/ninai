@@ -221,6 +221,8 @@
     filters: { query: "", scope: "", type: "" },
     lastFocus: null,
     modalGeneration: 0,
+    creatingProjectGeneration: null,
+    projectOptionsRequest: 0,
     addFromGuide: false,
     assistantStatuses: null,
     guide: { open: true, step: 0, project: "", client: "" }
@@ -1233,6 +1235,8 @@
 
   function openModal(selectedProject, requireProject) {
     state.modalGeneration += 1;
+    state.creatingProjectGeneration = null;
+    $("#create-project").disabled = false;
     state.addFromGuide = requireProject === true;
     state.lastFocus = document.activeElement;
     var modal = $("#add-modal");
@@ -1253,6 +1257,8 @@
 
   function closeModal() {
     state.modalGeneration += 1;
+    state.creatingProjectGeneration = null;
+    $("#create-project").disabled = false;
     state.addFromGuide = false;
     var modal = $("#add-modal");
     modal.classList.remove("is-open");
@@ -1279,6 +1285,7 @@
 
   async function submitAdd(e) {
     e.preventDefault();
+    if (state.creatingProjectGeneration === state.modalGeneration) return;
     var errBox = $("#add-error");
     errBox.classList.remove("is-shown");
     var content = $("#add-content").value.trim();
@@ -1332,7 +1339,9 @@
 
   async function loadProjectOptions(selectedId) {
     var generation = state.modalGeneration;
+    var request = ++state.projectOptionsRequest;
     var projects = await B.listProjects();
+    if (request !== state.projectOptionsRequest) return;
     rememberProjects(projects);
     if (generation !== state.modalGeneration || $("#add-modal").hidden || $("#add-modal").inert) return;
     var select = $("#add-project");
@@ -1466,18 +1475,29 @@
     $("#create-project").addEventListener("click", async function () {
       var button = this;
       var generation = state.modalGeneration;
+      if (state.creatingProjectGeneration === generation) return;
       var name = $("#new-project-name").value.trim();
       if (!name) { $("#new-project-name").focus(); return; }
+      state.creatingProjectGeneration = generation;
       button.disabled = true;
+      $("#add-submit").disabled = true;
+      $("#add-submit").textContent = "Creating project…";
       try {
         var project = await B.createProject(name);
         if (generation === state.modalGeneration) {
           await loadProjectOptions(project.id);
-          $("#new-project-name").value = "";
+          if (generation === state.modalGeneration) $("#new-project-name").value = "";
         }
         toast("Project created. Assistant access starts off.");
       } catch (err) { toast(err.message || String(err), "error"); }
-      finally { button.disabled = false; }
+      finally {
+        if (state.creatingProjectGeneration === generation && generation === state.modalGeneration) {
+          state.creatingProjectGeneration = null;
+          button.disabled = false;
+          $("#add-submit").disabled = false;
+          $("#add-submit").textContent = "Save memory";
+        }
+      }
     });
     try {
       await B.waitForBridge();

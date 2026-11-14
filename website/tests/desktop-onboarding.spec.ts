@@ -32,11 +32,61 @@ test("guide rejects an unassigned save, contains keyboard focus, and saves once 
     await page.getByText("Create a project", { exact: true }).click();
   }
   await page.getByLabel("Project name", { exact: true }).fill("Browser first success");
+  let releaseProject!: () => void;
+  let projectArrived!: () => void;
+  const projectHeld = new Promise<void>(resolve => { releaseProject = resolve; });
+  const projectPending = new Promise<void>(resolve => { projectArrived = resolve; });
+  await page.route("**/__test_bridge__", async route => {
+    if (route.request().postDataJSON().method === "create_project") {
+      projectArrived();
+      await projectHeld;
+    }
+    await route.continue();
+  });
   await page.getByRole("button", { name: "Create project", exact: true }).click();
+  await projectPending;
+  await expect(page.locator("#add-submit")).toBeDisabled();
+  await expect(page.locator("#add-submit")).toHaveText("Creating project…");
+  releaseProject();
+  await expect(page.locator("#add-project option:checked")).toHaveText("Browser first success");
   await page.getByRole("button", { name: "Save memory", exact: true }).click();
   await expect(page.locator("#add-modal")).toBeHidden();
   await expect(page.getByRole("button", { name: "✓ Save a decision", exact: true })).toBeVisible();
   await expect(page.locator("#app")).not.toHaveAttribute("inert", "");
+});
+
+test("finishing an earlier project creation preserves a newly opened draft", async ({ page }) => {
+  await page.goto(desktop);
+  await page.getByRole("button", { name: "Add a project decision", exact: true }).click();
+  if (await page.locator("#new-project-details").getAttribute("open") === null) {
+    await page.getByText("Create a project", { exact: true }).click();
+  }
+  await page.getByLabel("Project name", { exact: true }).fill("Earlier project request");
+  let release!: () => void;
+  let entered!: () => void;
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const arrived = new Promise<void>(resolve => { entered = resolve; });
+  await page.route("**/__test_bridge__", async route => {
+    if (route.request().postDataJSON().method === "create_project") { entered(); await held; }
+    await route.continue();
+  });
+  const finished = page.waitForResponse(response => response.url().endsWith("/__test_bridge__") && response.request().postDataJSON().method === "create_project");
+  await page.getByRole("button", { name: "Create project", exact: true }).click();
+  await arrived;
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#add-modal")).toBeHidden();
+  await page.getByRole("button", { name: "Add a project decision", exact: true }).click();
+  await page.locator("#add-content").fill("Keep this new draft.");
+  if (await page.locator("#new-project-details").getAttribute("open") === null) {
+    await page.getByText("Create a project", { exact: true }).click();
+  }
+  await page.getByLabel("Project name", { exact: true }).fill("New draft project name");
+  release();
+  await finished;
+  await expect(page.getByText("Project created. Assistant access starts off.", { exact: true })).toBeVisible();
+  await expect(page.locator("#add-content")).toHaveValue("Keep this new draft.");
+  await expect(page.getByLabel("Project name", { exact: true })).toHaveValue("New draft project name");
+  await expect(page.locator("#add-submit")).toBeEnabled();
 });
 
 test("recall and revocation instructions do not paste the saved answer into the assistant", async ({ page }) => {
