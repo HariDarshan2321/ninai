@@ -143,15 +143,49 @@ def build(output: Path) -> None:
         print(f'{archive}: {len(selected)} files; sha256 {digest}')
 
 
+def build_connected(output: Path, registered_app_id: str) -> Path:
+    """Private/workspace bundle using an already registered ChatGPT connector.
+
+    This is deliberately separate from the portable public/Claude packages.
+    A mapping grants no access and requires the referenced connector to be available.
+    """
+    require(re.fullmatch(r'(asdk_app_|connector_|templated_apps_)[A-Za-z0-9][A-Za-z0-9_-]*', registered_app_id)
+            is not None, 'Expected a registered app ID, not a plugin ID or URL')
+    manifest, files = validate()
+    contents = {p.relative_to(PLUGIN).as_posix(): p.read_bytes() for p in files
+                if '.claude-plugin' not in p.parts and p.name not in {'mcp.json', '.mcp.json'}}
+    for relative in ('plugin.json', '.codex-plugin/plugin.json'):
+        document = json.loads(contents[relative])
+        extension = document['extensions']['com.openai'] if relative == 'plugin.json' else document
+        extension['apps'] = './.app.json'
+        contents[relative] = (json.dumps(document, indent=2)+'\n').encode()
+    contents['.app.json'] = (json.dumps({'apps': {'ninai': {'id': registered_app_id, 'required': True}}}, indent=2)+'\n').encode()
+    output.mkdir(parents=True, exist_ok=True)
+    archive = output/f'ninai-openai-connected-{manifest["version"]}.zip'
+    with ZipFile(archive, 'w', compression=ZIP_DEFLATED) as bundle:
+        for relative, data in sorted(contents.items()):
+            info = ZipInfo(relative, date_time=(2026, 1, 1, 0, 0, 0))
+            info.compress_type = ZIP_DEFLATED
+            info.external_attr = 0o100644 << 16
+            bundle.writestr(info, data)
+    digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+    archive.with_suffix('.zip.sha256').write_text(f'{digest}  {archive.name}\n')
+    print(f'{archive}: private registered-connector package; sha256 {digest}')
+    return archive
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,default=ROOT/'dist'/'plugins')
     parser.add_argument('--check',action='store_true',help='Validate source without building ZIPs')
+    parser.add_argument('--registered-app-id',help='Build a private OpenAI bundle referencing an existing connector; never public submission')
     args = parser.parse_args()
     try:
         if args.check:
             manifest, files = validate()
             print(f'Package policy passed: {manifest["version"]}, {len(files)} source files. Portal scans and runtime acceptance remain pending.')
+        elif args.registered_app_id:
+            build_connected(args.output, args.registered_app_id)
         else:
             build(args.output)
     except (ValueError, KeyError, OSError, ElementTree.ParseError) as error:

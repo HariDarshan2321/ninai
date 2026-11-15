@@ -433,6 +433,34 @@ class ControlService:
             changed = db.execute("UPDATE client_scope_grants SET revoked_at=now() WHERE workspace_id=%s AND id=%s AND revoked_at IS NULL", (identity.workspace_id, grant_id))
             return changed.rowcount == 1
 
+    def reconnect_connection(self, identity: ControlIdentity, connection_id: str) -> dict[str, Any]:
+        """Owner-approved OAuth recovery, never an implicit permission restore."""
+        with self._connect() as db:
+            self._member(db, identity, admin=True)
+            row = db.execute("""SELECT c.id,c.status,c.revoked_at FROM client_connections c
+                WHERE c.workspace_id=%s AND c.id=%s AND c.user_id=%s
+                  AND EXISTS (SELECT 1 FROM oauth_client_bindings b
+                    WHERE b.workspace_id=c.workspace_id AND b.client_connection_id=c.id
+                      AND b.user_id=c.user_id AND b.revoked_at IS NULL)
+                FOR UPDATE OF c""", (identity.workspace_id, connection_id, identity.user_id)).fetchone()
+            if not row:
+                raise KeyError("OAuth connection not found; connect the assistant again")
+            if row["status"] != "revoked":
+                raise ValueError("Only a disconnected connection can be reconnected")
+            # Keep this invariant even if an older disconnect left a grant behind.
+            db.execute("""UPDATE client_scope_grants SET revoked_at=now()
+                WHERE workspace_id=%s AND client_connection_id=%s AND revoked_at IS NULL""",
+                (identity.workspace_id, connection_id))
+            db.execute("""UPDATE personal_access_tokens SET revoked_at=now()
+                WHERE workspace_id=%s AND client_connection_id=%s AND revoked_at IS NULL""",
+                (identity.workspace_id, connection_id))
+            db.execute("""UPDATE client_connections SET status='active',revoked_at=NULL,
+                metadata_json=metadata_json || jsonb_build_object(
+                  'reconnected_at',now(),'reconnected_by_user_id',%s::text)
+                WHERE workspace_id=%s AND id=%s""",
+                (identity.user_id, identity.workspace_id, connection_id))
+            return {"id": str(row["id"]), "status": "active", "grants_restored": False}
+
     def activity(self, identity: ControlIdentity, limit: int = 100) -> list[dict[str, Any]]:
         with self._connect() as db:
             self._member(db, identity)
@@ -859,6 +887,7 @@ class ControlApp:
         elif method == "POST" and (m := re.fullmatch(r"/memories/([^/]+)/(approve|reject)", suffix)): result = self.service.review(identity, m[1], approve=m[2] == "approve")
         elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/grants", suffix)): result = self.service.create_grant(identity, m[1], data)
         elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/revoke", suffix)): result = {"revoked": self.service.revoke_connection(identity, m[1])}
+        elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/reconnect", suffix)): result = self.service.reconnect_connection(identity, m[1])
         elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/tokens", suffix)): result = self.service.create_connection_token(identity, m[1], data)
         elif method == "POST" and (m := re.fullmatch(r"/connections/([^/]+)/test", suffix)): result = self.service.test_connection(identity, m[1])
         elif method == "POST" and (m := re.fullmatch(r"/grants/([^/]+)/revoke", suffix)): result = {"revoked": self.service.revoke_grant(identity, m[1])}

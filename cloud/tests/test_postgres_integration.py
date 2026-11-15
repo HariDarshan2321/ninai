@@ -678,6 +678,55 @@ class PostgresLifecycleTest(unittest.TestCase):
         with self.assertRaisesRegex(AuthenticationError, "revoked"):
             PrincipalResolver(self.store._connection, settings).resolve(claims)
 
+        # Recovery is an explicit owner operation, not another MCP authentication.
+        owner = ControlIdentity(self.user, self.workspace)
+        restored = control.reconnect_connection(owner, connection["id"])
+        self.assertFalse(restored["grants_restored"])
+        recovered = PrincipalResolver(self.store._connection, settings).resolve(claims)
+        self.assertEqual(recovered.client_connection_id, str(connection["id"]))
+        with self.psycopg.connect(DATABASE_URL) as db:
+            grants = db.execute("""SELECT count(*) FROM client_scope_grants
+                WHERE client_connection_id=%s AND revoked_at IS NULL""", (connection["id"],)).fetchone()[0]
+        self.assertEqual(grants, 0)
+        with self.assertRaisesRegex(ValueError, "Only a disconnected"):
+            control.reconnect_connection(owner, connection["id"])
+
+    def test_reconnect_never_revives_old_grants_and_checks_workspace_owner(self) -> None:
+        control = ControlService(self.store._connection)
+        owner = ControlIdentity(self.user, self.workspace)
+        control.revoke_connection(owner, self.client)
+        # A local/PAT connection has no OAuth binding and cannot be revived by this route.
+        with self.assertRaises(KeyError):
+            control.reconnect_connection(owner, self.client)
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("""INSERT INTO oauth_client_bindings
+                (id,issuer,oauth_client_id,user_id,workspace_id,client_connection_id)
+                VALUES(%s,'https://synthetic.invalid/','reconnect-test',%s,%s,%s)""",
+                (str(uuid.uuid4()), self.user, self.workspace, self.client))
+        with self.assertRaises(AuthorizationError):
+            control.reconnect_connection(ControlIdentity(str(uuid.uuid4()), self.workspace), self.client)
+        with self.assertRaises(AuthorizationError):
+            control.reconnect_connection(ControlIdentity(self.user, str(uuid.uuid4())), self.client)
+        control.reconnect_connection(owner, self.client)
+        with self.assertRaises(AuthorizationError):
+            self.store.search(self.principal, "", project_id=self.project)
+
+    def test_reconnect_does_not_revive_access_tokens_issued_before_disconnect(self) -> None:
+        control = ControlService(self.store._connection)
+        owner = ControlIdentity(self.user, self.workspace)
+        raw = control.create_connection_token(owner, self.client, {})["personal_access_token"]
+        with self.psycopg.connect(DATABASE_URL) as db:
+            db.execute("""INSERT INTO oauth_client_bindings
+                (id,issuer,oauth_client_id,user_id,workspace_id,client_connection_id)
+                VALUES(%s,'https://synthetic.invalid/','reconnect-token-test',%s,%s,%s)""",
+                (str(uuid.uuid4()), self.user, self.workspace, self.client))
+        verifier = PATTokenVerifier(self.store._connection, "https://ninai.test/mcp")
+        self.assertIsNotNone(asyncio.run(verifier.verify_token(raw)))
+        control.revoke_connection(owner, self.client)
+        self.assertIsNone(asyncio.run(verifier.verify_token(raw)))
+        control.reconnect_connection(owner, self.client)
+        self.assertIsNone(asyncio.run(verifier.verify_token(raw)))
+
 
 if __name__ == "__main__":
     unittest.main()

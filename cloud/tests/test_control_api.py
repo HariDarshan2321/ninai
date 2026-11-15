@@ -110,6 +110,9 @@ class FakeService:
         self.calls.append(("review", who, memory_id, approve)); return {"id": memory_id, "status": "active" if approve else "deleted"}
     def create_grant(self, who, connection_id, data): return {"id": "g1", **data}
     def revoke_connection(self, who, connection_id): return connection_id in {"c1", "c2"}
+    def reconnect_connection(self, who, connection_id):
+        self.calls.append(("reconnect", who, connection_id))
+        return {"id": connection_id, "status": "active", "grants_restored": False}
     def revoke_grant(self, who, grant_id): return grant_id == "g1"
     def delete_workspace(self, who, confirmation): return confirmation == "acme"
 
@@ -475,6 +478,7 @@ class ControlAppTest(unittest.TestCase):
         cases = [
             ("/api/control/connections/c1/grants", {"scope_kind": "project", "scope_id": "p1"}, "id", "g1"),
             ("/api/control/connections/c1/revoke", {}, "revoked", True),
+            ("/api/control/connections/c1/reconnect", {}, "grants_restored", False),
             ("/api/control/grants/g1/revoke", {}, "revoked", True),
             ("/api/control/delete-workspace", {"confirmation": "acme", "workspace_id": "attacker"}, "deleted", True),
         ]

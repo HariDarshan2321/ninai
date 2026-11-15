@@ -13,6 +13,26 @@ SPEC.loader.exec_module(builder)
 
 
 class OfficialPluginPackagingTests(unittest.TestCase):
+    def test_private_connected_bundle_reuses_registered_connector_without_duplicate_server(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = builder.build_connected(Path(tmp), 'asdk_app_synthetic_test')
+            first = archive.read_bytes()
+            self.assertEqual(first, builder.build_connected(Path(tmp), 'asdk_app_synthetic_test').read_bytes())
+            with ZipFile(archive) as bundle:
+                self.assertNotIn('mcp.json', bundle.namelist())
+                self.assertNotIn('.mcp.json', bundle.namelist())
+                self.assertNotIn('.claude-plugin/plugin.json', bundle.namelist())
+                self.assertEqual(json.loads(bundle.read('.app.json')), {
+                    'apps': {'ninai': {'id': 'asdk_app_synthetic_test', 'required': True}}})
+                self.assertEqual(json.loads(bundle.read('plugin.json'))['extensions']['com.openai']['apps'], './.app.json')
+                self.assertEqual(json.loads(bundle.read('.codex-plugin/plugin.json'))['apps'], './.app.json')
+                self.assertIn('assets/ninai-app-icon.svg', bundle.namelist())
+                skill = bundle.read('skills/project-continuity/SKILL.md').decode()
+                self.assertIn('Never use `ninai_local` tools', skill)
+            for invalid in ('plugin_asdk_app_test', 'https://example.test', '../secret', ''):
+                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                    builder.build_connected(Path(tmp), invalid)
+
     def test_archives_are_reproducible_and_host_specific(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp)

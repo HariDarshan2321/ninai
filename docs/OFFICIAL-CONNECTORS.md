@@ -13,7 +13,7 @@ python3 -m unittest discover -s scripts -p 'test_official_plugins.py' -v
 claude plugin validate ./plugins/ninai
 ```
 
-Outputs are `dist/plugins/ninai-openai-0.1.2.zip` and `dist/plugins/ninai-claude-0.1.2.zip`, each with a SHA-256 sidecar. ZIPs use fixed timestamps, stable ordering, regular-file permissions, and no credentials. Rebuild them after changing the source; `dist/` is intentionally ignored.
+Outputs are `dist/plugins/ninai-openai-0.1.3.zip` and `dist/plugins/ninai-claude-0.1.3.zip`, each with a SHA-256 sidecar. ZIPs use fixed timestamps, stable ordering, regular-file permissions, and no credentials. Rebuild them after changing the source; `dist/` is intentionally ignored.
 
 OpenAI's ZIP contains root Agent Plugins manifests plus the Codex compatibility overlay. Its inline OpenAI extension is canonical; the fallback is not merged by the host. Claude's ZIP contains `.claude-plugin/plugin.json` and `.mcp.json`; it excludes the OpenAI manifests. Both bundle the same continuity skill, README, license, and website assets. Claude's required 512px PNG is a direct rasterization of the website SVG, not a replacement mark. Vault `#0B302B` and Permit `#DCEF7B` supply the listing colors; both pass the relevant 2:1 contrast check. The unchanged wordmarks remain available for review materials; the square app icon is used for directory icons.
 
