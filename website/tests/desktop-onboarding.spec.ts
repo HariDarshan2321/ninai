@@ -206,11 +206,16 @@ test("a setup-status failure keeps memories available and can be retried", async
   await page.getByRole("button", { name: "Save memory", exact: true }).click();
   await expect(page.locator("#add-modal")).toBeHidden();
   let fail = true;
+  let failures = 0;
   await page.route("**/__test_bridge__", async route => {
-    if (route.request().postDataJSON().method === "setup_status" && fail) await route.fulfill({ json: { ok: false, error: "Synthetic status failure" } });
-    else await route.continue();
+    if (route.request().postDataJSON().method === "setup_status" && fail) {
+      failures += 1;
+      await route.fulfill({ json: { ok: false, error: "Synthetic status failure" } });
+    } else await route.continue();
   });
   await page.goto(desktop);
+  // Home reloads once more when assistant statuses arrive; retry manually only after that reload has failed too.
+  await expect.poll(() => failures).toBeGreaterThanOrEqual(2);
   await expect(page.getByRole("button", { name: "Retry setup guide", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Recent memories", exact: true })).toBeVisible();
   fail = false;

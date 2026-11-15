@@ -5,8 +5,15 @@ description: Use when users ask to show their memories, ask about earlier plans 
 
 # Ninai project continuity
 
-Use the Ninai MCP tools as the source-backed memory layer for the current project.
-Use the explicitly connected mode; do not substitute local memory for a requested cloud connection or upload local memory. A tool connection alone does not install this skill or lifecycle hooks.
+This distributed plugin uses the hosted Ninai server at `https://app.ninai.io/mcp`. Invoking this plugin selects hosted memory, even when the user does not explicitly say “cloud”. A separate local installation is not this plugin's connection.
+
+## Verify the connection before using memory
+
+- Inspect the available tool identities before any call. Use only tools belonging to this plugin's hosted server. Never use `ninai_local` tools, a local vault health check, or similarly named tools from another connector as a substitute.
+- If only local tools are available, or the hosted tool identity cannot be established, stop without calling memory tools. Say: “The Ninai cloud connection is unavailable in this chat. Local Ninai tools may be installed separately, but they do not verify this plugin's cloud connection.” Do not ask for a project ID or recommend granting local access to fix this state.
+- A successful call to this hosted connection's `projects` tool verifies that it is responding. An empty result means the hosted connection has no visible project grants; it does not mean authentication is missing. Report connection availability and project access separately.
+- Do not claim the cloud connection works from plugin installation, skill availability, a previous chat's response, or a local vault result. Do not invent a Connect button or sign-in path that the current interface does not expose.
+- Never upload local memory to make a hosted test pass. A tool connection alone does not install this skill or lifecycle hooks.
 
 ## Before answering from prior work
 
