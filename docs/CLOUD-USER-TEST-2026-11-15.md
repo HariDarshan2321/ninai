@@ -132,3 +132,29 @@ Automated evidence: 147 cloud tests passed against a disposable PostgreSQL 16
 container (one restore-rehearsal test skipped, as before), including three
 reconnect tests; 4 packaging tests passed; package policy check passed for
 0.1.3.
+
+## Release status after the follow-up
+
+- `a555074` added reconnect recovery, token revocation on reconnect and the
+  private connected package. Its CI failed for two reasons that were fixed in
+  `5d3978b`: the engine's bundled Codex skill no longer matched the plugin
+  copy, and one browser test raced an automatic Home reload.
+- CI run 43698976086 on `5d3978b` passed all five jobs.
+- **Not deployed.** After that run, public `/health` still reported revision
+  `cadeeff`. Render deploys the `cloud` root after passing checks; the commit
+  with the cloud change failed its checks and the fixing commit changed nothing
+  under `cloud/`. The reconnect endpoint and dashboard button are therefore not
+  live. A deliberate deployment of `5d3978b` and a `/health` revision check are
+  required first.
+
+Still not verified live:
+
+1. Reconnect recovery in the real dashboard: reconnect the disconnected test
+   connection, confirm zero project access, confirm a fresh assistant session
+   sees no projects until access is granted again.
+2. The branded package in ChatGPT: build the connected package with the
+   registered connector ID, install it, then run propose, approve, recall and
+   revoke through it.
+3. A fresh-account signup journey.
+
+Do not describe hosted onboarding as production ready until these pass.
