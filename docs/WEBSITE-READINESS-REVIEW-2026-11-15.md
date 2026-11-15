@@ -22,6 +22,8 @@ TypeScript checking and the static production build passed. All 35 browser tests
 
 Native desktop GUI verification is not represented by browser preview tests. The native app remains outside the completed visual checks.
 
+The first pushed website job caught an outdated exact-copy requirement in `scripts/validate_website.py`: it still required the unqualified local-memory sentence. The validator now requires the local-mode-qualified sentence instead. Run this validator as well as build/browser checks when changing release copy.
+
 ## Owner decisions and publication boundary
 
 The owner requested keeping the Ninai brand. No Berlin company, legal form, registered address, certification, traction, pricing, or competitor weakness was invented. The actual responsible legal operator and contact details still require owner confirmation; this is not a legal-compliance certification. Relevant primary references: [GDPR Article 13](https://eur-lex.europa.eu/eli/reg/2016/679/) and [DDG section 5](https://www.gesetze-im-internet.de/ddg/__5.html).
@@ -29,6 +31,8 @@ The owner requested keeping the Ninai brand. No Berlin company, legal form, regi
 Fresh-account signup, trusted signed installers and upgrades, live backup restore, and sustainable OAuth registration capacity remain launch gates. The wording review does not establish overall production readiness or a guaranteed five-minute source installation.
 
 The owner approved committing and pushing these reviewed changes on 15 November 2026, as requested in the private agent handoff. The live site must not be described as updated before deployment is separately verified.
+
+The wording patch was pushed as `70c6a1e`. Vercel reported a successful deployment, and fresh HTTP checks of all eight changed pages plus `llms.txt` verified the new wording. Each checked page returned HTTP 200. This confirms publication of the copy, not completion of the outstanding product or legal gates.
 
 ## Email setup handled separately
 

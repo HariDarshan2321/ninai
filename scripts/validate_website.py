@@ -133,7 +133,7 @@ for private_setup_marker in (
 for gated_copy in ("official installer", "I already have an account", "screen_hint=signup"):
     if gated_copy not in public_install:
         raise SystemExit(f"Public install page is missing account gate copy: {gated_copy}")
-for current_release_copy in ("Follow a real setup walkthrough", "Your complete memory stays on your computer"):
+for current_release_copy in ("Follow a real setup walkthrough", "With local setup, your memory stays on your computer"):
     if current_release_copy not in public_install:
         raise SystemExit(f"Public install page is missing current-release copy: {current_release_copy}")
 
