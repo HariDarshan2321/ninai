@@ -15,6 +15,7 @@ Three independent read-only reviewers checked source claims, beginner onboarding
 - Support explains using the same identity/sign-in method in dashboard and assistant, and reconnecting without restoring previous permissions.
 - Customer-facing research references to “MVP” were removed while preserving honest research and benchmark limitations.
 - The new cloud-option paragraph has its own spacing below the installer prerequisites.
+- A final independent re-review caught a local/cloud permission-label mixup. The local install step now says Read/Save, matching the local app, rather than implying its permissions are the hosted Propose workflow.
 
 ## Validation
 

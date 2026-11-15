@@ -44,7 +44,7 @@ export default function InstallPage() {
 
       <section className="install-choice shell" aria-label="Ninai setup steps">
         <article><span className="status-pill status-pill--ready">1 · Install</span><h2>Follow the Mac setup</h2><p>Check the prerequisites, then run the source installer. Review the command before running it.</p></article>
-        <article><span className="status-pill status-pill--ready">2 · Connect</span><h2>Choose project access</h2><p>Ninai configures detected supported assistants. In the app, choose what each one may read or propose.</p></article>
+        <article><span className="status-pill status-pill--ready">2 · Connect</span><h2>Choose project access</h2><p>Ninai configures detected supported assistants. In the app, choose which project memories each one may read or save.</p></article>
         <article><span className="status-pill status-pill--ready">3 · Check</span><h2>Run a private test</h2><p>Save one sample decision, open another assistant, and confirm that it can recall it.</p></article>
       </section>
 
