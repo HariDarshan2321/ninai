@@ -1,12 +1,45 @@
 # Hosted onboarding test: 2026-11-15
 
-## Verified outcome
+## Final result — private package and reconnect gates passed
 
-The real hosted Codex CLI path passed: OAuth login, discovery with no grants, explicit Read + Propose access to a new synthetic project, proposal storage, exclusion before approval, owner approval in the dashboard, source-backed recall from a fresh client session, immediate denial after grant revocation, and rejected MCP initialization after connection disconnect. The synthetic active memory remains in the cloud dashboard. The test connection is deliberately left revoked, with no test project access. Existing connections and the prior memory in this account were not modified.
+The private connected **Ninai 0.1.3** package is installed and enabled from the personal marketplace `ninai-private-test`. Its hosted app mapping resolved successfully in fresh Codex CLI sessions with both standalone Ninai MCP configurations explicitly disabled. This verifies the installed package workflow rather than falling back to a manually configured or local server.
 
-This is not a verified branded ChatGPT plugin flow, reconnect recovery test, fresh-account signup, or production-readiness certification. The current chat still exposes only local Ninai tools; the hosted tests ran in fresh ephemeral Codex CLI sessions configured with the canonical hosted server and without the local server. No local vault contents were uploaded.
+| Acceptance check | Verified result |
+| --- | --- |
+| Package installation | Supported `codex plugin add ninai@ninai-private-test --json` installed version 0.1.3; subsequent listing showed installed=true and enabled=true |
+| Brand assets | Installed app icon and both wordmark SVGs exactly match the website assets |
+| Package routing | `.app.json` resolves the already-authenticated Ninai cloud verification connector; no dangling MCP-file reference or duplicate bundled MCP server |
+| No grants | Fresh installed-plugin session called registered app projects and returned count=0 |
+| Review-first write | Read + Propose granted only to the synthetic project; installed plugin stored a new proposal with auto-activation disabled |
+| Before approval | A fresh tool recall did not expose the pending cobalt decision; it could still return the separate previously approved synthetic decision |
+| Owner approval | Only the cobalt synthetic proposal was approved through the real dashboard |
+| Fresh-session recall | Installed plugin recalled the approved cobalt decision, exact memory ID, and original source |
+| Disconnect | Dashboard disconnect of this exact test connector caused its next tool call to return UNAUTHORIZED / reauthentication required |
+| Explicit reconnect | Owner confirmed Reconnect without access; next hosted projects returned count=0 and recall returned forbidden with no memory |
+| Deliberate regrant | Granting only Read again restored recall of the persisted cobalt decision |
+| Final revocation | Temporary Read grant revoked; a new installed-plugin session called projects and recall and received forbidden with no memory content |
+| Final data state | Three approved cloud memories, including two synthetic test decisions; no pending test proposal; test connector active with zero project grants |
 
-After the owner-approved assistant registration reset, a separate direct ChatGPT custom connector also passed real OAuth, no-grant discovery, recall of the Codex-created synthetic decision with its original source, and immediate denial after its Read grant was revoked. This test connector is named **Ninai cloud verification**. It is not the branded ZIP plugin version 0.1.2.
+Synthetic private-package decision: `Private branded package acceptance decision: use the cobalt checklist for release reviews.` Source: `ninai-test://2026-11-15/private-package-acceptance`.
+
+The previous Codex cloud and direct ChatGPT web tests also passed save/review/recall and access revocation. Local data was never uploaded. Earlier owner-approved Auth0 cleanup preserved website sign-in and cloud memories. The private package reused the registered ChatGPT connector and required no additional OAuth application registration.
+
+### Scope and remaining launch work
+
+- This is a **private connected package**, not a public marketplace release or official directory approval. Account-specific connector references and the generated ZIP remain local; they are not committed as public configuration.
+- Installation and execution were verified through the supported CLI and shared plugin runtime. The desktop native GUI installation/appearance was not automated or visually verified; native app access was blocked by computer-use policy. Do not claim that screenshot-level GUI check passed.
+- A fresh-account signup, sustainable OAuth registration capacity/reuse, live backup restore, and trusted signed Mac/Windows installer and upgrade acceptance remain separate launch gates. Passing these two requested tests does not establish overall production readiness.
+- Deleted OAuth registrations and historical Ninai connection records are different objects. Provider deletion alone must not be represented as immediate revocation of every previously issued JWT.
+
+### Release and evidence
+
+The code/package fixes are on main through `085313e` (CI run 43701479747 passed). Render serves cloud 0.1.2 at `b94d453`; `/health` is healthy and `/ready` returns ready. No cloud source changed after that deployment.
+
+Final local checks: cloud suite ran 147 tests against the isolated PostgreSQL 16 container, with 146 passed and one skipped (the dump/restore comparison requires explicitly configured local PostgreSQL binaries). All four plugin packaging tests passed. The live plugin/reconnect checks above are additional real-service acceptance evidence, not substitutes for the remaining backup-restore or native GUI gates.
+
+Local evidence files: `/tmp/ninai-private-plugin-live-proposal.log`, `/tmp/ninai-private-plugin-live-recall.log`, `/tmp/ninai-private-plugin-live-denial.log`, and `/tmp/ninai-private-package-reconnect-final.png`. Logs contain synthetic-test execution evidence and are not published.
+
+The notes below are chronological evidence. Earlier statements such as “pending,” “not deployed,” or “not installed” describe intermediate states and are superseded by this final result.
 
 ## Owner-approved Auth0 cleanup and direct ChatGPT test
 
