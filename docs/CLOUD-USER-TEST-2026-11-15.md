@@ -171,3 +171,24 @@ action, and the reconnect route answers 401 without a session.
 This supersedes the "Not deployed" note above. It is a deployment check only.
 The signed-in reconnect test, the branded package test in ChatGPT and the
 fresh-account signup remain unverified.
+
+## Live reconnect check in the owner dashboard
+
+Run on the deployed 0.1.2 service, signed in as the same account that owns the
+test connections, with the owner present.
+
+| Check | Actual result |
+| --- | --- |
+| Before | Test connection `tpc_4G1Y…` shown as revoked with a Reconnect button; 7 active connection records |
+| Confirmation | In-page prompt stated that previous project permissions stay off |
+| After confirm | Notice: "Connection restored with no project access"; 8 active connection records |
+| Connection state | Same client now active, with the project selector unset |
+| Earlier grant | Still listed as Read Propose **Revoked** for the synthetic project; no active grant for this client |
+| Other connections | Unchanged; two older disconnected connections were left disconnected |
+| Memories | Unchanged; both approved memories still listed |
+
+Not covered by this check: a fresh assistant session through the reconnected
+client. The Codex account used for the earlier hosted test had no remaining
+usage, so "projects returns none until access is granted again" is verified
+by the database integration tests only, not by a live assistant call. The
+reconnected test connection is left active with no project access.
