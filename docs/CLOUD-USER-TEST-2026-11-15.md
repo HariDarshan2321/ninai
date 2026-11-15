@@ -158,3 +158,16 @@ Still not verified live:
 3. A fresh-account signup journey.
 
 Do not describe hosted onboarding as production ready until these pass.
+
+## Deployment of the follow-up
+
+`b94d453` set the cloud service version to 0.1.2. CI run on that commit passed
+all five jobs and Render deployed it automatically; no manual deployment was
+used and the auto-deploy setting was not touched. Public `/health` reports
+version 0.1.2 at revision `b94d453dee080970f0d84b992364a5fa6d75ed62`, and
+`/ready` returns 200. The served dashboard script contains the reconnect
+action, and the reconnect route answers 401 without a session.
+
+This supersedes the "Not deployed" note above. It is a deployment check only.
+The signed-in reconnect test, the branded package test in ChatGPT and the
+fresh-account signup remain unverified.
