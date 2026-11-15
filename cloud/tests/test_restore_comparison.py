@@ -87,9 +87,10 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
                 with psycopg.connect(origin + "/postgres", autocommit=True) as admin:
                     admin.execute("CREATE DATABASE synthetic_source")
                     admin.execute("CREATE DATABASE synthetic_restore")
+                    admin.execute("CREATE DATABASE synthetic_runtime")
                 source_url, restore_url = origin + "/synthetic_source", origin + "/synthetic_restore"
                 apply_migrations(source_url)
-                self.assertTrue(fixture.run_verification(source_url, cleanup=False)["passed"])
+                self.assertTrue(fixture.run_verification(source_url, cleanup=False, run_id="restore-rehearsal")["passed"])
                 run("pg_dump", "--dbname", source_url, "--format=custom", "--no-owner", "--no-acl", "--file", base / "synthetic.dump")
                 run("pg_restore", "--dbname", restore_url, "--exit-on-error", "--no-owner", "--no-acl", base / "synthetic.dump")
                 def compare():
@@ -100,6 +101,8 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
                         restore.rollback()
                         return report
                 self.assertEqual(compare()["status"], "ok")
+                run("pg_restore", "--dbname", origin + "/synthetic_runtime", "--exit-on-error", "--no-owner", "--no-acl", base / "synthetic.dump")
+                self.assert_restored_service_behaviour(fixture, origin + "/synthetic_runtime")
                 with psycopg.connect(restore_url) as restored:
                     MODULE.begin_snapshot(restored, 10)
                     with self.assertRaises(psycopg.errors.ReadOnlySqlTransaction):
@@ -123,6 +126,20 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
                     compare()
             finally:
                 run("pg_ctl", "-D", base / "data", "-m", "immediate", "-w", "stop")
+
+    def assert_restored_service_behaviour(self, fixture, restored_url):
+        from ninai_cloud.postgres_store import AuthorizationError, PostgresStore, Principal
+
+        ids = fixture._ids("restore-rehearsal")
+        store = PostgresStore(restored_url)
+        granted = Principal(ids["user"], ids["workspace"], ids["claude-client"])
+        revoked = Principal(ids["user"], ids["workspace"], ids["codex-client"])
+        shared = store.search(granted, "shared continuity")
+        self.assertEqual([m.source_uri for m in shared], ["claude-code://session/acceptance/turn-1"])
+        private = store.search(granted, "zephyr")
+        self.assertEqual([m.scope_id for m in private], [ids["private-project"]])
+        with self.assertRaises(AuthorizationError):
+            store.search(revoked, "shared continuity")
 
 
 if __name__ == "__main__":
