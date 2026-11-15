@@ -66,8 +66,10 @@ With explicit consent, the installer merges `SessionStart`, `Stop`, and
 `SessionEnd` hooks for Claude Code and Codex. A completed session is normalized
 to user/assistant text, secret-redacted, stored only in the local vault, and
 offered to the next supported agent only for the same project and only after a
-project-scope permission check. Injected excerpts are token-bounded and marked
-as untrusted historical data. Disable capture at any time:
+project-scope permission check. The handoff lists the project's saved decisions,
+commitments, constraints, project state, and procedures first, then session
+excerpts. The whole injected text is token-bounded and marked as untrusted
+historical data, and the saved memories handed over are recorded in sharing history. Disable capture at any time:
 
 ```bash
 ~/.ninai-app/venv/bin/ninai capture disable

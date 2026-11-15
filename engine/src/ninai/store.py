@@ -30,6 +30,20 @@ from .models import (
 from .retrieval import compose_context, estimate_tokens, rank_candidates
 from .security import contains_secret
 
+HANDOFF_MEMORY_TYPES = frozenset({"decision", "commitment", "constraint", "project_state", "procedure"})
+
+
+def _excerpt_tail(content: str, limit: int) -> str:
+    if limit <= 0:
+        return ""
+    if len(content) <= limit:
+        return content
+    tail = content[-limit:]
+    if content[-limit - 1] == "\n":
+        return tail
+    _, newline, rest = tail.partition("\n")
+    return rest if newline and rest else "…" + tail
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -605,9 +619,15 @@ class MemoryStore:
 
     def session_context(self, *, project_id: str, client_id: str, max_tokens: int = 600) -> dict[str, object]:
         if not self.can_access_project(client_id, project_id, "read"):
-            return {"project_id": project_id, "sessions": [], "estimated_tokens": 0,
+            return {"project_id": project_id, "sessions": [], "decisions": [], "estimated_tokens": 0,
                     "message": "Read access to this project is not granted to this client."}
         budget = max(100, min(int(max_tokens), 2000))
+        decisions, decision_tokens = self._handoff_decisions(project_id, budget // 2)
+        if decisions:
+            self._log_access(client_id, "session handoff", "", ["project"],
+                             [str(item["id"]) for item in decisions], decision_tokens,
+                             project_id=project_id)
+        budget -= decision_tokens
         with self._connection() as db:
             rows = db.execute(
                 """SELECT s.id,s.provider,s.title,s.source_uri,s.updated_at,a.content
@@ -619,10 +639,10 @@ class MemoryStore:
         total = 0
         for row in rows:
             item = dict(row)
-            content = str(item.pop("content"))[-2400:]
+            content = _excerpt_tail(str(item.pop("content")), 2400)
             tokens = estimate_tokens(content + str(item["source_uri"]))
             if tokens > budget - total:
-                content = content[: max(0, (budget - total) * 4 - 120)]
+                content = _excerpt_tail(content, (budget - total) * 4 - 120)
                 tokens = estimate_tokens(content + str(item["source_uri"]))
             if not content or tokens > budget - total:
                 continue
@@ -639,7 +659,22 @@ class MemoryStore:
                 (str(uuid.uuid4()), client_id, project_id,
                  json.dumps([str(item["id"]) for item in selected]), total, now_iso()),
             )
-        return {"project_id": project_id, "sessions": selected, "estimated_tokens": total}
+        return {"project_id": project_id, "sessions": selected, "decisions": decisions,
+                "estimated_tokens": total + decision_tokens}
+
+    def _handoff_decisions(self, project_id: str, max_tokens: int) -> tuple[list[dict[str, object]], int]:
+        types = sorted(HANDOFF_MEMORY_TYPES)
+        with self._connection() as db:
+            rows = db.execute(
+                f"""SELECT * FROM memories
+                    WHERE project_id=? AND deleted_at IS NULL AND scope='project'
+                      AND memory_type IN ({",".join("?" for _ in types)})
+                      AND source_uri NOT LIKE 'claude-hook://%'
+                    ORDER BY updated_at DESC, id LIMIT 40""",
+                (project_id, *types),
+            ).fetchall()
+        ranked = rank_candidates([dict(row) for row in rows], "")
+        return compose_context(ranked, max_items=6, max_tokens=max_tokens)
 
     def remember(
         self,
