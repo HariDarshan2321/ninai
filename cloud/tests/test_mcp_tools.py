@@ -180,7 +180,7 @@ class HostedMCPToolsTest(unittest.TestCase):
             health = client.get("/health")
             self.assertEqual(health.status_code, 200)
             self.assertEqual(health.json()["status"], "ok")
-            self.assertEqual(health.json()["version"], "0.1.1")
+            self.assertEqual(health.json()["version"], "0.1.2")
             self.assertEqual(health.headers["cache-control"], "no-store")
             readiness = client.get("/ready")
             self.assertEqual(readiness.status_code, 503)

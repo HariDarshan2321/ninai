@@ -1,6 +1,6 @@
 """Ninai's explicit opt-in hosted persistence adapter."""
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 from .postgres_store import (
     AuthorizationError,

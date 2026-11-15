@@ -1,6 +1,6 @@
 [project]
 name = "ninai-cloud"
-version = "0.1.1"
+version = "0.1.2"
 description = "Opt-in hosted PostgreSQL service for Ninai"
 requires-python = ">=3.11"
 license = { text = "MIT" }
