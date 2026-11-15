@@ -12,11 +12,11 @@ export default function PrivacyPage() {
   return <main id="main-content">
     <section className="page-hero page-hero--privacy"><div className="shell page-hero__grid">
       <div><p className="section-label section-label--light">Privacy Policy</p><h1>Your memory.<br />A visible boundary.</h1></div>
-      <div className="page-hero__aside"><p>Choose where your memory lives. Local memory stays on your computer. Memory you submit to Ninai Cloud is stored in the hosted service; signing in does not upload your local memory.</p><span className="privacy-version">Effective 14 November 2026</span></div>
+      <div className="page-hero__aside"><p>Choose where your memory lives. Local memory stays on your computer. Memory you submit to Ninai Cloud is stored in the hosted service; signing in does not upload your local memory.</p><span className="privacy-version">Effective 15 November 2026</span></div>
     </div></section>
 
     <section className="mode-section shell"><div className="mode-grid">
-      <article className="mode-card"><span className="status-pill status-pill--ready">Local</span><h2>Stored on your computer</h2><p>Sign-in is required to access the installer and setup guide. After installation, your memories, their sources, access choices, and sharing history remain on your device. Ninai does not automatically sync them to the cloud.</p><p>If you ask a cloud AI to use selected context, that context leaves the device and the provider&apos;s policy applies.</p></article>
+      <article className="mode-card"><span className="status-pill status-pill--ready">Local</span><h2>Stored on your computer</h2><p>Sign-in is required to download the Mac source installer. The setup guide is public. After installation, your memories, their sources, access choices, and sharing history remain on your device. Ninai does not automatically sync them to the cloud.</p><p>If you ask a cloud AI to use selected context, that context leaves the device and the provider&apos;s policy applies.</p></article>
       <article className="mode-card"><span className="status-pill">Optional cloud</span><h2>Stored in Ninai Cloud</h2><p>If you choose cloud setup, connected agents can submit and retrieve memory in your hosted workspace, subject to its project permissions.</p><p>This is separate from local storage. Ninai Cloud does not automatically read, upload, or synchronize your local memory.</p></article>
     </div></section>
 

@@ -16,7 +16,7 @@ const clients = [
   ["Gemini CLI", "Preview on Mac", "The installer can connect Gemini to the same local memory with separate access. Real-model acceptance is still in progress."],
   ["Other local AI tools", "Manual setup", "Compatible tools can connect through Ninai's local interface after the user allows access. Automatic session capture depends on the tool."],
   ["Claude.ai", "Host acceptance pending", "Public directory listing and a complete sign-in-to-recall test are pending. Availability depends on your account and plan."],
-  ["ChatGPT", "Host acceptance pending", "Public directory listing and a complete sign-in-to-recall test are pending. Availability depends on your account and plan."],
+  ["ChatGPT", "Private cloud flow verified", "Private OAuth, source-backed recall, and revocation passed in ChatGPT web. The connected private package passed in the shared plugin runtime. Public directory release, native desktop GUI checks, and other account or plan configurations remain unverified."],
   ["Claude Desktop / Cowork", "Host acceptance pending", "Availability and authentication depend on the selected host surface, plan, and account policy."],
   ["Anthropic API", "Planned", "A client application must explicitly call Ninai tools; Ninai cannot observe unrelated conversations."],
   ["OpenAI Responses API", "Planned", "A client application must explicitly connect and invoke Ninai."],

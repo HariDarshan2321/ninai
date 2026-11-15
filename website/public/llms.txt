@@ -1,6 +1,6 @@
 # Ninai
 
-Ninai gives Claude Code and Codex shared project memory on Mac while the user controls what each assistant may receive. Hosted storage is planned for later and is not available today.
+Ninai gives supported assistants permissioned project memory. Local setup keeps memory on the user's Mac. A separate hosted workspace is available for invited testing; it does not automatically upload or synchronize local memory.
 
 ## Canonical pages
 - Home: https://ninai.io/
@@ -9,13 +9,15 @@ Ninai gives Claude Code and Codex shared project memory on Mac while the user co
 - Privacy: https://ninai.io/privacy/
 
 ## Core product facts
-- Ninai stores the complete memory in a local SQLite database.
-- Supported assistants connect through a local tool interface.
+- Local mode stores memory in SQLite on the user's computer. Hosted mode stores submitted memory in a separate online workspace.
+- Supported local assistants connect through a local tool interface. Hosted assistants use an authenticated online connection.
 - Each assistant receives only the memory areas the user allows.
 - Returned context includes its source and a bounded amount of text.
-- The complete memory stays local, but selected context is sent to the chosen AI provider.
+- In local mode, the complete memory stays on the device, but selected context is sent to the chosen AI provider. Hosted memory is stored online.
 - Automatic capture currently targets Claude Code PostToolUse hooks.
-- Hosted Claude/Codex onboarding is invitation-only and operator-assisted.
+- Hosted setup is for invited testing. Private Codex and ChatGPT flows have verified project access, proposal review, source-backed recall, and revocation. This is not a public directory release or universal host-compatibility claim.
 - Connecting Ninai does not give it silent access to unrelated ChatGPT or Claude conversations.
 - Local memory is never uploaded or synchronized automatically.
 - Ninai has not completed an independent security audit and does not yet ship a signed desktop package.
+- Use the same account and sign-in method in the dashboard and assistant. Google sign-in and email/password may be separate identities.
+- Cloud Reconnect restores a saved connection without restoring old project permissions. Explicitly grant access again and test recall.

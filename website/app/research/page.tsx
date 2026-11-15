@@ -61,7 +61,7 @@ export default function ResearchPage() {
         <div className="research-disclaimer">
           <strong>Honest status</strong>
           <p>
-            PACT is a working engineering method in the MVP. It is not presented as
+            PACT is a working engineering method in the current implementation. It is not presented as
             academically novel until it is evaluated against credible baselines.
           </p>
         </div>
@@ -94,7 +94,7 @@ export default function ResearchPage() {
             <div>
               <h2>Inspectable weights, not hidden magic.</h2>
               <p>
-                The MVP uses deterministic weights that can be tested and changed. They
+                The retrieval method uses deterministic weights that can be tested and changed. They
                 are evaluation hypotheses, not immutable product truth.
               </p>
             </div>
@@ -153,7 +153,7 @@ export default function ResearchPage() {
             <li><span>05</span> Publish results—including failures.</li>
           </ol>
           <div className="research-next__cta">
-            <Link className="button button--acid" href="/install/">Run the current MVP ↗</Link>
+            <Link className="button button--acid" href="/install/">Try the setup guide ↗</Link>
             <a className="button button--dark-line" href="mailto:hello@ninai.io?subject=PACT%20research">Discuss the research</a>
           </div>
         </div>

@@ -1815,6 +1815,10 @@ a:focus-visible {
   line-height: 1.6;
 }
 
+.page-hero__aside > .install-next {
+  margin-top: 16px;
+}
+
 .hero-actions {
   display: flex;
   flex-wrap: wrap;

@@ -31,8 +31,8 @@ export default function HomePage() {
           <div className={styles.heroProduct}>
             <p className={styles.productCaption}>First success <span>Three clear steps</span></p>
             <ol className={styles.quickStart}>
-              <li><span>1</span><div><strong>Install Ninai</strong><p>Choose the version for your computer.</p></div></li>
-              <li><span>2</span><div><strong>Choose assistants</strong><p>Ninai shows the supported tools it found.</p></div></li>
+              <li><span>1</span><div><strong>Install Ninai</strong><p>Check the setup requirements for your computer.</p></div></li>
+              <li><span>2</span><div><strong>Choose project access</strong><p>Decide what each detected assistant may use.</p></div></li>
               <li><span>3</span><div><strong>Test one memory</strong><p>Save a decision and recall it from another assistant.</p></div></li>
             </ol>
           </div>
@@ -44,6 +44,7 @@ export default function HomePage() {
           <div className={styles.sectionHeading}>
             <p className={styles.eyebrow}>A simple example</p>
             <h2>The first assistant finishes. The next one knows the decision.</h2>
+            <p>This local example requires session handoff to be enabled and project access to be granted. Each assistant must call Ninai to retrieve its allowed context.</p>
           </div>
           <div className={styles.returnFlow}>
             <article className={styles.sessionCard}>
@@ -54,7 +55,7 @@ export default function HomePage() {
             <div className={styles.returnBridge} aria-hidden="true"><div className={styles.returnMark}><img src="/assets/ninai-app-icon.svg" alt="" width="54" height="54" /></div><span>Only the allowed memory</span></div>
             <article className={`${styles.sessionCard} ${styles.sessionCardRecall}`}>
               <div className={styles.cardMeta}><span>Session 02</span><span>Codex</span></div>
-              <p className={styles.userPrompt}>Codex opens in the same project.</p>
+              <p className={styles.userPrompt}>Codex asks Ninai for allowed project context.</p>
               <div className={styles.memoryReceipt}><span className={styles.receiptIndex}>01</span><div><strong>Keep every migration reversible.</strong><small>claude-code://project/decision</small></div></div>
               <p className={styles.receiptFooter}>1 memory · source included</p>
             </article>
