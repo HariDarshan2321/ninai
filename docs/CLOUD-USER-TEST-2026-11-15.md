@@ -192,3 +192,25 @@ client. The Codex account used for the earlier hosted test had no remaining
 usage, so "projects returns none until access is granted again" is verified
 by the database integration tests only, not by a live assistant call. The
 reconnected test connection is left active with no project access.
+
+## Private connected package: build corrected, live install still pending
+
+OpenAI's plugin guide says to copy the registered connection's technical ID
+from its ChatGPT settings URL, and that it starts with `plugin_asdk_app`. The
+only public `.app.json` example found (the Figma plugin in `openai/plugins`)
+uses `{"apps": {"<name>": {"id": "connector_…"}}}` with no `required` key. The
+first build rejected the `plugin_` prefix and added `required: true`, which
+neither source shows. The builder now accepts `plugin_asdk_app_…`,
+`asdk_app_…` and `connector_…` IDs and writes only the documented `id` key.
+Four packaging tests pass.
+
+A package was built locally for the verified **Ninai cloud verification**
+connection. It is not committed, because it carries an account-specific ID.
+
+Not verified: installing that package and using it in a conversation. The
+guide describes local plugin installation through a personal marketplace file
+and the ChatGPT desktop app, not through a ZIP upload in ChatGPT web, and
+states that packages containing app references cannot be submitted for public
+listing. Which ID form the host accepts is therefore still unproven; if the
+`plugin_asdk_app_…` form is refused, rebuild with the shorter App ID shown on
+the same settings page and record the result.

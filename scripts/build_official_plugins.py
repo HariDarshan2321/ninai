@@ -149,8 +149,9 @@ def build_connected(output: Path, registered_app_id: str) -> Path:
     This is deliberately separate from the portable public/Claude packages.
     A mapping grants no access and requires the referenced connector to be available.
     """
-    require(re.fullmatch(r'(asdk_app_|connector_|templated_apps_)[A-Za-z0-9][A-Za-z0-9_-]*', registered_app_id)
-            is not None, 'Expected a registered app ID, not a plugin ID or URL')
+    # OpenAI's guide names the settings-URL form (plugin_asdk_app_…); its public example uses connector_….
+    require(re.fullmatch(r'(plugin_asdk_app_|asdk_app_|connector_)[A-Za-z0-9]{8,64}', registered_app_id)
+            is not None, 'Expected a registered connection ID such as plugin_asdk_app_… from its ChatGPT settings URL')
     manifest, files = validate()
     contents = {p.relative_to(PLUGIN).as_posix(): p.read_bytes() for p in files
                 if '.claude-plugin' not in p.parts and p.name not in {'mcp.json', '.mcp.json'}}
@@ -159,7 +160,7 @@ def build_connected(output: Path, registered_app_id: str) -> Path:
         extension = document['extensions']['com.openai'] if relative == 'plugin.json' else document
         extension['apps'] = './.app.json'
         contents[relative] = (json.dumps(document, indent=2)+'\n').encode()
-    contents['.app.json'] = (json.dumps({'apps': {'ninai': {'id': registered_app_id, 'required': True}}}, indent=2)+'\n').encode()
+    contents['.app.json'] = (json.dumps({'apps': {'ninai': {'id': registered_app_id}}}, indent=2)+'\n').encode()
     output.mkdir(parents=True, exist_ok=True)
     archive = output/f'ninai-openai-connected-{manifest["version"]}.zip'
     with ZipFile(archive, 'w', compression=ZIP_DEFLATED) as bundle:
