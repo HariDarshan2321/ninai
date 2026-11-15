@@ -26,6 +26,8 @@ class OfficialPluginPackagingTests(unittest.TestCase):
                     'apps': {'ninai': {'id': 'plugin_asdk_app_0123456789abcdef'}}})
                 self.assertEqual(json.loads(bundle.read('plugin.json'))['extensions']['com.openai']['apps'], './.app.json')
                 self.assertEqual(json.loads(bundle.read('.codex-plugin/plugin.json'))['apps'], './.app.json')
+                for manifest in ('plugin.json', '.codex-plugin/plugin.json'):
+                    self.assertNotIn('mcpServers', bundle.read(manifest).decode())
                 self.assertIn('assets/ninai-app-icon.svg', bundle.namelist())
                 skill = bundle.read('skills/project-continuity/SKILL.md').decode()
                 self.assertIn('Never use `ninai_local` tools', skill)

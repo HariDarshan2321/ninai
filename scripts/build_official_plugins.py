@@ -159,6 +159,7 @@ def build_connected(output: Path, registered_app_id: str) -> Path:
         document = json.loads(contents[relative])
         extension = document['extensions']['com.openai'] if relative == 'plugin.json' else document
         extension['apps'] = './.app.json'
+        extension.pop('mcpServers', None)
         contents[relative] = (json.dumps(document, indent=2)+'\n').encode()
     contents['.app.json'] = (json.dumps({'apps': {'ninai': {'id': registered_app_id}}}, indent=2)+'\n').encode()
     output.mkdir(parents=True, exist_ok=True)
