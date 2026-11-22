@@ -25,12 +25,8 @@ export function Brand({ reversed = false }: { reversed?: boolean }) {
   return (
     <Link className="brand" href="/" aria-label="Ninai home" onClick={handleClick}>
       <img
-        className="brand__wordmark"
-        src={
-          reversed
-            ? "/assets/ninai-wordmark-reversed.svg"
-            : "/assets/ninai-wordmark.svg"
-        }
+        className={`brand__wordmark${reversed ? " brand__wordmark--reversed" : ""}`}
+        src="/assets/ninai-wordmark.svg"
         alt="Ninai"
         width="640"
         height="257"

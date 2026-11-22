@@ -1719,6 +1719,10 @@ a:focus-visible {
   width: 130px;
 }
 
+.brand__wordmark--reversed {
+  filter: brightness(0) invert(1);
+}
+
 .site-footer__top {
   display: grid;
   grid-template-columns: 1fr auto;
