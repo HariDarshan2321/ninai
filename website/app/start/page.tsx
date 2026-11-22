@@ -9,7 +9,7 @@ export const metadata = pageMetadata({
 
 export default function StartPage() {
   return (
-    <main id="main-content">
+    <main id="main-content" tabIndex={-1}>
       <section className="page-hero page-hero--install">
         <div className="shell page-hero__grid">
           <div><p className="section-label">Choose your setup</p><h1>Your memory.<br />Your choice.</h1></div>

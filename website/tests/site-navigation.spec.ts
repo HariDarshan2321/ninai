@@ -9,18 +9,71 @@ test("Help opens the support page and Security deep-links to the reporting instr
   await expect(page).toHaveURL(`${site}/support/`);
   await expect(page.getByRole("heading", { name: "Help and support", exact: true })).toBeVisible();
   await expect(header.getByRole("link", { name: "Help", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("link", { name: "Email support", exact: true })).toHaveAttribute(
-    "href", "mailto:hello@ninai.io?subject=Ninai%20support",
-  );
 
   await page.goto(`${site}/local/`);
   await page.getByRole("contentinfo").getByRole("link", { name: "Security", exact: true }).click();
   await expect(page).toHaveURL(`${site}/support/#security`);
   const security = page.locator("#security");
   await expect(security.getByRole("heading", { name: "Report a security issue" })).toBeInViewport();
-  await expect(security.getByRole("link", { name: "hello@ninai.io", exact: true })).toHaveAttribute(
-    "href", "mailto:hello@ninai.io?subject=Ninai%20security%20report",
-  );
+});
+
+test("email actions expose the address and subject before opening an email app", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 850 });
+  for (const [path, label, subject] of [
+    ["/support/", "Email support", "Ninai support"],
+    ["/support/", "Email feedback", "Ninai feedback"],
+    ["/support/#security", "Email a security report", "Ninai security report"],
+    ["/install/", "Ask about Windows testing", "Ninai for Windows"],
+    ["/research/", "Discuss the research", "PACT research"],
+    ["/privacy/", "Email a privacy request", "Ninai privacy request"],
+    ["/terms/", "Email a question or legal notice", "Ninai terms"],
+  ]) {
+    await page.goto(`${site}${path}`);
+    const toggle = page.locator(".email-contact > summary").filter({ hasText: label });
+    const panel = toggle.locator("..").locator(".email-contact__panel");
+    await expect(panel).toBeHidden();
+    await toggle.click();
+    await expect(page).toHaveURL(`${site}${path}`);
+    await expect(panel.getByText("hello@ninai.io", { exact: true })).toBeVisible();
+    await expect(panel.getByText(subject, { exact: true })).toBeVisible();
+    await expect(panel.getByRole("link", { name: "Open email app" })).toHaveAttribute(
+      "href", `mailto:hello@ninai.io?subject=${encodeURIComponent(subject)}`,
+    );
+    await toggle.press("Enter");
+    await expect(panel).toBeHidden();
+  }
+});
+
+test("support email can be copied and shows a manual fallback if clipboard access fails", async ({ context, page }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: site });
+  await page.goto(`${site}/support/`);
+  await page.locator("summary").filter({ hasText: "Email support" }).press("Enter");
+  const panel = page.locator(".email-contact[open] .email-contact__panel");
+  const copy = panel.getByRole("button", { name: "Copy email address" });
+  await copy.click();
+  await expect(panel.getByRole("status")).toHaveText("Email address copied.");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("hello@ninai.io");
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: () => Promise.reject(new Error("Clipboard unavailable")) },
+    });
+  });
+  await copy.click();
+  await expect(panel.getByRole("status")).toHaveText("Select and copy the email address above.");
+  await expect(panel.getByText("hello@ninai.io", { exact: true })).toBeVisible();
+});
+
+test("skip links move keyboard focus to the main content on every page", async ({ page }) => {
+  for (const path of ["/", "/local/", "/governance/", "/install/", "/compatibility/", "/start/", "/support/", "/privacy/", "/terms/", "/research/", "/404.html"]) {
+    await page.goto(`${site}${path}`);
+    await page.keyboard.press("Tab");
+    const skipLink = page.getByRole("link", { name: "Skip to content" });
+    await expect(skipLink).toBeFocused();
+    await skipLink.press("Enter");
+    await expect(page.getByRole("main")).toBeFocused();
+  }
 });
 
 test("primary navigation remains visible on tablets", async ({ page }) => {
@@ -80,6 +133,45 @@ test("the homepage links to the local governance guide and Mac setup", async ({ 
   await expect(page.getByRole("link", { name: "Sign in for Mac setup" })).toHaveAttribute(
     "href", "https://app.ninai.io/control/login",
   );
+});
+
+test("install walkthrough waits for chapters before enabling automatic pause", async ({ page }) => {
+  let releaseChapters!: () => void;
+  const chaptersReady = new Promise<void>((resolve) => { releaseChapters = resolve; });
+  await page.route("**/assets/ninai-install-chapters.json", async (route) => {
+    await chaptersReady;
+    await route.continue();
+  });
+  await page.goto(`${site}/install/`);
+  const pause = page.getByRole("checkbox", { name: "Pause after each step so I can try it" });
+  try {
+    await expect(pause).toBeDisabled();
+  } finally {
+    releaseChapters();
+  }
+  await expect(pause).toBeEnabled();
+  await pause.check();
+  await expect(pause).toBeChecked();
+});
+
+test("install walkthrough points to the text guide when the video fails", async ({ page }) => {
+  let releaseScripts!: () => void;
+  const scriptsReady = new Promise<void>((resolve) => { releaseScripts = resolve; });
+  await page.route("**/_next/static/chunks/*.js", async (route) => {
+    await scriptsReady;
+    await route.continue();
+  });
+  await page.route("**/assets/ninai-install-guide.mp4", (route) => route.abort());
+  try {
+    await page.goto(`${site}/install/`, { waitUntil: "commit" });
+    await page.waitForFunction(() => Boolean(document.querySelector("video")?.error));
+  } finally {
+    releaseScripts();
+  }
+  await expect(page.getByRole("status")).toContainText("The video could not load. Use the text guide below");
+  const guide = page.locator("details").filter({ hasText: "Read the step-by-step text guide" });
+  await guide.locator("summary").click();
+  await expect(guide.getByRole("heading").first()).toBeVisible();
 });
 
 test("install walkthrough chapters, checklist, and text guide work", async ({ page }) => {

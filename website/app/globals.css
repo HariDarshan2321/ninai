@@ -2180,6 +2180,59 @@ a:focus-visible {
   scroll-margin-top: 90px;
 }
 
+.email-contact > summary {
+  width: fit-content;
+  max-width: 100%;
+  cursor: pointer;
+  list-style: none;
+}
+
+.email-contact > summary::-webkit-details-marker {
+  display: none;
+}
+
+.email-contact__indicator::before {
+  content: "+";
+  font-size: 1.2em;
+}
+
+.email-contact[open] .email-contact__indicator::before {
+  content: "−";
+}
+
+.email-contact__panel {
+  width: min(100%, 28rem);
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--ink);
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--white);
+  overflow-wrap: anywhere;
+}
+
+.email-contact__panel p {
+  margin: 0;
+  color: inherit;
+}
+
+.email-contact__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+}
+
+.email-contact__actions button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.email-contact__status:not(:empty) {
+  margin-top: 8px;
+}
+
 .privacy-index {
   color: var(--blue);
   font-family: "SFMono-Regular", Consolas, monospace;
@@ -2533,6 +2586,7 @@ a:focus-visible {
 .research-next__cta {
   grid-column: 2;
   display: flex;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 14px;
 }

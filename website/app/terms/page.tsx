@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import EmailContact from "../../components/email-contact";
 import { pageMetadata } from "../site-metadata";
 
 export const metadata = pageMetadata({
@@ -10,7 +11,7 @@ export const metadata = pageMetadata({
 
 export default function TermsPage() {
   return (
-    <main id="main-content">
+    <main id="main-content" tabIndex={-1}>
       <section className="page-hero page-hero--privacy">
         <div className="shell page-hero__grid">
           <div><p className="section-label section-label--light">Legal</p><h1>Terms of Service.</h1></div>
@@ -26,7 +27,7 @@ export default function TermsPage() {
         <article><span className="privacy-index">05</span><div><p className="section-label">AI providers</p><h2>Provider terms apply after disclosure.</h2><p>When Ninai releases an authorized context packet to OpenAI, Anthropic, or another connected provider, that provider processes the packet under its own terms and privacy policy. Ninai does not control provider outputs and does not guarantee their accuracy.</p></div></article>
         <article><span className="privacy-index">06</span><div><p className="section-label">Warranties</p><h2>Use Ninai with appropriate caution.</h2><p>To the maximum extent permitted by law, Ninai is provided “as is” and “as available,” without warranties of uninterrupted operation, fitness for a particular purpose, or error-free AI output. Do not rely on it for medical, legal, financial, safety-critical, or emergency decisions.</p></div></article>
         <article><span className="privacy-index">07</span><div><p className="section-label">Suspension and deletion</p><h2>Access may be limited to protect users.</h2><p>We may suspend abusive, unlawful, insecure, or harmful use. Local memory controls run on your computer. Hosted workspace owners can revoke cloud connections and delete their workspace from active use; these actions do not erase copies already disclosed to an AI provider. For retention details, account-data access, or a deletion request, contact us as described in the <Link href="/privacy/">Privacy Policy</Link>.</p></div></article>
-        <article><span className="privacy-index">08</span><div><p className="section-label">Liability and contact</p><h2>Reasonable limits apply.</h2><p>To the maximum extent permitted by law, Ninai is not liable for indirect, incidental, special, consequential, or lost-profit damages. Nothing excludes liability that cannot legally be excluded. Questions or legal notices: <a href="mailto:hello@ninai.io">hello@ninai.io</a>.</p></div></article>
+        <article><span className="privacy-index">08</span><div><p className="section-label">Liability and contact</p><h2>Reasonable limits apply.</h2><p>To the maximum extent permitted by law, Ninai is not liable for indirect, incidental, special, consequential, or lost-profit damages. Nothing excludes liability that cannot legally be excluded. Send questions or legal notices to hello@ninai.io.</p><EmailContact label="Email a question or legal notice" subject="Ninai terms" /></div></article>
       </section>
     </main>
   );

@@ -14,7 +14,7 @@ export const metadata = pageMetadata({
 
 export default function HomePage() {
   return (
-    <main id="main-content" className={styles.page}>
+    <main id="main-content" tabIndex={-1} className={styles.page}>
       <HomeSearchMetadata description={description} />
       <section className={styles.hero} id="product">
         <div className={`shell ${styles.heroInner}`}>

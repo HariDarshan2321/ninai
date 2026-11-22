@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import InstallWalkthrough from "../../components/InstallWalkthrough";
+import EmailContact from "../../components/email-contact";
 import { pageMetadata } from "../site-metadata";
 
 export const metadata = pageMetadata({
@@ -14,7 +15,7 @@ const signinUrl = "https://app.ninai.io/control/login";
 
 export default function InstallPage() {
   return (
-    <main id="main-content">
+    <main id="main-content" tabIndex={-1}>
       <section className="page-hero page-hero--install">
         <div className="shell page-hero__grid">
           <div><h1>Install Ninai on Mac.</h1></div>
@@ -33,7 +34,7 @@ export default function InstallPage() {
         <div className="platform-choice__intro"><h2 id="platform-title">Supported platforms</h2><p>See <Link href="/compatibility/">assistant compatibility</Link> for tested and preview integrations.</p></div>
         <div className="platform-choice__items">
           <article><span className="status-pill status-pill--ready">Source setup available</span><h3>macOS</h3><p>Local handoff from Claude Code to Codex is verified.</p></article>
-          <article className="platform-choice__future"><span className="status-pill">Preview only</span><h3>Windows</h3><p>A source setup script is available for testing. A signed Windows installer and clean-machine verification are still pending.</p><a className="text-link" href="mailto:hello@ninai.io?subject=Ninai%20for%20Windows">Ask about Windows testing</a></article>
+          <article className="platform-choice__future"><span className="status-pill">Preview only</span><h3>Windows</h3><p>A source setup script is available for testing. A signed Windows installer and clean-machine verification are still pending.</p><EmailContact label="Ask about Windows testing" subject="Ninai for Windows" /></article>
         </div>
       </section>
 

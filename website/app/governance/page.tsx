@@ -17,7 +17,7 @@ const actions = [
 
 export default function GovernancePage() {
   return (
-    <main id="main-content" className={styles.page}>
+    <main id="main-content" tabIndex={-1} className={styles.page}>
       <section className="page-hero">
         <div className={`shell ${styles.hero}`}>
           <div>

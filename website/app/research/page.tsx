@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import EmailContact from "../../components/email-contact";
 import { pageMetadata } from "../site-metadata";
 
 export const metadata = pageMetadata({
@@ -21,7 +22,7 @@ const signals = [
 
 export default function ResearchPage() {
   return (
-    <main id="main-content">
+    <main id="main-content" tabIndex={-1}>
       <section className="research-hero">
         <div className="shell research-hero__inner">
           <div>
@@ -142,7 +143,7 @@ export default function ResearchPage() {
           </ol>
           <div className="research-next__cta">
             <Link className="button button--acid" href="/install/">Try the setup guide ↗</Link>
-            <a className="button button--dark-line" href="mailto:hello@ninai.io?subject=PACT%20research">Discuss the research</a>
+            <EmailContact label="Discuss the research" subject="PACT research" summaryClassName="button button--dark-line" />
           </div>
         </div>
       </section>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import EmailContact from "../../components/email-contact";
 import { pageMetadata } from "../site-metadata";
 
 export const metadata = pageMetadata({
@@ -16,9 +17,7 @@ export default function SupportPage() {
           <h1>Help and support</h1>
           <div className="page-hero__aside">
             <p>Get help with installation, assistant connections, and memory access.</p>
-            <a className="button button--acid" href="mailto:hello@ninai.io?subject=Ninai%20support">
-              Email support <span aria-hidden="true">↗</span>
-            </a>
+            <EmailContact label="Email support" subject="Ninai support" summaryClassName="button button--acid" />
           </div>
         </div>
       </section>
@@ -41,14 +40,16 @@ export default function SupportPage() {
         <article>
           <div>
             <h2>Send feedback</h2>
-            <p>Email <a href="mailto:hello@ninai.io?subject=Ninai%20feedback">hello@ninai.io</a> with your operating system, Ninai version, assistant, and the steps you tried. Share screenshots only after removing private information. Keep credentials, private memories, and full conversation exports out of the message.</p>
+            <p>Include your operating system, Ninai version, assistant, and the steps you tried. Share screenshots only after removing private information. Keep credentials, private memories, and full conversation exports out of the message.</p>
+            <EmailContact label="Email feedback" subject="Ninai feedback" />
           </div>
         </article>
         <article id="security">
           <div>
             <h2>Report a security issue</h2>
-            <p>Email <a href="mailto:hello@ninai.io?subject=Ninai%20security%20report">hello@ninai.io</a> with the subject “Ninai security report”. Name the affected feature and explain how to reproduce the issue with sample data. Leave out real credentials and other people&apos;s data.</p>
+            <p>Name the affected feature and explain how to reproduce the issue with sample data. Leave out real credentials and other people&apos;s data.</p>
             <p>For access to or deletion of your data, see the <Link href="/privacy/">privacy policy</Link>. We may need to verify account ownership.</p>
+            <EmailContact label="Email a security report" subject="Ninai security report" />
           </div>
         </article>
       </section>

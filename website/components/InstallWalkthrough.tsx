@@ -18,10 +18,12 @@ export default function InstallWalkthrough() {
   const [completed, setCompleted] = useState<string[]>([]);
   const [current, setCurrent] = useState(0);
   const [pauseAfterStep, setPauseAfterStep] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
   const [notice, setNotice] = useState("");
   const [transcript, setTranscript] = useState<string[]>([]);
 
   useEffect(() => {
+    if (video.current?.error) setVideoFailed(true);
     let cancelled = false;
     fetch("/assets/ninai-install-chapters.json")
       .then((response) => { if (!response.ok) throw new Error(); return response.json(); })
@@ -106,13 +108,30 @@ export default function InstallWalkthrough() {
       </div>
       <div className="setup-walkthrough__grid">
         <div>
-          <video ref={video} className="setup-walkthrough__video" controls playsInline preload="metadata" poster="/assets/ninai-install-poster.jpg" onTimeUpdate={updateTime} onLoadedMetadata={() => { if (video.current && pendingSeek.current !== null) { video.current.currentTime = pendingSeek.current; pendingSeek.current = null; } }} onError={() => setNotice("The video could not load. Use the text guide below, or download the recording to watch locally.")} aria-label="Ninai setup walkthrough with sample data">
-            <source src="/assets/ninai-install-guide.mp4" type="video/mp4" />
+          <video
+            ref={video}
+            className="setup-walkthrough__video"
+            src="/assets/ninai-install-guide.mp4"
+            controls
+            playsInline
+            preload="metadata"
+            poster="/assets/ninai-install-poster.jpg"
+            onTimeUpdate={updateTime}
+            onLoadedMetadata={() => {
+              setVideoFailed(false);
+              if (video.current && pendingSeek.current !== null) {
+                video.current.currentTime = pendingSeek.current;
+                pendingSeek.current = null;
+              }
+            }}
+            onError={() => setVideoFailed(true)}
+            aria-label="Ninai setup walkthrough with sample data"
+          >
             <track kind="captions" src="/assets/ninai-install-guide.vtt" srcLang="en" label="English" default />
             Your browser cannot play this video. Use the step-by-step text guide below.
           </video>
           <div className="setup-walkthrough__playback">
-            <label><input type="checkbox" checked={pauseAfterStep} onChange={(event) => { setPauseAfterStep(event.target.checked); lastPause.current = null; }} /> Pause after each step so I can try it</label>
+            <label><input type="checkbox" checked={pauseAfterStep} disabled={!chapters.length} onChange={(event) => { setPauseAfterStep(event.target.checked); lastPause.current = null; }} /> Pause after each step so I can try it</label>
             <a href="/assets/ninai-install-guide.mp4" download>Download video</a>
           </div>
           {active && <div className="setup-walkthrough__instruction">
@@ -121,7 +140,9 @@ export default function InstallWalkthrough() {
             <p><strong>You are done when:</strong> {active.success}</p>
             <button className="button button--ink" type="button" aria-pressed={completed.includes(active.id)} onClick={() => markComplete(active.id)}>{completed.includes(active.id) ? "✓ Step completed — undo" : "I tried this — mark complete"}</button>
           </div>}
-          <p className="setup-walkthrough__notice" role="status">{notice}</p>
+          <p className="setup-walkthrough__notice" role="status">
+            {videoFailed ? "The video could not load. Use the text guide below, or download the recording to watch locally." : notice}
+          </p>
         </div>
         <nav className="setup-walkthrough__chapters" aria-label="Video chapters">
           <div className="setup-walkthrough__progress"><h3>Your setup checklist</h3><p>{completedCount} of {chapters.length} steps tried</p><progress max={Math.max(chapters.length, 1)} value={completedCount} aria-label="Steps you marked complete" /></div>
