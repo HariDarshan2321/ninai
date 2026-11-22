@@ -10,9 +10,11 @@ export function Brand({ reversed = false }: { reversed?: boolean }) {
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     // Clicking the logo while already on the home route does not trigger a
     // Next.js navigation (same path), so scroll back to the top ourselves.
-    if (pathname === "/") {
+    if (pathname === "/" && event.button === 0 && !event.metaKey && !event.ctrlKey &&
+        !event.altKey && !event.shiftKey) {
       event.preventDefault();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      window.scrollTo({ top: 0, behavior: reduceMotion ? "instant" : "smooth" });
       // Clear a stale #hash so the address bar matches the top-of-page state.
       if (window.location.hash) {
         history.replaceState(null, "", "/");

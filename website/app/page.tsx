@@ -1,40 +1,42 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
+import { HomeSearchMetadata } from "./home-search-metadata";
+import { pageMetadata } from "./site-metadata";
 import styles from "./home.module.css";
 
-export const metadata: Metadata = {
-  title: "Ninai — private memory for your AI assistants",
-  description:
-    "Ninai lets supported AI assistants remember the same project while you control what each assistant may use.",
-  alternates: { canonical: "/" },
-};
+const description = "Keep project decisions on your Mac for Claude Code and Codex. Grant each assistant separate read, save, and delete permissions and see what Ninai shared.";
+
+export const metadata = pageMetadata({
+  path: "/",
+  title: "Local AI Memory with Project Permissions",
+  description,
+});
 
 export default function HomePage() {
   return (
     <main id="main-content" className={styles.page}>
+      <HomeSearchMetadata description={description} />
       <section className={styles.hero} id="product">
         <div className={`shell ${styles.heroInner}`}>
           <div className={styles.heroCopy}>
-            <p className={styles.kicker}><span /> Private memory for your AI assistants</p>
-            <h1 className={styles.heroTitle}>Your assistants remember.<em>You stay in control.</em></h1>
+            <p className={styles.kicker}><span aria-hidden="true" /> Local AI memory with project permissions</p>
+            <h1 className={styles.heroTitle}>Project memory{" "}<em>you control.</em></h1>
             <p className={styles.heroLead}>
-              Finish work in one supported assistant and continue in another without explaining
-              the project again. Built today for people who use Claude Code and Codex on the same project.
+              Save project decisions and their sources on your Mac. Pick up the work in a later
+              Claude Code or Codex session, with permissions you set for each assistant and project.
             </p>
             <div className={styles.heroActions}>
-              <Link className={styles.primaryAction} href="/install/">See setup steps <span aria-hidden="true">↗</span></Link>
+              <Link className={styles.primaryAction} href="/install/">Install on Mac <span aria-hidden="true">↗</span></Link>
               <Link className={styles.secondaryAction} href="#how-it-works">See how it works</Link>
             </div>
-            <p className={styles.heroNote}>Mac source setup · Windows preview · you choose what each assistant can use</p>
           </div>
           <div className={styles.heroProduct}>
-            <p className={styles.productCaption}>First success <span>Three clear steps</span></p>
-            <ol className={styles.quickStart}>
-              <li><span>1</span><div><strong>Install Ninai</strong><p>Check the setup requirements for your computer.</p></div></li>
-              <li><span>2</span><div><strong>Choose project access</strong><p>Decide what each detected assistant may use.</p></div></li>
-              <li><span>3</span><div><strong>Test one memory</strong><p>Save a decision and recall it from another assistant.</p></div></li>
-            </ol>
+            <p className={styles.productCaption} id="project-permissions">Permissions for each assistant and project</p>
+            <ul className={styles.quickStart} aria-labelledby="project-permissions">
+              <li><div><strong>Read</strong><p>Retrieve saved decisions and their sources.</p></div></li>
+              <li><div><strong>Save</strong><p>Add a memory when you allow it.</p></div></li>
+              <li><div><strong>Delete</strong><p>Remove a memory only with a separate grant.</p></div></li>
+            </ul>
           </div>
         </div>
       </section>
@@ -42,22 +44,20 @@ export default function HomePage() {
       <section className={styles.returnSection} id="how-it-works">
         <div className="shell">
           <div className={styles.sectionHeading}>
-            <p className={styles.eyebrow}>A simple example</p>
-            <h2>The first assistant finishes. The next one knows the decision.</h2>
-            <p>This local example requires session handoff to be enabled and project access to be granted. Each assistant must call Ninai to retrieve its allowed context.</p>
+            <h2>Pick up a decision in a new session.</h2>
+            <p>Enable session handoff and grant access to the project. A later session can ask Ninai for the context it’s allowed to read.</p>
           </div>
           <div className={styles.returnFlow}>
             <article className={styles.sessionCard}>
-              <div className={styles.cardMeta}><span>Session 01</span><span>Claude Code</span></div>
-              <p className={styles.userPrompt}>Claude Code session ends.</p>
-              <div className={styles.toolEvent}><span>Ninai saved</span><strong>The useful project decision.</strong><small>stored on this computer · source attached</small></div>
+              <div className={styles.cardMeta}><span>Save a decision</span><span>Claude Code</span></div>
+              <p className={styles.userPrompt}>“Keep database migrations reversible.”</p>
+              <div className={styles.toolEvent}><strong>Saved to this project</strong><small>Stored on your Mac with a source reference</small></div>
             </article>
             <div className={styles.returnBridge} aria-hidden="true"><div className={styles.returnMark}><img src="/assets/ninai-app-icon.svg" alt="" width="54" height="54" /></div><span>Only the allowed memory</span></div>
             <article className={`${styles.sessionCard} ${styles.sessionCardRecall}`}>
-              <div className={styles.cardMeta}><span>Session 02</span><span>Codex</span></div>
-              <p className={styles.userPrompt}>Codex asks Ninai for allowed project context.</p>
-              <div className={styles.memoryReceipt}><span className={styles.receiptIndex}>01</span><div><strong>Keep every migration reversible.</strong><small>claude-code://project/decision</small></div></div>
-              <p className={styles.receiptFooter}>1 memory · source included</p>
+              <div className={styles.cardMeta}><span>Recall the decision</span><span>Codex</span></div>
+              <p className={styles.userPrompt}>“What’s our rule for database migrations?”</p>
+              <div className={styles.memoryReceipt}><div><strong>Keep database migrations reversible.</strong><small>Source: Claude Code session</small></div></div>
             </article>
           </div>
         </div>
@@ -65,9 +65,9 @@ export default function HomePage() {
 
       <section className={styles.finalCta}>
         <div className={`shell ${styles.finalCtaInner}`}>
-          <img src="/assets/ninai-app-icon.svg" alt="" width="62" height="62" />
-          <h2>Continue the work.<em>Keep control of the memory.</em></h2>
-          <div><Link className={styles.primaryAction} href="/install/">See installation options ↗</Link><Link className={styles.secondaryActionLight} href="/privacy/">How privacy works</Link></div>
+          <h2>Access starts off.</h2>
+          <p>Approve what each assistant can do for a project, see what Ninai shared, and revoke future access.</p>
+          <div><Link className={styles.primaryAction} href="/governance/">Explore governance <span aria-hidden="true">↗</span></Link></div>
         </div>
       </section>
     </main>

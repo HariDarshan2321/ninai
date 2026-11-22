@@ -19,15 +19,15 @@ export function SiteFooter() {
             <p className="footer-label">Product</p>
             <Link href="/install/">Get Ninai</Link>
             <Link href="/local/">Why local</Link>
+            <Link href="/governance/">Governance</Link>
             <Link href="/privacy/">Privacy</Link>
             <Link href="/terms/">Terms</Link>
           </div>
           <div>
             <p className="footer-label">Connect</p>
             <Link href="/support/">Help &amp; support</Link>
+            <Link href="/support/#security">Security</Link>
             <a href="https://github.com/HariDarshan2321/ninai">GitHub</a>
-            <a href="mailto:hello@ninai.io">hello@ninai.io</a>
-            <a href="mailto:hello@ninai.io">Security</a>
           </div>
         </div>
       </div>

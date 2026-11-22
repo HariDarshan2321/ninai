@@ -1,20 +1,26 @@
 # Ninai
 
-Ninai gives supported assistants permissioned project memory. Local setup keeps memory on the user's Mac. A separate hosted workspace is available for invited testing; it does not automatically upload or synchronize local memory.
+Ninai gives Claude Code and Codex local project memory on Mac. Save project decisions with sources, then grant each assistant permission to read or save memory for a project. A separate hosted workspace is available for invited testing. Local memory is never uploaded or synchronized automatically.
 
 ## Canonical pages
 - Home: https://ninai.io/
 - Install: https://ninai.io/install/
-- Local engine: https://ninai.io/local/
+- Local memory: https://ninai.io/local/
+- Project permissions and governance: https://ninai.io/governance/
+- Compatibility: https://ninai.io/compatibility/
+- Help and support: https://ninai.io/support/
+- Report a security concern: https://ninai.io/support/#security
 - Privacy: https://ninai.io/privacy/
+- Terms: https://ninai.io/terms/
 
 ## Core product facts
 - Local mode stores memory in SQLite on the user's computer. Hosted mode stores submitted memory in a separate online workspace.
 - Supported local assistants connect through a local tool interface. Hosted assistants use an authenticated online connection.
-- Each assistant receives only the memory areas the user allows.
+- Ninai checks project permissions for each assistant. The local app lets the owner grant Read and Save separately.
+- Revoking a permission stops future access through Ninai. A revocation cannot remove context an assistant or provider has already received.
 - Returned context includes its source and a bounded amount of text.
 - In local mode, the complete memory stays on the device, but selected context is sent to the chosen AI provider. Hosted memory is stored online.
-- Automatic capture currently targets Claude Code PostToolUse hooks.
+- Optional session handoff uses local lifecycle hooks for Claude Code and Codex. Claude Code also supports opt-in MCP tool-result capture.
 - Hosted setup is for invited testing. Private Codex and ChatGPT flows have verified project access, proposal review, source-backed recall, and revocation. This is not a public directory release or universal host-compatibility claim.
 - Connecting Ninai does not give it silent access to unrelated ChatGPT or Claude conversations.
 - Local memory is never uploaded or synchronized automatically.

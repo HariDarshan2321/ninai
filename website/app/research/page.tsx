@@ -1,26 +1,14 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = {
-  title: "PACT research direction",
+import { pageMetadata } from "../site-metadata";
+
+export const metadata = pageMetadata({
+  path: "/research/",
+  title: "PACT Research",
   description:
     "Explore Ninai's permission-first, provenance-backed approach to minimum sufficient context and the evaluation plan behind it.",
-  alternates: { canonical: "/research/" },
-  robots: { index: false, follow: true },
-  openGraph: {
-    title: "PACT — Minimum sufficient context for AI memory",
-    description: "Permission-first retrieval, provenance, and compact evidence packets.",
-    url: "/research/",
-    images: [
-      {
-        url: "/assets/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "PACT minimum sufficient context research by Ninai",
-      },
-    ],
-  },
-};
+  index: false,
+});
 
 const signals = [
   ["Lexical relevance", "0.34", "Does the fact address this request?"],

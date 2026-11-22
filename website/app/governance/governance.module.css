@@ -1,0 +1,158 @@
+.page h2,
+.page h3 {
+  text-wrap: balance;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 0.66fr);
+  align-items: end;
+  gap: clamp(26px, 6vw, 88px);
+}
+
+.intro {
+  max-width: 58ch;
+  margin: 24px 0 0;
+  color: var(--muted);
+  font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+  line-height: 1.6;
+}
+
+.panel {
+  padding: clamp(20px, 3.4vw, 34px);
+  border: 1px solid var(--line-light);
+  border-radius: 22px;
+  color: var(--paper);
+  background: var(--ink-soft);
+}
+
+.panel h2,
+.panel p {
+  margin: 0;
+}
+
+.panel h2 {
+  font-size: 1.18rem;
+}
+
+.panel p,
+.actions dd {
+  color: var(--mint);
+  line-height: 1.5;
+}
+
+.actions {
+  margin: 20px 0;
+}
+
+.actions > div {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  gap: 14px;
+  padding-block: 14px;
+  border-top: 1px solid var(--line-light);
+}
+
+.actions > div:last-child {
+  border-bottom: 1px solid var(--line-light);
+}
+
+.actions dt {
+  color: var(--acid);
+  font-weight: 720;
+}
+
+.actions dd {
+  margin: 0;
+}
+
+.workflow,
+.boundaryInner,
+.install {
+  padding-block: clamp(54px, 7vw, 96px);
+}
+
+.sectionIntro {
+  max-width: 720px;
+  margin-bottom: 32px;
+}
+
+.sectionIntro h2,
+.boundary h2,
+.install h2 {
+  margin: 0;
+  font-size: clamp(2.15rem, 4.4vw, 3.7rem);
+  letter-spacing: -.045em;
+  line-height: 1.04;
+}
+
+.sectionIntro p,
+.workflowCards p,
+.boundary p,
+.install p {
+  max-width: 64ch;
+  margin: 14px 0 0;
+  line-height: 1.65;
+}
+
+.workflowCards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.workflowCards article {
+  padding: 24px 0 0;
+  border-top: 1px solid currentColor;
+}
+
+.workflowCards h3 {
+  margin: 0;
+  font-size: 1.22rem;
+}
+
+.boundary {
+  color: var(--paper);
+  background: var(--ink-soft);
+}
+
+.boundaryInner,
+.install {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: start;
+  gap: 28px 40px;
+}
+
+.boundaryInner > div:first-child,
+.install > div {
+  flex: 1 1 390px;
+}
+
+.resources {
+  display: grid;
+  flex: 0 1 360px;
+  gap: 12px;
+}
+
+.resources a {
+  display: flex;
+  color: var(--acid);
+  justify-content: space-between;
+  gap: 10px;
+  padding-block: 10px;
+  text-underline-offset: 4px;
+}
+
+@media (max-width: 760px) {
+  .hero,
+  .workflowCards {
+    grid-template-columns: 1fr;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.6rem, 11.4vw, 3.8rem);
+    line-height: .94;
+  }
+}

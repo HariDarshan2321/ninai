@@ -1,16 +1,11 @@
-import type { Metadata } from "next";
-export const metadata: Metadata = {
-  title: "Choose your Ninai setup",
+import { pageMetadata } from "../site-metadata";
+
+export const metadata = pageMetadata({
+  path: "/start/",
+  title: "Choose Your Setup",
   description: "Choose local memory on your Mac or a separate, opt-in Ninai Cloud workspace. Local memory is never uploaded automatically.",
-  alternates: { canonical: "/start/" },
-  robots: { index: false, follow: true },
-  openGraph: {
-    title: "Choose your Ninai setup",
-    description: "Local and hosted memory are separate choices.",
-    url: "/start/",
-    images: [{ url: "/assets/og-image.png", width: 1200, height: 630, alt: "Start with Ninai" }],
-  },
-};
+  index: false,
+});
 
 export default function StartPage() {
   return (

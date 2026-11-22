@@ -1,12 +1,12 @@
 {
   "name": "Ninai",
   "short_name": "Ninai",
-  "description": "Permissioned AI memory for Claude Code and Codex",
+  "description": "Local AI memory and project permissions for Claude Code and Codex on Mac",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4f2ec",
   "theme_color": "#0a0a0a",
   "icons": [
-    {"src": "/assets/ninai-app-icon.svg", "sizes": "any", "type": "image/svg+xml"}
+    {"src": "/assets/ninai-icon.png", "sizes": "192x192", "type": "image/png"}
   ]
 }

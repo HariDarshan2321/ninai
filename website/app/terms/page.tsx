@@ -1,17 +1,12 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = {
+import { pageMetadata } from "../site-metadata";
+
+export const metadata = pageMetadata({
+  path: "/terms/",
   title: "Terms of Service",
   description: "Terms governing the Ninai website, account, authenticated installer, local AI memory software, and optional hosted service.",
-  alternates: { canonical: "/terms/" },
-  openGraph: {
-    title: "Ninai Terms of Service",
-    description: "Terms for the Ninai account, installer, local software, and optional hosted service.",
-    url: "/terms/",
-    images: [{ url: "/assets/og-image.png", width: 1200, height: 630, alt: "Ninai" }],
-  },
-};
+});
 
 export default function TermsPage() {
   return (

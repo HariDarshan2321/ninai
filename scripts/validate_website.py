@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 import re
 import json
 from urllib.parse import unquote, urlsplit
+from xml.etree import ElementTree
 
 
 class PageParser(HTMLParser):
@@ -12,6 +13,13 @@ class PageParser(HTMLParser):
         super().__init__()
         self.ids: set[str] = set()
         self.targets: list[str] = []
+        self.metadata: dict[str, list[str]] = {}
+        self.structured_data: list[str] = []
+        self.title = ""
+        self.h1_count = 0
+        self._in_head = False
+        self._in_title = False
+        self._in_json_ld = False
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
@@ -22,31 +30,59 @@ class PageParser(HTMLParser):
             target = attributes.get(attribute)
             if target:
                 self.targets.append(target)
+        if tag == "head":
+            self._in_head = True
+        if tag == "title" and self._in_head:
+            self._in_title = True
+        if tag == "script" and attributes.get("type") == "application/ld+json":
+            self._in_json_ld = True
+        if tag == "h1":
+            self.h1_count += 1
+        if not self._in_head:
+            return
+        if tag == "meta":
+            name = attributes.get("name") or attributes.get("property")
+            content = attributes.get("content")
+            if name and content:
+                self.metadata.setdefault(name, []).append(content)
+        if tag == "link" and attributes.get("rel") == "canonical":
+            canonical = attributes.get("href")
+            if canonical:
+                self.metadata.setdefault("canonical", []).append(canonical)
+        if tag == "link" and attributes.get("rel") == "icon" and attributes.get("type") == "image/png":
+            self.metadata.setdefault("favicon", []).append(attributes.get("href") or "")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "head":
+            self._in_head = False
+        if tag == "title":
+            self._in_title = False
+        if tag == "script":
+            self._in_json_ld = False
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            self.title += data
+        if self._in_json_ld:
+            self.structured_data.append(data)
 
 website = Path(__file__).resolve().parents[1] / "website"
 root = website / "out"
+site_url = "https://ninai.io"
+indexable_paths = ("/", "/install/", "/local/", "/governance/", "/compatibility/", "/privacy/", "/terms/", "/support/")
+nonindex_paths = ("/start/", "/research/")
+pages = {path: root / path.lstrip("/") / "index.html" for path in (*indexable_paths, *nonindex_paths)}
 required = [
-    "index.html", "install/index.html", "local/index.html", "compatibility/index.html",
-    "research/index.html", "privacy/index.html", "terms/index.html", "start/index.html",
     "404.html", "robots.txt", "sitemap.xml", "site.webmanifest", "llms.txt",
-    ".well-known/security.txt", "assets/og-image.png", "assets/ninai-wordmark.svg", "CNAME",
+    ".well-known/security.txt", "assets/og-image.png", "assets/ninai-icon.png", "assets/ninai-wordmark.svg", "CNAME",
 ]
-for item in required:
-    if not (root / item).exists():
-        raise SystemExit(f"Missing exported file: {item}. Run `npm run build` in website/.")
+for item in [*pages.values(), *(root / file for file in required)]:
+    if not item.is_file():
+        raise SystemExit(f"Missing exported file: {item.relative_to(root)}. Run `npm run build` in website/.")
 
 titles: set[str] = set()
 descriptions: set[str] = set()
-indexable_pages = [
-    root / "index.html",
-    root / "install/index.html",
-    root / "local/index.html",
-    root / "privacy/index.html",
-    root / "terms/index.html",
-    root / "start/index.html",
-]
-nonindex_pages = [root / "compatibility/index.html", root / "research/index.html"]
-public_pages = [*indexable_pages, *nonindex_pages, root / "404.html"]
+public_pages = [*pages.values(), root / "404.html"]
 parsed_pages: dict[Path, PageParser] = {}
 for html in public_pages:
     parser = PageParser()
@@ -83,27 +119,17 @@ for source, parser in list(parsed_pages.items()):
             if target_parser is None or parsed.fragment not in target_parser.ids:
                 raise SystemExit(f"{source}: missing anchor target: {target}")
 
-for html in indexable_pages:
-    text = html.read_text(encoding="utf-8")
-    for marker in (
-        "<title>",
-        'name="description"',
-        'rel="canonical"',
-        'property="og:title"',
-        'property="og:description"',
-        'property="og:image"',
-    ):
-        if marker not in text:
-            raise SystemExit(f"{html}: missing {marker}")
-    if len(re.findall(r"<h1(?:\s|>)", text)) != 1:
+for path, html in pages.items():
+    parser = parsed_pages[html]
+    title = parser.title
+    if parser.h1_count != 1:
         raise SystemExit(f"{html}: expected exactly one H1")
-
-    title_match = re.search(r"<title>(.*?)</title>", text)
-    description_match = re.search(r'<meta name="description" content="(.*?)"', text)
-    if title_match is None or description_match is None:
-        raise SystemExit(f"{html}: metadata could not be parsed")
-    title = title_match.group(1)
-    description = description_match.group(1)
+    if not title.endswith(" - Ninai") or any(separator in title for separator in ("—", "–", " -- ")):
+        raise SystemExit(f"{html}: expected a page title ending in ' - Ninai'")
+    descriptions_in_head = parser.metadata.get("description", [])
+    if len(descriptions_in_head) != 1:
+        raise SystemExit(f"{html}: expected exactly one page description")
+    description = descriptions_in_head[0]
     if title in titles:
         raise SystemExit(f"{html}: duplicate title: {title}")
     if description in descriptions:
@@ -111,15 +137,63 @@ for html in indexable_pages:
     titles.add(title)
     descriptions.add(description)
 
-not_found = (root / "404.html").read_text(encoding="utf-8")
-if 'name="robots" content="noindex"' not in not_found:
-    raise SystemExit("404.html: expected noindex")
-if len(re.findall(r"<h1(?:\s|>)", not_found)) != 1:
-    raise SystemExit("404.html: expected exactly one H1")
-for html in nonindex_pages:
-    text = html.read_text(encoding="utf-8")
-    if 'name="robots" content="noindex, follow"' not in text:
+    canonical = site_url + path
+    social_image = f"{site_url}/assets/og-image.png"
+    expected_metadata = {
+        "canonical": canonical,
+        "favicon": "/assets/ninai-icon.png",
+        "og:url": canonical,
+        "og:type": "website",
+        "og:site_name": "Ninai",
+        "og:title": title,
+        "og:description": description,
+        "og:image": social_image,
+        "twitter:card": "summary_large_image",
+        "twitter:title": title,
+        "twitter:description": description,
+        "twitter:image": social_image,
+    }
+    for name, value in expected_metadata.items():
+        if parser.metadata.get(name) != [value]:
+            raise SystemExit(f"{html}: expected one {name} with value {value!r}")
+    robots = parser.metadata.get("robots", [])
+    if path in nonindex_paths and robots != ["noindex, follow"]:
         raise SystemExit(f"{html}: expected noindex, follow")
+    if path in indexable_paths and any(
+        "noindex" in directive for directive in [*robots, *parser.metadata.get("googlebot", [])]
+    ):
+        raise SystemExit(f"{html}: indexable page contains noindex")
+    if path != "/":
+        for payload in parser.structured_data:
+            data = json.loads(payload)
+            if any(item.get("@type") == "WebSite" for item in data.get("@graph", [data])):
+                raise SystemExit(f"{html}: WebSite structured data belongs on the homepage")
+
+not_found = parsed_pages[root / "404.html"]
+if "noindex" not in not_found.metadata.get("robots", []):
+    raise SystemExit("404.html: expected noindex")
+if not_found.h1_count != 1:
+    raise SystemExit("404.html: expected exactly one H1")
+
+sitemap = ElementTree.parse(root / "sitemap.xml")
+sitemap_urls = [(node.text or "").strip() for node in sitemap.findall("{*}url/{*}loc")]
+if sorted(sitemap_urls) != sorted(site_url + path for path in indexable_paths):
+    raise SystemExit("sitemap.xml: URLs must list each indexable canonical page exactly once")
+robots_lines = (root / "robots.txt").read_text(encoding="utf-8").splitlines()
+if f"Sitemap: {site_url}/sitemap.xml" not in robots_lines:
+    raise SystemExit("robots.txt: missing the canonical sitemap URL")
+
+homepage = parsed_pages[pages["/"]]
+if len(homepage.structured_data) != 1:
+    raise SystemExit("index.html: expected one structured data graph")
+graph = json.loads(homepage.structured_data[0])["@graph"]
+entities = {item["@type"]: item for item in graph}
+if set(entities) != {"Organization", "WebSite"} or len(graph) != len(entities):
+    raise SystemExit("index.html: expected organization and website structured data")
+if any(entity.get("name") != "Ninai" or entity.get("url") != f"{site_url}/" for entity in entities.values()):
+    raise SystemExit("index.html: structured data does not match the canonical Ninai homepage")
+if [entities["WebSite"].get("description")] != homepage.metadata["description"]:
+    raise SystemExit("index.html: website and page descriptions must match")
 
 public_install = (root / "install/index.html").read_text(encoding="utf-8")
 for private_setup_marker in (
@@ -130,7 +204,7 @@ for private_setup_marker in (
 ):
     if private_setup_marker in public_install:
         raise SystemExit(f"Public install page exposes account-gated setup: {private_setup_marker}")
-for gated_copy in ("official installer", "I already have an account", "screen_hint=signup"):
+for gated_copy in ("official installer", "Create account for Mac setup", "Sign in for Mac setup", "screen_hint=signup"):
     if gated_copy not in public_install:
         raise SystemExit(f"Public install page is missing account gate copy: {gated_copy}")
 for current_release_copy in ("Follow a real setup walkthrough", "With local setup, your memory stays on your computer"):

@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = {
+import { pageMetadata } from "../site-metadata";
+
+export const metadata = pageMetadata({
+  path: "/privacy/",
   title: "Privacy Policy",
   description: "How Ninai handles account data, local and hosted memory, connected AI providers, deletion, and security.",
-  alternates: { canonical: "/privacy/" },
-  openGraph: { title: "Ninai Privacy Policy", description: "Local, hosted memory, and account boundaries, stated plainly.", url: "/privacy/", images: [{ url: "/assets/og-image.png", width: 1200, height: 630, alt: "Ninai privacy" }] },
-};
+});
 
 export default function PrivacyPage() {
   return <main id="main-content">

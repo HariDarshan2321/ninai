@@ -223,6 +223,7 @@ pre,
 }
 
 .mobile-nav__panel .mobile-nav__install {
+  display: none;
   margin-top: 4px;
   color: var(--paper);
   background: var(--ink-soft);
@@ -292,10 +293,10 @@ a:focus-visible {
 .status-pill--ready { color: var(--ink-soft); background: var(--acid); }
 .lifecycle-section { padding-block: clamp(72px, 10vw, 140px); color: var(--paper); background: var(--ink-soft); }
 .lifecycle-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line-light); }
-.lifecycle-grid article { min-height: 260px; padding: 30px; background: var(--ink-soft); }
-.lifecycle-grid article > span { color: var(--acid); font-family: monospace; }
-.lifecycle-grid h3 { margin: 54px 0 10px; font-size: 1.55rem; }
+.lifecycle-grid article { padding: 30px; color: var(--paper); background: var(--ink-soft); }
+.lifecycle-grid h3 { margin: 0 0 10px; font-size: 1.55rem; }
 .lifecycle-grid p { color: var(--mint); }
+.lifecycle-grid a { color: var(--acid); }
 .lifecycle-section .truth-note { margin-left: 0; color: var(--mint); }
 .beta-trust { display: grid; grid-template-columns: 1fr 1fr; gap: 8vw; padding-block: clamp(56px, 7vw, 96px); }
 .beta-trust > div:last-child { align-self: end; font-size: 1.1rem; }
@@ -2167,6 +2168,14 @@ a:focus-visible {
   padding-block: 50px;
 }
 
+.support-topics article {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.support-topics #security {
+  scroll-margin-top: 90px;
+}
+
 .privacy-index {
   color: var(--blue);
   font-family: "SFMono-Regular", Consolas, monospace;
@@ -2608,14 +2617,12 @@ a:focus-visible {
 @media (max-width: 900px) {
   .site-header__inner {
     grid-template-columns: 130px 1fr auto;
+    gap: 22px;
   }
 
   .main-nav {
     justify-content: flex-end;
-  }
-
-  .main-nav a:nth-child(-n + 2) {
-    display: none;
+    gap: clamp(12px, 2.2vw, 24px);
   }
 
   .section-intro--split,
@@ -3037,6 +3044,10 @@ a:focus-visible {
 
   .site-header__inner > .button {
     display: none;
+  }
+
+  .mobile-nav__panel .mobile-nav__install {
+    display: block;
   }
 }
 

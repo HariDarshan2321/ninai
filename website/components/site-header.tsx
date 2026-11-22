@@ -3,11 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 
 import { Brand } from "./brand";
 
+const primaryLinks = [
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/local/", label: "Why local" },
+  { href: "/governance/", label: "Governance" },
+  { href: "/support/", label: "Help" },
+] as const;
+
 export function SiteHeader() {
   const mobileMenu = useRef<HTMLDetailsElement>(null);
+  const mobileMenuButton = useRef<HTMLElement>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
   const currentSection = pathname.replace(/\/$/, "");
@@ -27,31 +36,51 @@ export function SiteHeader() {
     }
   }
 
+  function handleMobileMenuKeyDown(event: KeyboardEvent<HTMLDetailsElement>) {
+    if (event.key === "Escape" && mobileMenu.current?.open) {
+      event.preventDefault();
+      closeMobileMenu();
+      mobileMenuButton.current?.focus({ preventScroll: true });
+    }
+  }
+
   return (
     <header className="site-header">
       <div className="site-header__inner shell">
         <Brand />
         <nav className="main-nav" aria-label="Primary navigation">
-          <Link href="/#how-it-works">How it works</Link>
-          <Link href="/local/" aria-current={currentSection === "/local" ? "page" : undefined}>Why local</Link>
+          {primaryLinks.map(({ href, label }) => (
+            <Link key={href} href={href} aria-current={currentSection === href.replace(/\/$/, "") ? "page" : undefined}>
+              {label}
+            </Link>
+          ))}
         </nav>
         <Link className="button button--compact button--ink" href="/install/">
-          Get started
+          Get Ninai
           <span aria-hidden="true">↗</span>
         </Link>
         <details
           className="mobile-nav"
           ref={mobileMenu}
+          onKeyDown={handleMobileMenuKeyDown}
           onToggle={(event) => setMobileMenuOpen(event.currentTarget.open)}
         >
-          <summary aria-label={`${mobileMenuOpen ? "Close" : "Open"} navigation menu`}>
+          <summary ref={mobileMenuButton} aria-label={`${mobileMenuOpen ? "Close" : "Open"} navigation menu`}>
             Menu
           </summary>
           <nav className="mobile-nav__panel" aria-label="Mobile navigation">
-            <Link href="/#how-it-works" onClick={closeMobileMenu}>How it works</Link>
-            <Link href="/local/" aria-current={currentSection === "/local" ? "page" : undefined} onClick={closeMobileMenu}>Why local</Link>
+            {primaryLinks.map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                aria-current={currentSection === href.replace(/\/$/, "") ? "page" : undefined}
+                onClick={closeMobileMenu}
+              >
+                {label}
+              </Link>
+            ))}
             <Link className="mobile-nav__install" href="/install/" onClick={closeMobileMenu}>
-              Get Ninai ↗
+              Get Ninai <span aria-hidden="true">↗</span>
             </Link>
           </nav>
         </details>

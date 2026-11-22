@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    { "source": "/help", "destination": "/support/", "permanent": true },
+    { "source": "/help/", "destination": "/support/", "permanent": true },
+    { "source": "/security", "destination": "/support/#security", "permanent": true },
+    { "source": "/security/", "destination": "/support/#security", "permanent": true }
+  ]
+}
