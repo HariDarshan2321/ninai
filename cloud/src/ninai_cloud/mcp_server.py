@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import math
 import re
+from contextlib import ExitStack
 from dataclasses import asdict
 from typing import Any, Protocol
 
@@ -261,7 +262,8 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
                write_calls_per_minute: int = DEFAULT_WRITE_CALLS_PER_MINUTE,
                max_request_body_bytes: int = MAX_REQUEST_BODY_BYTES,
                control_service: ControlService | None = None,
-               control_oauth_settings: HostedAuthSettings | None = None) -> FastMCP:
+               control_oauth_settings: HostedAuthSettings | None = None,
+               team_store: Any = None) -> FastMCP:
     """Build the authenticated, stateless hosted MCP application."""
     mcp = FastMCP(
         "Ninai Hosted",
@@ -474,6 +476,8 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
         def check_database() -> None:
             with connect() as db:
                 db.execute("SELECT 1").fetchone()
+            if team_store is not None:
+                team_store.check_ready()
 
         try:
             await run_in_threadpool(check_database)
@@ -520,6 +524,14 @@ def create_mcp(store: PostgresStore, *, token_verifier: TokenVerifier,
     @mcp.custom_route("/api/control/{path:path}", methods=["GET", "POST"])
     async def control_api(request: Request):
         return await control.handle(request)
+    if team_store is not None:
+        from .team_api import TeamApp
+
+        team = TeamApp(team_store, control_token_verifier, control_oauth_settings)
+        mcp.custom_route("/control/team", methods=["GET"])(team.page)
+        mcp.custom_route("/api/team/{path:path}", methods=["GET", "POST"])(team.handle)
+        mcp.custom_route("/api/team-assistant/{path:path}", methods=["POST"])(team.handle)
+
     return mcp
 
 
@@ -542,7 +554,7 @@ def main() -> None:
         max_size=pool_max_size,
         kwargs={"row_factory": dict_row},
         timeout=5,
-    ) as pool:
+    ) as pool, ExitStack() as previews:
         pool.wait(timeout=10)
         store = PostgresStore(database_url, connect=pool.connection)
         if mode == "pat":
@@ -577,19 +589,43 @@ def main() -> None:
                 # capability in Postgres; new clients start with no grants.
                 required_scopes=[],
             )
+        team_store = None
+        team_database_url = os.environ.get("NINAI_TEAM_DATABASE_URL", "").strip()
+        if team_database_url:
+            from .team_runtime import verify_team_runtime
+            from .team_store import TeamStore
+
+            if settings is None or team_database_url == database_url:
+                raise SystemExit("Team preview requires dashboard OAuth and a separate database login")
+            team_pool = previews.enter_context(ConnectionPool(
+                conninfo=team_database_url, min_size=1, max_size=pool_max_size,
+                kwargs={"row_factory": dict_row}, timeout=5,
+            ))
+            team_pool.wait(timeout=10)
+            verify_team_runtime(team_pool.connection, pool.connection)
+            team_store = TeamStore(team_pool.connection)
+
         control_service = ControlService(
             store._connection, self_hosted=mode == "pat",
             public_mcp_url=str(sdk_auth.resource_server_url),
             oauth_issuer=settings.issuer if settings is not None else None,
         )
-        create_mcp(store, token_verifier=verifier, control_token_verifier=control_verifier,
-                   auth=sdk_auth, control_service=control_service,
-                   control_oauth_settings=settings,
-                   host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")),
-                   read_calls_per_minute=int(os.environ.get("NINAI_READ_CALLS_PER_MINUTE", DEFAULT_READ_CALLS_PER_MINUTE)),
-                   write_calls_per_minute=int(os.environ.get("NINAI_WRITE_CALLS_PER_MINUTE", DEFAULT_WRITE_CALLS_PER_MINUTE)),
-                   max_request_body_bytes=int(os.environ.get("NINAI_MAX_REQUEST_BODY_BYTES", MAX_REQUEST_BODY_BYTES))).run(
-                       transport="streamable-http")
+        host, port = os.environ.get("HOST", "127.0.0.1"), int(os.environ.get("PORT", "8000"))
+        server = create_mcp(
+            store, token_verifier=verifier, control_token_verifier=control_verifier,
+            auth=sdk_auth, control_service=control_service,
+            control_oauth_settings=settings, team_store=team_store, host=host, port=port,
+            read_calls_per_minute=int(os.environ.get("NINAI_READ_CALLS_PER_MINUTE", DEFAULT_READ_CALLS_PER_MINUTE)),
+            write_calls_per_minute=int(os.environ.get("NINAI_WRITE_CALLS_PER_MINUTE", DEFAULT_WRITE_CALLS_PER_MINUTE)),
+            max_request_body_bytes=int(os.environ.get("NINAI_MAX_REQUEST_BODY_BYTES", MAX_REQUEST_BODY_BYTES)),
+        )
+        if team_store is not None:
+            import uvicorn
+
+            # Team URLs contain restricted workspace and project identifiers.
+            uvicorn.run(server.streamable_http_app(), host=host, port=port, access_log=False)
+        else:
+            server.run(transport="streamable-http")
 
 
 __all__ = ["HostedMCPTools", "PrincipalResolver", "RateLimitError", "RequestBodyLimitMiddleware",

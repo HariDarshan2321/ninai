@@ -572,6 +572,8 @@ class ControlService:
     def delete_workspace(self, identity: ControlIdentity, confirmation: str) -> bool:
         with self._connect() as db:
             workspace = self._member(db, identity, admin=True)
+            # Serialize soft deletion with opt-in team context finalization.
+            db.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (str(workspace["id"]),))
             PostgresStore._lock_workspace(db, identity.workspace_id)
             if workspace["role"] != "owner":
                 raise AuthorizationError("Workspace owner role required")

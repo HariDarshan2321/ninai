@@ -5,7 +5,10 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY migrations ./migrations
-RUN pip install --no-cache-dir .
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m pip install --no-cache-dir . \
+    && python -m pip check \
+    && python -m pip uninstall --yes pip
 
 RUN groupadd --system --gid 10001 ninai \
     && useradd --system --uid 10001 --gid ninai --home-dir /nonexistent --shell /usr/sbin/nologin ninai

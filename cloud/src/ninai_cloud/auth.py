@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, ContextManager, Mapping
 
 from mcp.server.auth.provider import AccessToken, TokenVerifier
+from starlette.concurrency import run_in_threadpool
 
 from .postgres_store import AuthorizationError, Principal
 
@@ -362,6 +363,9 @@ class OAuthControlTokenVerifier(TokenVerifier):
         self.identities = identities
 
     async def verify_token(self, token: str) -> AccessToken | None:
+        return await run_in_threadpool(self._verify, token)
+
+    def _verify(self, token: str) -> AccessToken | None:
         try:
             claims = self.validator.validate(token)
         except AuthenticationError:

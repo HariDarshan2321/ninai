@@ -217,5 +217,42 @@ class HostedMCPToolsTest(unittest.TestCase):
         self.assertEqual(response.json()["status"], "ready")
         self.assertEqual(response.headers["cache-control"], "no-store")
 
+    def test_readiness_checks_team_pool_when_preview_is_enabled(self) -> None:
+        from starlette.testclient import TestClient
+        from ninai_cloud.auth import AuthSettings
+        from ninai_cloud.mcp_server import create_mcp
+        from ninai_cloud.team_store import TeamStore
+
+        class Verifier:
+            async def verify_token(self, token): return None
+
+        available = True
+        legacy = ReadyStore()
+
+        @contextmanager
+        def team_connection():
+            if not available:
+                raise RuntimeError("private team database details")
+            with legacy._connection() as db:
+                yield db
+
+        issuer = "https://auth.example.test"
+        resource = "https://api.example.test/mcp"
+        verifier = Verifier()
+        server = create_mcp(
+            legacy, token_verifier=verifier, control_token_verifier=verifier,
+            auth=MCPAuthSettings(issuer_url=issuer, resource_server_url=resource, required_scopes=[]),
+            control_oauth_settings=AuthSettings(issuer, "test", resource, issuer + "/keys",
+                                                control_client_id="dashboard"),
+            principal_resolver=lambda: Principal("user", "workspace", "client"),
+            team_store=TeamStore(team_connection),
+        )
+        with TestClient(server.streamable_http_app()) as client:
+            self.assertEqual(client.get("/ready").status_code, 200)
+            available = False
+            response = client.get("/ready")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"status": "unavailable", "service": "ninai-cloud-mcp"})
+
 
 if __name__ == "__main__": unittest.main()
