@@ -16,6 +16,7 @@ ninai-cloud-bootstrap = "ninai_cloud.bootstrap:main"
 ninai-cloud-storage = "ninai_cloud.storage_admin:main"
 ninai-cloud-reviewer-seed = "ninai_cloud.reviewer_seed:main"
 ninai-team-mcp = "ninai_cloud.team_client:main"
+ninai-team-session-start = "ninai_cloud.team_session:main"
 
 [project.optional-dependencies]
 test = []

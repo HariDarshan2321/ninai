@@ -10,11 +10,11 @@ GRANT SELECT (user_id, issuer, subject) ON oauth_identities TO :"team_runtime_ro
 GRANT SELECT, INSERT ON team_workspaces, team_members, team_projects, team_project_members, team_groups,
     team_group_members, team_group_projects, team_invitations, team_bindings, team_binding_actions,
     team_decisions, team_decision_versions, team_decision_reviewers, team_decision_sources,
-    team_source_pins, team_decision_events, team_supersessions, team_audit_events, team_audit_items
+    team_source_pins, team_decision_events, team_supersessions, team_audit_events, team_audit_items, team_handoffs
     TO :"team_runtime_role";
 
 GRANT UPDATE (authorization_epoch) ON team_workspaces TO :"team_runtime_role";
-GRANT UPDATE (archived_at) ON team_projects TO :"team_runtime_role";
+GRANT UPDATE (archived_at, repository) ON team_projects TO :"team_runtime_role";
 GRANT UPDATE (role, revoked_at) ON team_members, team_project_members TO :"team_runtime_role";
 GRANT UPDATE (revoked_at) ON team_group_members, team_group_projects,
     team_binding_actions, team_decision_reviewers TO :"team_runtime_role";

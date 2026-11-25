@@ -62,6 +62,7 @@ class HostedStoreUnitTest(unittest.TestCase):
             "0007_installer_downloads.sql",
             "0008_account_login_activity.sql",
             "0009_team_core.sql",
+            "0010_team_repository_handoffs.sql",
         ])
         sql = files[0].read_text(encoding="utf-8")
         for table in (

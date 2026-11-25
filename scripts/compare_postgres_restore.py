@@ -34,7 +34,7 @@ TEAM_TABLES = (
     "team_group_members", "team_group_projects", "team_invitations", "team_bindings",
     "team_binding_actions", "team_decisions", "team_decision_versions", "team_decision_reviewers",
     "team_decision_sources", "team_source_pins", "team_decision_events", "team_supersessions",
-    "team_audit_events", "team_audit_items",
+    "team_audit_events", "team_audit_items", "team_handoffs",
 )
 TABLES = LEGACY_TABLES + TEAM_TABLES
 TEAM_SCOPE_PREDICATE = "(workspace_id=(SELECTpublic.team_current_workspace()ASteam_current_workspace))"

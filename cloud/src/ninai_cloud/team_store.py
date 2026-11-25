@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import time
 import hashlib
+import json
 import re
 import secrets
 from typing import Any, Callable, ContextManager, Iterator
@@ -14,14 +15,15 @@ from uuid import UUID, uuid4
 from .postgres_store import AuthorizationError
 from .rate_limit import RateLimitError
 from .team_packet import DEFAULT_PACKET_TOKENS
+from .team_repo import repository_key
 from .team_sources import parse_source_reference
 
 ROLES = {"admin", "member"}
-ACTIONS = {"read", "propose", "view-history"}
+ACTIONS = {"read", "propose", "view-history", "read-handoffs", "publish-handoff"}
 ADMIN = {"owner", "admin"}
 DENIED = "Team access is unavailable"
 HOURLY_CREATE_LIMITS = {"invite": 20, "create-group": 10, "create-project": 10,
-                        "issue-binding": 20, "propose": 60}
+                        "issue-binding": 20, "propose": 60, "publish-handoff": 20}
 MAX_INSPECTION_ITEMS = 256
 MAX_AUDIT_ITEMS = 100
 
@@ -118,8 +120,8 @@ class TeamStore:
     @staticmethod
     def _projects(db, workspace, user, *, project=None, include_unassigned=False):
         return db.execute("""
-            SELECT id,name,access,maintainer FROM (
-                SELECT p.id,p.name,COALESCE(pm.role='maintainer', false) AS maintainer,
+            SELECT id,name,repository,access,maintainer FROM (
+                SELECT p.id,p.name,p.repository,COALESCE(pm.role='maintainer', false) AS maintainer,
                     pm.user_id IS NOT NULL OR EXISTS (
                         SELECT 1 FROM team_group_projects gp
                         JOIN team_groups g ON (g.workspace_id,g.id)=(gp.workspace_id,gp.group_id)
@@ -139,6 +141,13 @@ class TeamStore:
 
     def _project(self, db, workspace, project, user):
         return require_row(self._projects(db, workspace, user, project=project).fetchone())
+
+    @staticmethod
+    def _require_repository(db, workspace, project, repository):
+        require_row(db.execute(
+            "SELECT 1 FROM team_projects WHERE workspace_id=%s AND id=%s AND repository=%s",
+            (workspace, project, repository),
+        ).fetchone())
 
     @staticmethod
     def _advance(db, workspace):
@@ -456,7 +465,7 @@ class TeamStore:
         """, (workspace, audit, project, decision, version, Jsonb(states)))
 
     def propose(self, workspace, project, credential, *, topic, rule, rationale=None, visibility="team",
-                paths=None, terms=None, links=None, expires_hours=None, decision=None):
+                paths=None, terms=None, links=None, expires_hours=None, decision=None, repository=None):
         from .postgres_store import _contains_secret
 
         topic = bounded_text(topic, 80, "topic")
@@ -491,6 +500,8 @@ class TeamStore:
 
         with self._tenant(workspace, lock=True) as db:
             actor = self._authorize(db, workspace, project, credential, "propose")
+            if repository is not None:
+                self._require_repository(db, workspace, project, repository_key(repository))
             self._check_create_quota(db, workspace, actor, "propose")
             if decision is None:
                 decision = str(uuid4())
@@ -763,11 +774,13 @@ class TeamStore:
             scope_terms=tuple(row["scope_terms"]), expires_at=row["expires_at"], replaces_version_id=parent_key,
         )
 
-    def _context_snapshot(self, db, workspace, project, credential, context, history_only):
+    def _context_snapshot(self, db, workspace, project, credential, context, history_only, repository):
         from .team_packet import matches_task
 
         action = "view-history" if history_only else "read"
         actor = self._authorize(db, workspace, project, credential, action)
+        if repository is not None:
+            self._require_repository(db, workspace, project, repository)
         epoch = self._workspace(db, workspace)["authorization_epoch"]
         can_view_history = isinstance(credential, TeamHuman) or history_only
         if not can_view_history:
@@ -791,7 +804,7 @@ class TeamStore:
         return actor, epoch, can_view_history, rows, self._sources(db, workspace, project, rows)
 
     def context(self, workspace, project, credential, *, task, paths=None, max_items=6, max_tokens=DEFAULT_PACKET_TOKENS,
-                history_only=False):
+                history_only=False, repository=None, project_overview=False):
         from .team_packet import MAX_PACKET_ITEMS, MAX_PACKET_TOKENS, SourceEvidence, TaskContext, compose_task_packet
         from .team_sources import proof_status
 
@@ -805,14 +818,17 @@ class TeamStore:
         ):
             raise ValueError("Invalid context budget")
         request_id = str(uuid4())
-        context = TaskContext(task, paths)
+        repository = repository_key(repository) if repository is not None else None
+        if type(project_overview) is not bool or project_overview and (repository is None or history_only):
+            raise ValueError("A project overview requires a connected repository and current guidance.")
+        context = TaskContext(task, paths, project_overview)
         try:
             with self._tenant(workspace) as db:
-                snapshot = self._context_snapshot(db, workspace, project, credential, context, history_only)
+                snapshot = self._context_snapshot(db, workspace, project, credential, context, history_only, repository)
             actor, epoch, can_view_history, rows, sources = snapshot
             proofs = self._proofs(workspace, project, actor, epoch, sources, request_id)
             with self._tenant(workspace, lock=True) as db:
-                if self._context_snapshot(db, workspace, project, credential, context, history_only) != snapshot:
+                if self._context_snapshot(db, workspace, project, credential, context, history_only, repository) != snapshot:
                     raise AuthorizationError(DENIED)
                 now = self._clock(db)
                 proof_now = datetime.now(timezone.utc)
@@ -900,17 +916,102 @@ class TeamStore:
                 """, (workspace,)).fetchall()
             return result
 
-    def create_project(self, workspace, human, *, name):
+    def create_project(self, workspace, human, *, name, repository=None):
         name = bounded_text(name, 100, "project name")
+        repository = repository_key(repository) if repository is not None else None
         project = str(uuid4())
         with self._tenant(workspace, lock=True) as db:
             actor = self._human(db, workspace, human, admin=True)
             self._check_create_quota(db, workspace, actor, "create-project")
             db.execute("""
-                INSERT INTO team_projects(id,workspace_id,name,slug) VALUES(%s,%s,%s,%s)
-            """, (project, workspace, name, f"team-{project}"))
+                INSERT INTO team_projects(id,workspace_id,name,slug,repository) VALUES(%s,%s,%s,%s,%s)
+            """, (project, workspace, name, f"team-{project}", repository))
             self._audit(db, workspace, actor, "create-project", project=project)
         return {"project_id": project}
+
+    def connect_repository(self, workspace, human, *, project, repository):
+        repository = repository_key(repository)
+        with self._tenant(workspace, lock=True) as db:
+            actor = self._human(db, workspace, human, admin=True)
+            row = require_row(db.execute("""
+                SELECT repository FROM team_projects WHERE workspace_id=%s AND id=%s AND archived_at IS NULL
+            """, (workspace, project)).fetchone())
+            if row["repository"] is None:
+                db.execute("UPDATE team_projects SET repository=%s WHERE workspace_id=%s AND id=%s",
+                           (repository, workspace, project))
+                self._audit(db, workspace, actor, "connect-repository", project=project)
+            elif row["repository"] != repository:
+                raise AuthorizationError(DENIED)
+        return {"updated": True}
+
+    def publish_handoff(self, workspace, project, credential, *, repository, request_key,
+                        topic, status, summary, next_step=None):
+        from .postgres_store import _contains_secret
+
+        repository = repository_key(repository)
+        request_key = identifier(request_key)
+        topic = bounded_text(topic, 80, "handoff topic")
+        summary = bounded_text(summary, 400, "handoff summary")
+        next_step = bounded_text(next_step, 240, "next step") if next_step is not None else None
+        if status not in ("working", "blocked", "done") or any(
+            _contains_secret(text) for text in (topic, summary, next_step or "")
+        ):
+            raise ValueError("Invalid handoff")
+        with self._tenant(workspace, lock=True) as db:
+            actor = self._authorize(db, workspace, project, credential, "publish-handoff")
+            self._require_repository(db, workspace, project, repository)
+            existing = db.execute("""
+                SELECT id,topic,status,summary,next_step FROM team_handoffs
+                WHERE workspace_id=%s AND project_id=%s AND author_user_id=%s AND request_key=%s
+            """, (workspace, project, actor.user_id, request_key)).fetchone()
+            if existing:
+                if (existing["topic"], existing["status"], existing["summary"], existing["next_step"]) != (
+                    topic, status, summary, next_step
+                ):
+                    raise ValueError("Handoff request key already used with different content")
+                return {"id": str(existing["id"])}
+            self._check_create_quota(db, workspace, actor, "publish-handoff")
+            handoff = str(uuid4())
+            db.execute("""
+                INSERT INTO team_handoffs(workspace_id,project_id,id,author_user_id,request_key,topic,status,
+                                          summary,next_step) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (workspace, project, handoff, actor.user_id, request_key, topic, status, summary, next_step))
+            self._audit(db, workspace, actor, "publish-handoff", project=project, reason=handoff)
+        return {"id": handoff}
+
+    def handoffs(self, workspace, project, credential, *, repository):
+        repository = repository_key(repository)
+        request_id = str(uuid4())
+        with self._tenant(workspace, lock=True) as db:
+            actor = self._authorize(db, workspace, project, credential, "read-handoffs")
+            self._require_repository(db, workspace, project, repository)
+            rows = db.execute("""
+                SELECT latest.*,u.display_name FROM (
+                    SELECT DISTINCT ON (author_user_id,lower(topic))
+                        id,author_user_id,topic,status,summary,next_step,recorded_at
+                    FROM team_handoffs WHERE workspace_id=%s AND project_id=%s
+                        AND recorded_at>statement_timestamp()-interval '14 days'
+                    ORDER BY author_user_id,lower(topic),recorded_at DESC,id DESC
+                ) latest LEFT JOIN users u ON u.id=latest.author_user_id AND u.deleted_at IS NULL
+                ORDER BY recorded_at DESC,id DESC LIMIT 8
+            """, (workspace, project)).fetchall()
+            items = []
+            for row in rows:
+                handoff = str(row["id"])
+                item = {"id": handoff, "author": (row["display_name"] or "Team member")[:80],
+                        "topic": row["topic"], "status": row["status"], "summary": row["summary"],
+                        "next_step": row["next_step"], "recorded_at": row["recorded_at"].isoformat(),
+                        "source_uri": f"ninai://team/{workspace}/projects/{project}/handoffs/{handoff}"}
+                candidate = json.dumps({"items": [*items, item]}, ensure_ascii=True).encode("utf-8")
+                if len(candidate) > 2048:
+                    break
+                items.append(item)
+                self._audit(db, workspace, actor, "read-handoffs", project=project, outcome="released",
+                            request_id=request_id, reason=handoff)
+            if not items:
+                self._audit(db, workspace, actor, "read-handoffs", project=project, outcome="empty",
+                            request_id=request_id)
+        return {"items": items}
 
     def archive_project(self, workspace, human, *, project):
         with self._tenant(workspace, lock=True) as db:

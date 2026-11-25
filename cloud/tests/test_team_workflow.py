@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
+import json
+import subprocess
+import tempfile
 from threading import Event
 import time
 import unittest
@@ -126,6 +130,107 @@ class TeamWorkflowTests(unittest.TestCase):
 
     def _recall(self, credential):
         return self.store.context(self.workspace, self.project, credential, **TASK)
+
+    def test_two_repository_checkouts_share_cloud_handoffs_and_approved_guidance(self):
+        import httpx
+        from mcp.shared.memory import create_connected_server_and_client_session
+        from starlette.applications import Starlette
+        from starlette.routing import Route
+
+        from ninai_cloud.auth import AuthSettings
+        from ninai_cloud.team_api import TeamApp
+        from ninai_cloud.team_client import TeamClient, create_stdio_bridge
+        from ninai_cloud.team_session import session_start
+
+        self._member()
+        repository = "synthetic/payments"
+        self.store.connect_repository(self.workspace, self.owner, project=self.project, repository=repository)
+        with self.assertRaises(AuthorizationError):
+            self.store.connect_repository(self.workspace, self.owner, project=self.project, repository="other/repo")
+        with self.assertRaises(AuthorizationError):
+            self.store.connect_repository(self.workspace, self.member, project=self.project, repository=repository)
+        self.assertEqual(self.store.overview(self.workspace, self.member)["projects"][0]["repository"], repository)
+
+        alice = self._binding(self.owner, "claude", ["read", "propose", "read-handoffs", "publish-handoff"])
+        bob = self._binding(self.member, "codex", ["read", "read-handoffs"])
+        legacy = self._binding(self.member, "legacy-read", ["read"])
+        origin = "https://ninai.example.invalid"
+        settings = AuthSettings(ISSUER, "test", origin, ISSUER + ".well-known/jwks.json", control_client_id="dashboard")
+        app = TeamApp(self.store, None, settings)
+        transport = httpx.ASGITransport(Starlette(routes=[
+            Route("/api/team-assistant/{tail:path}", app.handle, methods=["POST"]),
+        ]))
+
+        def client(binding, repo=repository):
+            return TeamClient(origin, self.workspace, self.project, binding["token"],
+                              repository=repo, transport=transport)
+
+        async def exercise(alice_path, bob_path, unrelated_path):
+            payload = {"request_key": str(uuid4()), "topic": "Refund rollout", "status": "working",
+                       "summary": "Checked the retry path.", "next_step": "Confirm the queue owner."}
+            async with create_connected_server_and_client_session(create_stdio_bridge(client(alice))) as session:
+                published = await session.call_tool("team_publish_handoff", payload)
+                self.assertFalse(published.isError, published)
+                handoff_id = json.loads(published.content[0].text)["id"]
+                retry = await session.call_tool("team_publish_handoff", payload)
+                self.assertEqual(json.loads(retry.content[0].text)["id"], handoff_id)
+                changed = await session.call_tool("team_publish_handoff", {**payload, "status": "done"})
+                self.assertTrue(changed.isError)
+                proposal = await session.call_tool("team_propose_decision", {
+                    "topic": "refund idempotency", "rule": "Persist refund idempotency keys before calls.",
+                    "paths": ["billing:src"], "links": [SOURCE_LINK],
+                })
+                self.assertFalse(proposal.isError, proposal)
+                proposed = json.loads(proposal.content[0].text)
+
+            def event(cwd):
+                return {"hook_event_name": "SessionStart", "cwd": str(cwd)}
+
+            async def brief(binding, cwd):
+                result = await session_start(event(cwd), client(binding))
+                message = result["hookSpecificOutput"]["additionalContext"]
+                return json.loads(message.split("\n", 1)[1])
+
+            self.assertIsNone(await session_start(event(unrelated_path), client(bob)))
+            first = await brief(bob, bob_path)
+            self.assertEqual(first["decisions"], {"outcome": "empty"})
+            self.assertEqual(first["handoffs"]["items"][0]["next_step"], "Confirm the queue owner.")
+            self.assertTrue(first["handoffs"]["items"][0]["source_uri"].endswith(handoff_id))
+            self.assertTrue((await client(legacy).handoffs()).isError)
+            self.assertTrue((await client(bob, "other/repo").handoffs()).isError)
+            self.assertTrue((await client(bob).publish_handoff(**payload)).isError)
+
+            self._review(proposed)
+            current = await brief(bob, bob_path)
+            self.assertEqual(current["decisions"]["current"][0]["scope_paths"], ["billing:src"])
+            self.assertEqual(current["decisions"]["current"][0]["sources"][0]["uri"], SOURCE_LINK)
+            self.assertEqual((await brief(alice, alice_path))["handoffs"], first["handoffs"])
+            self.verifier.denied.add(self.member.user_id)
+            denied_source = await brief(bob, bob_path)
+            self.assertEqual(denied_source["decisions"], {"outcome": "empty"})
+            self.assertEqual(denied_source["handoffs"], first["handoffs"])
+
+            latest = await client(alice).publish_handoff(**{**payload, "request_key": str(uuid4()), "status": "done"})
+            self.assertFalse(latest.isError)
+            self.assertEqual([row["status"] for row in (await brief(bob, bob_path))["handoffs"]["items"]], ["done"])
+            self.store.update_binding(self.workspace, self.member, project=self.project,
+                                      binding=bob["binding_id"], operation="revoke")
+            self.assertEqual(await brief(bob, bob_path), {
+                "handoffs": {"status": "unavailable"}, "decisions": {"status": "unavailable"},
+            })
+
+        with tempfile.TemporaryDirectory() as directory:
+            checkouts = []
+            for name, remote in (
+                ("alice", "https://github.com/Synthetic/Payments.git"),
+                ("bob", "git@github.com:synthetic/payments.git"),
+                ("unrelated", "https://github.com/other/repo"),
+            ):
+                checkout = Path(directory) / name
+                subprocess.run(["git", "init", "-q", checkout], check=True)
+                subprocess.run(["git", "-C", checkout, "remote", "add", "origin", remote], check=True)
+                checkouts.append(checkout)
+            asyncio.run(exercise(*checkouts))
 
     def test_create_quota_serializes_and_shares_sponsor_budget_across_bindings(self):
         self._member()

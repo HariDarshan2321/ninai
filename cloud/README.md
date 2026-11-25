@@ -162,3 +162,10 @@ next request even if its token has not expired. Serve
 responsible for authorization-server discovery, login, consent, and tokens.
 
 See [Auth0 deployment adaptation](../docs/AUTH0.md) for DCR and tenant setup.
+
+## Team repository handoff preview
+
+Use a disposable staging environment. Apply the cloud migrations, provision the
+separate Team runtime role, and reapply [the Team grants](team_runtime_grants.sql)
+after migration 0010. See the [Team setup guide](../docs/TEAM-REPOSITORY-HANDOFF.md)
+to connect two assistants to the same project.

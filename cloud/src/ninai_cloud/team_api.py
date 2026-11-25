@@ -21,19 +21,21 @@ from .team_store import DENIED, TeamHuman, digest, identifier
 
 WORKSPACE_ACTIONS = {
     "enable": "enable", "invite": "invite", "accept": "accept_invite",
+    "connect-repository": "connect_repository",
     "member": "change_member", "project-member": "assign_project", "group": "create_group",
     "group-edge": "group_edge", "project": "create_project", "archive-project": "archive_project", "audit": "audit",
 }
 PROJECT_ACTIONS = {
     "binding": "issue_binding", "propose": "propose", "approve": "review", "reviewer": "assign_reviewer",
     "context": "context", "proposals": "proposals", "export": "export_project",
+    "handoffs": "handoffs", "publish-handoff": "publish_handoff",
     "audit-export": "export_project_audit",
     "rotate-binding": "update_binding", "revoke-binding": "update_binding",
     "retire": "suppress", "revoke": "suppress",
 }
 IDENTIFIERS = {"project", "user", "group", "decision", "replaces", "binding"}
-READ_ACTIONS = {"identity", "overview", "audit", "context", "proposals", "export", "audit-export"}
-ACCESS_ACTIONS = {"member", "project-member", "group-edge", "archive-project", "reviewer", "rotate-binding",
+READ_ACTIONS = {"identity", "overview", "audit", "context", "proposals", "export", "audit-export", "handoffs"}
+ACCESS_ACTIONS = {"connect-repository", "member", "project-member", "group-edge", "archive-project", "reviewer", "rotate-binding",
                   "revoke-binding", "retire", "revoke"}
 PROOF_ACTIONS = {"context", "approve", "proposals", "export", "audit-export"}
 HEADERS = ControlApp._security_headers()
@@ -156,7 +158,7 @@ class TeamApp:
 
         if is_assistant:
             actor = self._bearer(request.headers.get("authorization"))
-            limiter = self._assistant_reads if action == "context" else self._assistant_writes
+            limiter = self._assistant_reads if action in {"context", "handoffs"} else self._assistant_writes
             limiter.check_key(digest(actor))
         else:
             actor = await self._human(request)
@@ -182,7 +184,7 @@ class TeamApp:
             args = (identifier(workspace), actor)
         elif len(parts) == 4 and parts[1] == "projects" and request.method == "POST":
             workspace, _, project, action = parts
-            if is_assistant and action not in {"context", "propose"} or action not in PROJECT_ACTIONS:
+            if is_assistant and action not in {"context", "propose", "handoffs", "publish-handoff"} or action not in PROJECT_ACTIONS:
                 return json_response({"error": "Route unavailable"}, 404)
             operation = getattr(self.store, PROJECT_ACTIONS[action])
             args = (identifier(workspace), identifier(project), actor)

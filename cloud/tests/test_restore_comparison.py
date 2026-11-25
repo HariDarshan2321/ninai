@@ -111,7 +111,7 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
                 initial = compare()
                 self.assertEqual(initial["status"], "ok")
                 for table, count in (("team_projects", 1), ("team_decision_versions", 2), ("team_supersessions", 1),
-                                     ("team_source_pins", 2), ("team_bindings", 1)):
+                                     ("team_source_pins", 2), ("team_bindings", 1), ("team_handoffs", 1)):
                     self.assertEqual(initial["restore"]["tables"][table]["rows"], count)
                 self.assert_filtered_snapshot_is_rejected(psycopg, source_url)
                 run("pg_restore", "--dbname", origin + "/synthetic_runtime", "--exit-on-error", "--no-owner", "--no-acl", base / "synthetic.dump")
@@ -181,10 +181,13 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
             db.execute("INSERT INTO team_workspaces(workspace_id) VALUES(%s)", (workspace,))
             db.execute("""INSERT INTO team_members(workspace_id,user_id,role,revoked_at)
                 VALUES(%s,%s,'owner',NULL),(%s,%s,'member',now())""", (workspace, owner, workspace, member))
-            db.execute("""INSERT INTO team_projects(workspace_id,id,name,slug)
-                VALUES(%s,%s,'Team restore test','team-restore-test')""", (workspace, project))
+            db.execute("""INSERT INTO team_projects(workspace_id,id,name,slug,repository)
+                VALUES(%s,%s,'Team restore test','team-restore-test','restore/demo')""", (workspace, project))
             db.execute("""INSERT INTO team_project_members(workspace_id,project_id,user_id,role)
                 VALUES(%s,%s,%s,'maintainer')""", (workspace, project, owner))
+            db.execute("""INSERT INTO team_handoffs(workspace_id,project_id,id,author_user_id,request_key,
+                topic,status,summary) VALUES(%s,%s,%s,%s,%s,'Recovery','working','Check the restored queue.')""",
+                (workspace, project, uuid4(), owner, uuid4()))
             db.execute("""INSERT INTO team_bindings(workspace_id,project_id,id,sponsor_user_id,kind,
                 client_registration,token_hash,expires_at,revoked_at)
                 VALUES(%s,%s,%s,%s,'human','synthetic-codex',%s,now()+interval '1 hour',now())""",
@@ -260,6 +263,8 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
         self.assertEqual(packet.payload["current"][0]["version"], 2)
         self.assertEqual(packet.payload["current"][0]["sources"][0]["uri"], TEAM_SOURCE)
         self.assertTrue(packet.payload["lineage"][0]["replaces"].endswith("@1"))
+        self.assertEqual(store.handoffs(workspace, project, owner, repository="restore/demo")["items"][0]["summary"],
+                         "Check the restored queue.")
         with self.assertRaises(AuthorizationError):
             store.context(workspace, project, REVOKED_TEAM_TOKEN, task="restore drill")
 
@@ -268,6 +273,7 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
         for operation in (
             lambda: store.context(workspace, project, owner, task="restore drill"),
             lambda: store.export_project(workspace, project, owner),
+            lambda: store.handoffs(workspace, project, owner, repository="restore/demo"),
             lambda: store.issue_binding(workspace, owner, project=project, client="claude", actions=["read"]),
         ):
             with self.assertRaises(AuthorizationError):

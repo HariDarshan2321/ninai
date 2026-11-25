@@ -83,7 +83,16 @@ TEAM_HTML = r"""<!doctype html>
           </div><button>Apply workspace role</button></form>
         </details>
         <details><summary>Create a project or assign project access</summary>
-          <form id="project" class="row"><label class="field">Project name<input name="name" required maxlength="100"></label><button>Create project</button></form>
+          <form id="project" class="row">
+            <label class="field">Project name<input name="name" required maxlength="100"></label>
+            <label class="field">GitHub repository (optional)<input name="repository" placeholder="owner/repo" maxlength="240" autocomplete="off" spellcheck="false"></label>
+            <button>Create project</button>
+          </form>
+          <form id="project-repository" class="row group">
+            <label class="field">Project to connect<select name="project" data-projects-without-repo required></select></label>
+            <label class="field">GitHub repository<input name="repository" required placeholder="owner/repo" maxlength="240" autocomplete="off" spellcheck="false"></label>
+            <button>Connect existing project</button>
+          </form>
           <form id="project-member" class="group"><div class="fields">
             <label class="field">Project<select name="project" data-all-projects required></select></label>
             <label class="field">Member<select name="user" data-members required></select></label>
@@ -111,6 +120,9 @@ TEAM_HTML = r"""<!doctype html>
         <h2 id="project-title">Project</h2>
         <label class="field">Project with decision access<select id="active-project"></select></label>
         <p class="group muted" id="project-role"></p>
+        <p id="project-repo" class="muted wrap"></p>
+        <form id="project-handoffs" class="group" hidden><button class="secondary">Load recent handoffs</button></form>
+        <div id="handoff-results" class="group"></div>
       </section>
 
       <section class="card" id="decisions" aria-labelledby="decisions-title" data-project hidden>
@@ -157,6 +169,8 @@ TEAM_HTML = r"""<!doctype html>
           <label class="choice"><input name="actions" type="checkbox" value="read"> Read context</label>
           <label class="choice"><input name="actions" type="checkbox" value="propose"> Propose decisions</label>
           <label class="choice"><input name="actions" type="checkbox" value="view-history"> View history</label>
+          <label class="choice"><input name="actions" type="checkbox" value="read-handoffs"> Read team handoffs</label>
+          <label class="choice"><input name="actions" type="checkbox" value="publish-handoff"> Publish team handoffs</label>
         </div></fieldset><button>Issue credential</button></form>
         <details id="binding-controls"><summary>Rotate or revoke a binding</summary>
           <form id="manage-binding"><div class="fields">
@@ -285,7 +299,7 @@ function selectProject(project) {
   if (state.project !== project) {
     state.generation += 1;
     clearCredential();
-    for (const id of ['proposal-results', 'context-results']) select(id).replaceChildren();
+    for (const id of ['proposal-results', 'context-results', 'handoff-results']) select(id).replaceChildren();
     for (const id of ['propose', 'version-action', 'reviewer', 'binding', 'manage-binding', 'context-form']) select(id).reset();
   }
   state.project = project;
@@ -295,6 +309,8 @@ function selectProject(project) {
   select('project-export').hidden = !selection || !['owner', 'admin'].includes(state.overview?.role);
   select('project-audit-export').hidden = select('project-export').hidden;
   select('project-role').textContent = selection ? (elevated ? 'Decision review available.' : 'Project member access.') : 'Choose a project to continue.';
+  select('project-repo').textContent = selection?.repository ? `Repository ${selection.repository} · Project ID ${project}` : '';
+  select('project-handoffs').hidden = !selection?.repository;
 }
 
 function displayOverview(overview) {
@@ -309,6 +325,9 @@ function displayOverview(overview) {
   select('project-panel').hidden = !role;
   for (const node of document.querySelectorAll('[data-members]')) setOptions(node, members(overview), 'Choose a member');
   for (const node of document.querySelectorAll('[data-all-projects]')) setOptions(node, projects(overview), 'Choose a project');
+  const unconnected = (overview?.projects || []).filter(row => !row.repository)
+    .map(row => ({value: row.id, label: row.name}));
+  setOptions(document.querySelector('[data-projects-without-repo]'), unconnected, 'Choose a project');
   for (const node of document.querySelectorAll('[data-groups]')) {
     setOptions(node, (overview?.groups || []).map(row => ({value: row.id, label: row.name})), 'Choose a group');
   }
@@ -532,7 +551,8 @@ bind('member', async (data) => {
 });
 workspaceAction('project-member', 'project-member', unchanged, updated);
 workspaceAction('group', 'group', unchanged, updated);
-workspaceAction('project', 'project', unchanged, updated);
+workspaceAction('project', 'project', values => ({name: values.name, repository: values.repository.trim() || null}), updated);
+workspaceAction('project-repository', 'connect-repository', unchanged, updated);
 bind('archive-project', async (data) => {
   const workspace = workspaceId();
   if (state.workspace !== workspace || !state.overview) throw Error('Open the workspace first.');
@@ -542,6 +562,26 @@ bind('archive-project', async (data) => {
 });
 workspaceAction('group-edge', 'group-edge', values => ({...values, active: values.active === 'true'}), updated);
 workspaceAction('audit-form', 'audit', empty, showAudit);
+
+projectAction('project-handoffs', 'handoffs', () => ({
+  repository: state.overview.projects.find(row => row.id === state.project)?.repository
+}), result => {
+  const target = select('handoff-results');
+  target.replaceChildren();
+  if (!result.items.length) {
+    append(target, 'p', 'No recent team handoffs.', 'muted');
+    return;
+  }
+  const list = append(target, 'ul', null, 'list');
+  for (const row of result.items) {
+    const item = append(list, 'li', null, 'item');
+    append(item, 'h3', row.topic);
+    append(item, 'p', `${row.status} · ${row.author} · ${new Date(row.recorded_at).toLocaleString()}`, 'muted');
+    append(item, 'p', row.summary);
+    if (row.next_step) append(item, 'p', row.next_step);
+    append(item, 'code', row.id);
+  }
+});
 
 projectAction('binding', 'binding', (values, data) => ({client: values.client, kind: values.kind, actions: data.getAll('actions')}), (result, button) => {
   select('manage-binding').elements.binding.value = result.binding_id;

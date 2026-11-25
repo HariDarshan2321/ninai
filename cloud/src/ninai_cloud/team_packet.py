@@ -60,6 +60,7 @@ class DecisionVersion:
 class TaskContext:
     task: str
     repo_paths: tuple[str, ...] = ()
+    project_overview: bool = False
 
 
 @dataclass(frozen=True)
@@ -122,7 +123,7 @@ def _selectors(context: TaskContext) -> tuple[str, tuple[tuple[str, tuple[str, .
 
 def matches_task(context: TaskContext, version: DecisionVersion) -> bool:
     """Screen task selectors before obtaining per-source evidence."""
-    return _relevance(version, *_selectors(context)) is not None
+    return context.project_overview or _relevance(version, *_selectors(context)) is not None
 
 
 def _is_verified(source: SourceEvidence) -> bool:
@@ -143,9 +144,9 @@ def _evidence_state(version: DecisionVersion) -> str:
     return "hidden"
 
 
-def _decision(version: DecisionVersion) -> dict[str, Any]:
+def _decision(version: DecisionVersion, *, include_scope: bool) -> dict[str, Any]:
     rationale = version.rationale if version.rationale and version.rationale.strip() else None
-    return {
+    result = {
         "version_id": version.version_id,
         "decision_id": version.decision_id,
         "version": version.version,
@@ -158,6 +159,9 @@ def _decision(version: DecisionVersion) -> dict[str, Any]:
             if _is_verified(source)
         ],
     }
+    if include_scope:
+        result.update(topic=version.topic, scope_paths=list(version.scope_paths), scope_terms=list(version.scope_terms))
+    return result
 
 
 def _json(value: dict[str, Any]) -> bytes:
@@ -172,13 +176,14 @@ def _packet(
     category: str | None = None,
     versions: Iterable[DecisionVersion] = (),
     lineage: dict[str, str] | None = None,
+    include_scope: bool = False,
 ) -> TaskPacket:
     selected = tuple(versions)
     payload: dict[str, Any] = {"outcome": outcome}
     if signals:
         payload["signals"] = list(signals)
     if category is not None and selected:
-        payload[category] = [_decision(version) for version in selected]
+        payload[category] = [_decision(version, include_scope=include_scope) for version in selected]
     if lineage:
         payload["lineage"] = [{"current": current, "replaces": replaces} for current, replaces in lineage.items()]
 
@@ -202,12 +207,14 @@ def _fit_versions(
     lineage: dict[str, str],
     max_items: int,
     max_tokens: int,
+    include_scope: bool = False,
 ) -> TaskPacket:
     included: list[DecisionVersion] = []
     for version in ranked:
         if len(included) == max_items:
             break
-        attempt = _packet(outcome, signals, max_tokens, category=category, versions=(*included, version))
+        attempt = _packet(outcome, signals, max_tokens, category=category, versions=(*included, version),
+                          include_scope=include_scope)
         if attempt.serialized is not None:
             included.append(version)
     if not included:
@@ -221,10 +228,11 @@ def _fit_versions(
         if predecessor is None or len(included) + len(edges) == max_items:
             continue
         attempt = _packet(outcome, signals, max_tokens, category=category, versions=included,
-                          lineage={**edges, version.version_id: predecessor})
+                          lineage={**edges, version.version_id: predecessor}, include_scope=include_scope)
         if attempt.serialized is not None:
             edges[version.version_id] = predecessor
-    return _packet(outcome, signals, max_tokens, category=category, versions=included, lineage=edges)
+    return _packet(outcome, signals, max_tokens, category=category, versions=included, lineage=edges,
+                   include_scope=include_scope)
 
 
 def compose_task_packet(
@@ -253,7 +261,7 @@ def compose_task_packet(
     unverified_topics: set[str] = set()
     relevance: dict[str, tuple[int, int, int]] = {}
     for version in versions:
-        rank = _relevance(version, *selectors)
+        rank = (0, 0, 0) if context.project_overview else _relevance(version, *selectors)
         if rank is None:
             continue
         expires_at = version.expires_at
@@ -299,7 +307,7 @@ def compose_task_packet(
         signals = ("resolve-before-edit",)
         if len(conflicting) <= max_items:
             packet = _packet("conflict", signals, max_tokens, category="conflicting",
-                             versions=sorted(conflicting, key=sort_key))
+                             versions=sorted(conflicting, key=sort_key), include_scope=context.project_overview)
             if packet.serialized is not None:
                 return packet
         # An unresolved conflict stays a conflict. Never elevate a contender
@@ -318,7 +326,7 @@ def compose_task_packet(
         }
         signals = ("evidence-unverified",) if unverified_topics else ()
         return _fit_versions(ranked, outcome="packet", category="current", signals=signals, lineage=lineage,
-                             max_items=max_items, max_tokens=max_tokens)
+                             max_items=max_items, max_tokens=max_tokens, include_scope=context.project_overview)
 
     if unverified_topics:
         return _packet("abstain", ("evidence-unverified",), max_tokens)

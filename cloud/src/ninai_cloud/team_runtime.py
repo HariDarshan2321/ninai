@@ -7,7 +7,7 @@ TEAM_TABLES = frozenset({
     "team_group_members", "team_group_projects", "team_invitations", "team_bindings",
     "team_binding_actions", "team_decisions", "team_decision_versions", "team_decision_reviewers",
     "team_decision_sources", "team_source_pins", "team_decision_events", "team_supersessions",
-    "team_audit_events", "team_audit_items",
+    "team_audit_events", "team_audit_items", "team_handoffs",
 })
 LEGACY_READ_COLUMNS = {
     "users": {"id", "deleted_at", "display_name"},
@@ -17,7 +17,7 @@ LEGACY_READ_COLUMNS = {
 }
 TEAM_UPDATE_COLUMNS = {
     "team_workspaces": {"authorization_epoch"},
-    "team_projects": {"archived_at"},
+    "team_projects": {"archived_at", "repository"},
     "team_members": {"role", "revoked_at"},
     "team_project_members": {"role", "revoked_at"},
     "team_group_members": {"revoked_at"},
