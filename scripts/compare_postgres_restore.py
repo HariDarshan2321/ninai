@@ -21,7 +21,7 @@ from urllib.parse import urlsplit, unquote
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "cloud" / "src"))
 from ninai_cloud.migrations import migration_files
 
-TABLES = (
+LEGACY_TABLES = (
     "schema_migrations", "users", "workspaces", "workspace_members", "projects",
     "client_connections", "client_scope_grants", "memories", "memory_sources",
     "memory_relations", "disclosure_logs", "memory_feedback", "idempotency_keys",
@@ -29,6 +29,15 @@ TABLES = (
     "workspace_capture_settings", "sessions", "session_artifacts",
     "session_disclosure_logs", "installer_downloads",
 )
+TEAM_TABLES = (
+    "team_workspaces", "team_members", "team_projects", "team_project_members", "team_groups",
+    "team_group_members", "team_group_projects", "team_invitations", "team_bindings",
+    "team_binding_actions", "team_decisions", "team_decision_versions", "team_decision_reviewers",
+    "team_decision_sources", "team_source_pins", "team_decision_events", "team_supersessions",
+    "team_audit_events", "team_audit_items", "team_handoffs",
+)
+TABLES = LEGACY_TABLES + TEAM_TABLES
+TEAM_SCOPE_PREDICATE = "(workspace_id=(SELECTpublic.team_current_workspace()ASteam_current_workspace))"
 
 # All checks return violation counts, never identifying rows or stored text.
 INVARIANTS = {
@@ -45,6 +54,27 @@ INVARIANTS = {
     "pat_owner_invalid": "SELECT count(*) FROM public.personal_access_tokens t WHERE NOT EXISTS (SELECT 1 FROM public.client_connections c WHERE c.workspace_id=t.workspace_id AND c.id=t.client_connection_id AND c.user_id=t.user_id)",
     "blank_session_provenance": "SELECT count(*) FROM public.sessions WHERE btrim(source_uri)=''",
     "blank_artifact_provenance": "SELECT count(*) FROM public.session_artifacts WHERE btrim(source_uri)=''",
+    "team_active_owner_missing": """SELECT count(*) FROM public.team_workspaces t
+        JOIN public.workspaces w ON w.id=t.workspace_id
+        WHERE t.quarantined_at IS NULL AND w.deleted_at IS NULL AND NOT EXISTS (
+            SELECT 1 FROM public.team_members m JOIN public.users u ON u.id=m.user_id
+            WHERE m.workspace_id=t.workspace_id AND m.role='owner' AND m.revoked_at IS NULL AND u.deleted_at IS NULL)""",
+    "team_missing_version_history": """SELECT count(*) FROM public.team_decision_versions v WHERE NOT EXISTS (
+            SELECT 1 FROM public.team_decision_events e WHERE
+            (e.workspace_id,e.project_id,e.decision_id,e.version)=(v.workspace_id,v.project_id,v.decision_id,v.version)
+            AND e.state='proposed')""",
+    "team_replacement_without_approval": """SELECT count(*) FROM public.team_supersessions s WHERE NOT EXISTS (
+            SELECT 1 FROM public.team_decision_events e WHERE
+            (e.workspace_id,e.project_id,e.decision_id,e.version)=(s.workspace_id,s.project_id,s.decision_id,s.version)
+            AND e.state='approved') OR NOT EXISTS (
+            SELECT 1 FROM public.team_decision_events e WHERE
+            (e.workspace_id,e.project_id,e.decision_id,e.version)=(s.workspace_id,s.project_id,s.replaces_decision_id,s.replaces_version)
+            AND e.state='replaced')""",
+    "team_replaced_version_without_edge": """SELECT count(*) FROM public.team_decision_events e
+        WHERE e.state='replaced' AND NOT EXISTS (
+            SELECT 1 FROM public.team_supersessions s WHERE
+            (s.workspace_id,s.project_id,s.replaces_decision_id,s.replaces_version)=
+            (e.workspace_id,e.project_id,e.decision_id,e.version))""",
 }
 
 
@@ -87,9 +117,32 @@ def begin_snapshot(db, timeout_seconds: int) -> tuple:
     db.execute("SELECT set_config('statement_timeout',%s,true)", (str(timeout_seconds * 1000),))
     db.execute("SELECT set_config('lock_timeout','3000',true)")
     db.execute("SELECT set_config('idle_in_transaction_session_timeout','60000',true)")
+    # PostgreSQL errors if rows would be filtered for this role. This setting
+    # does not grant permission to read them. A restore operator needs an
+    # independently provisioned identity with complete snapshot access.
+    db.execute("SELECT set_config('row_security','off',true)")
     if db.execute("SHOW transaction_read_only").fetchone()[0] != "on":
         raise ValueError("read-only snapshot not established")
     return db.execute("SELECT current_database(), inet_server_addr()::text, inet_server_port()").fetchone()
+
+
+def check_row_security(db) -> None:
+    relations = db.execute("""SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,row_security_active(c.oid)
+        FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND (c.relrowsecurity OR c.relforcerowsecurity)""").fetchall()
+    if {name for name, _, _, _ in relations} != set(TEAM_TABLES):
+        raise ValueError("unexpected row-level security inventory")
+    if any(not enabled or not forced or filtered for _, enabled, forced, filtered in relations):
+        raise ValueError("team row-level security requires forced policies and a complete snapshot role")
+
+    policies = db.execute("""SELECT tablename,policyname,permissive,roles::text,cmd,qual,with_check
+        FROM pg_catalog.pg_policies WHERE schemaname='public'""").fetchall()
+    if len(policies) != len(TEAM_TABLES) or {policy[0] for policy in policies} != set(TEAM_TABLES):
+        raise ValueError("unexpected team row-level policy inventory")
+    for _, name, kind, roles, command, using, check in policies:
+        if ((name, kind, roles, command) != ("team_workspace_scope", "PERMISSIVE", "{public}", "ALL")
+                or any("".join((clause or "").split()) != TEAM_SCOPE_PREDICATE for clause in (using, check))):
+            raise ValueError("unexpected team workspace policy")
 
 
 def inspect(db, salt: str, deadline: float) -> dict:
@@ -106,15 +159,14 @@ def inspect(db, salt: str, deadline: float) -> dict:
     # Fail before querying unreviewed tables (potential views/functions are excluded).
     if missing or unknown:
         return {"missing_tables": missing, "unknown_tables": unknown, "valid": False}
-    if db.execute("SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relrowsecurity").fetchone()[0]:
-        raise ValueError("row-level security prevents proof of a complete inventory")
-    # Include column definitions/defaults, constraints, indexes and RLS flags.
+    check_row_security(db)
+    # Include row security and decision invariants implemented by functions and triggers.
     # Digest catalog text inside the server, avoiding output of any default values.
     schema_digest = db.execute("""
         SELECT encode(sha256(convert_to(%s || jsonb_build_object(
           'columns', (SELECT jsonb_agg(to_jsonb(x) ORDER BY x.table_name,x.ordinal_position)
                       FROM (SELECT table_name,ordinal_position,column_name,data_type,udt_name,
-                                   is_nullable,column_default FROM information_schema.columns
+                                   is_nullable,column_default,identity_generation FROM information_schema.columns
                             WHERE table_schema='public') x),
           'constraints', (SELECT jsonb_agg(to_jsonb(x) ORDER BY x.table_name,x.name)
                           FROM (SELECT c.relname AS table_name,k.conname AS name,
@@ -125,7 +177,18 @@ def inspect(db, salt: str, deadline: float) -> dict:
                                 WHERE n.nspname='public') x),
           'indexes', (SELECT jsonb_agg(to_jsonb(x) ORDER BY x.tablename,x.indexname)
                       FROM (SELECT tablename,indexname,indexdef FROM pg_catalog.pg_indexes
-                            WHERE schemaname='public') x)
+                            WHERE schemaname='public') x),
+          'functions', (SELECT jsonb_agg(pg_get_functiondef(p.oid) ORDER BY p.proname,pg_get_function_identity_arguments(p.oid))
+                        FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+                        WHERE n.nspname='public' AND p.proname IN ('team_current_workspace',
+                              'team_reject_record_updates','team_check_version_write',
+                              'team_check_supersession','team_check_committed_supersession')),
+          'triggers', (SELECT jsonb_agg(to_jsonb(x) ORDER BY x.table_name,x.name)
+                       FROM (SELECT c.relname AS table_name,t.tgname AS name,
+                                    pg_get_triggerdef(t.oid) AS definition,t.tgenabled
+                             FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid
+                             JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+                             WHERE n.nspname='public' AND NOT t.tgisinternal) x)
         )::text, 'UTF8')), 'hex')
     """, (salt,)).fetchone()[0]
     expected = sorted(path.stem for path in migration_files())
@@ -152,6 +215,13 @@ def inspect(db, salt: str, deadline: float) -> dict:
     for name, query in INVARIANTS.items():
         bounded()
         violations[name] = db.execute(query).fetchone()[0]
+    for table in ("team_decision_versions", "team_decision_events"):
+        bounded()
+        latest = db.execute(f'SELECT max(sequence) FROM public."{table}"').fetchone()[0]
+        last_value = db.execute("""SELECT last_value FROM pg_catalog.pg_sequences
+            WHERE schemaname='public' AND sequencename=%s""", (f"{table}_sequence_seq",)).fetchone()
+        violations[f"{table}_sequence_behind"] = int(latest is not None and
+            (last_value is None or last_value[0] is None or last_value[0] < latest))
     return {
         "valid": applied == expected and not any(violations.values()),
         "expected_migrations": expected, "applied_migrations": applied,

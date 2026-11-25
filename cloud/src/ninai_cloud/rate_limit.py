@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import threading
 import time
-from collections import defaultdict, deque
-from typing import Any, Callable
+from collections import OrderedDict, deque
+from typing import Any, Callable, Hashable
 
 from .postgres_store import Principal
 
@@ -18,29 +18,43 @@ MAX_REQUEST_BODY_BYTES = 64 * 1024
 class RateLimitError(Exception):
     """The authenticated client exhausted an application-level request quota."""
 
+    def __init__(self, message: str, *, retry_after: int = 60):
+        super().__init__(message)
+        self.retry_after = retry_after
+
 
 class SlidingWindowRateLimiter:
-    """Process-local sliding-window limiter keyed by workspace and client."""
+    """Process-local sliding-window limiter for a principal or an opaque key."""
 
     def __init__(self, maximum: int, window_seconds: float = 60,
-                 clock: Callable[[], float] = time.monotonic) -> None:
-        if maximum < 1 or window_seconds <= 0:
+                 clock: Callable[[], float] = time.monotonic, *, maximum_keys: int | None = None) -> None:
+        if maximum < 1 or window_seconds <= 0 or (maximum_keys is not None and maximum_keys < 1):
             raise ValueError("Rate limit and window must be positive")
         self.maximum, self.window_seconds, self.clock = maximum, window_seconds, clock
-        self._events: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+        self.maximum_keys = maximum_keys
+        self._events: OrderedDict[Hashable, deque[float]] = OrderedDict()
         self._lock = threading.Lock()
 
     def check(self, principal: Principal) -> None:
-        key = (principal.workspace_id, principal.client_connection_id)
-        now = self.clock()
-        cutoff = now - self.window_seconds
+        self.check_key((principal.workspace_id, principal.client_connection_id))
+
+    def check_key(self, key: Hashable) -> None:
         with self._lock:
-            events = self._events[key]
+            now = self.clock()
+            cutoff = now - self.window_seconds
+            while self._events and next(iter(self._events.values()))[-1] <= cutoff:
+                self._events.popitem(last=False)
+            events = self._events.get(key)
+            if events is None:
+                if self.maximum_keys is not None and len(self._events) >= self.maximum_keys:
+                    raise RateLimitError("Request rate limit exceeded; retry later")
+                events = self._events[key] = deque()
             while events and events[0] <= cutoff:
                 events.popleft()
             if len(events) >= self.maximum:
                 raise RateLimitError("Request rate limit exceeded; retry later")
             events.append(now)
+            self._events.move_to_end(key)
 
 
 class RequestBodyLimitMiddleware:

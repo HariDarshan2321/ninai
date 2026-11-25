@@ -162,3 +162,23 @@ next request even if its token has not expired. Serve
 responsible for authorization-server discovery, login, consent, and tokens.
 
 See [Auth0 deployment adaptation](../docs/AUTH0.md) for DCR and tenant setup.
+
+## Team repository handoff preview
+
+Rehearse in a disposable environment before a hosted rollout. Apply the cloud
+migrations and provision a separate PostgreSQL login. Apply
+[the Team grants](team_runtime_grants.sql) as the migration operator after the
+current migrations. Set `NINAI_TEAM_DATABASE_URL` in the host's secret store with
+that login's connection string. Startup checks the login, database, grants and
+row-level isolation. Removing the variable and redeploying disables Team routes.
+
+Set `NINAI_TEAM_BOOTSTRAP_USER_IDS` to the comma-separated Ninai user UUIDs
+approved to create pilot teams. An empty value keeps new team creation closed.
+Existing teams and verified-email project invitations use the regular project
+access controls. Removing a bootstrap UUID closes new team creation for that
+user. Use the Team access controls to revoke existing grants.
+
+See the [Team setup guide](../docs/TEAM-REPOSITORY-HANDOFF.md) for the assistant
+connection and two-person acceptance flow. Protected source approval and recall
+require a configured per-user source verifier. The default hosted entry point
+ships with that path closed.

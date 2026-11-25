@@ -1,20 +1,27 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import importlib.util
 import json
 import os
 import socket
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("restore_comparison", ROOT / "scripts/compare_postgres_restore.py")
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+
+TEAM_ISSUER = "https://restore-identity.example.invalid/"
+TEAM_SOURCE = "https://github.com/restore/demo/pull/1"
+REVOKED_TEAM_TOKEN = "b" * 43  # Synthetic fixture only.
 
 
 class RestoreComparisonTests(unittest.TestCase):
@@ -91,6 +98,7 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
                 source_url, restore_url = origin + "/synthetic_source", origin + "/synthetic_restore"
                 apply_migrations(source_url)
                 self.assertTrue(fixture.run_verification(source_url, cleanup=False, run_id="restore-rehearsal")["passed"])
+                self.seed_team_snapshot(psycopg, source_url, fixture._ids("restore-rehearsal"))
                 run("pg_dump", "--dbname", source_url, "--format=custom", "--no-owner", "--no-acl", "--file", base / "synthetic.dump")
                 run("pg_restore", "--dbname", restore_url, "--exit-on-error", "--no-owner", "--no-acl", base / "synthetic.dump")
                 def compare():
@@ -100,9 +108,27 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
                         source.rollback()
                         restore.rollback()
                         return report
-                self.assertEqual(compare()["status"], "ok")
+                initial = compare()
+                self.assertEqual(initial["status"], "ok")
+                for table, count in (("team_projects", 1), ("team_decision_versions", 2), ("team_supersessions", 1),
+                                     ("team_source_pins", 2), ("team_bindings", 1), ("team_handoffs", 1)):
+                    self.assertEqual(initial["restore"]["tables"][table]["rows"], count)
+                self.assert_filtered_snapshot_is_rejected(psycopg, source_url)
                 run("pg_restore", "--dbname", origin + "/synthetic_runtime", "--exit-on-error", "--no-owner", "--no-acl", base / "synthetic.dump")
                 self.assert_restored_service_behaviour(fixture, origin + "/synthetic_runtime")
+                self.assert_restored_team_behaviour(psycopg, origin + "/synthetic_runtime", fixture._ids("restore-rehearsal"))
+                with psycopg.connect(restore_url) as restored:
+                    restored.execute("ALTER TABLE public.team_members NO FORCE ROW LEVEL SECURITY")
+                with self.assertRaises(ValueError):
+                    compare()
+                with psycopg.connect(restore_url) as restored:
+                    restored.execute("ALTER TABLE public.team_members FORCE ROW LEVEL SECURITY")
+                    restored.execute("UPDATE public.team_bindings SET revoked_at=NULL")
+                self.assertEqual(compare()["mismatched_tables"], ["team_bindings"])
+                with psycopg.connect(restore_url) as restored:
+                    restored.execute("SELECT setval('public.team_decision_events_sequence_seq',1)")
+                self.assertGreater(compare()["restore"]["invariant_violations"]["team_decision_events_sequence_behind"], 0)
+                run("pg_restore", "--dbname", restore_url, "--clean", "--exit-on-error", "--no-owner", "--no-acl", base / "synthetic.dump")
                 with psycopg.connect(restore_url) as restored:
                     MODULE.begin_snapshot(restored, 10)
                     with self.assertRaises(psycopg.errors.ReadOnlySqlTransaction):
@@ -127,6 +153,70 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
             finally:
                 run("pg_ctl", "-D", base / "data", "-m", "immediate", "-w", "stop")
 
+    def assert_filtered_snapshot_is_rejected(self, psycopg, source_url):
+        with psycopg.connect(source_url) as db:
+            db.execute("CREATE ROLE limited_restore_reader NOLOGIN NOSUPERUSER NOBYPASSRLS")
+            db.execute("GRANT USAGE ON SCHEMA public TO limited_restore_reader")
+            db.execute("GRANT SELECT ON ALL TABLES IN SCHEMA public TO limited_restore_reader")
+        with psycopg.connect(source_url, autocommit=True) as db:
+            db.execute("SET ROLE limited_restore_reader")
+            db.autocommit = False
+            MODULE.begin_snapshot(db, 10)
+            with self.assertRaisesRegex(ValueError, "complete snapshot role"):
+                MODULE.inspect(db, "ephemeral-test-salt", MODULE.time.monotonic() + 60)
+
+    @staticmethod
+    def seed_team_snapshot(psycopg, source_url, ids):
+        from ninai_cloud.team_sources import source_fingerprint
+        from ninai_cloud.team_store import digest
+
+        workspace, project, owner = (ids[key] for key in ("workspace", "shared-project", "user"))
+        member, decision, binding = uuid4(), uuid4(), uuid4()
+        with psycopg.connect(source_url) as db:
+            db.execute("SELECT set_config('ninai.team_workspace_id',%s,true)", (workspace,))
+            db.execute("INSERT INTO users(id,email,display_name) VALUES(%s,%s,'Removed member')",
+                       (member, f"{member}@example.invalid"))
+            db.execute("INSERT INTO oauth_identities(id,issuer,subject,user_id) VALUES(%s,%s,'fixture-owner',%s)",
+                       (uuid4(), TEAM_ISSUER, owner))
+            db.execute("INSERT INTO team_workspaces(workspace_id) VALUES(%s)", (workspace,))
+            db.execute("""INSERT INTO team_members(workspace_id,user_id,role,revoked_at)
+                VALUES(%s,%s,'owner',NULL),(%s,%s,'member',now())""", (workspace, owner, workspace, member))
+            db.execute("""INSERT INTO team_projects(workspace_id,id,name,slug,repository)
+                VALUES(%s,%s,'Team restore test','team-restore-test','restore/demo')""", (workspace, project))
+            db.execute("""INSERT INTO team_project_members(workspace_id,project_id,user_id,role)
+                VALUES(%s,%s,%s,'maintainer')""", (workspace, project, owner))
+            db.execute("""INSERT INTO team_handoffs(workspace_id,project_id,id,author_user_id,request_key,
+                topic,status,summary) VALUES(%s,%s,%s,%s,%s,'Recovery','working','Check the restored queue.')""",
+                (workspace, project, uuid4(), owner, uuid4()))
+            db.execute("""INSERT INTO team_bindings(workspace_id,project_id,id,sponsor_user_id,kind,
+                client_registration,token_hash,expires_at,revoked_at)
+                VALUES(%s,%s,%s,%s,'human','synthetic-codex',%s,now()+interval '1 hour',now())""",
+                (workspace, project, binding, member, digest(REVOKED_TEAM_TOKEN)))
+            db.execute("""INSERT INTO team_binding_actions(workspace_id,project_id,binding_id,action,revoked_at)
+                VALUES(%s,%s,%s,'read',now())""", (workspace, project, binding))
+            db.execute("""INSERT INTO team_decisions(workspace_id,project_id,id,created_by_user_id,visibility,topic)
+                VALUES(%s,%s,%s,%s,'team','restore-drill')""", (workspace, project, decision, owner))
+            for version in (1, 2):
+                version_key = (workspace, project, decision, version)
+                db.execute("""INSERT INTO team_decision_versions
+                    (workspace_id,project_id,decision_id,version,rule,proposed_by_user_id)
+                    VALUES(%s,%s,%s,%s,'Synthetic restore decision',%s)""", (*version_key, owner))
+                source = db.execute("""INSERT INTO team_decision_sources
+                    (workspace_id,project_id,decision_id,version,provider,resource_key,source_url)
+                    VALUES(%s,%s,%s,%s,'github','restore/demo/pull/1',%s) RETURNING id""",
+                    (*version_key, TEAM_SOURCE)).fetchone()[0]
+                state = """INSERT INTO team_decision_events(workspace_id,project_id,decision_id,version,state,actor_user_id)
+                    VALUES(%s,%s,%s,%s,%s,%s)"""
+                db.execute(state, (*version_key, "proposed", owner))
+                db.execute("""INSERT INTO team_source_pins(workspace_id,project_id,decision_id,version,source_id,fingerprint)
+                    VALUES(%s,%s,%s,%s,%s,%s)""",
+                    (*version_key, source, source_fingerprint("github", "restore/demo/pull/1", "fixture-v1")))
+                if version == 2:
+                    db.execute("""INSERT INTO team_supersessions(workspace_id,project_id,decision_id,version,
+                        replaces_decision_id,replaces_version) VALUES(%s,%s,%s,%s,%s,1)""", (*version_key, decision))
+                    db.execute(state, (workspace, project, decision, 1, "replaced", owner))
+                db.execute(state, (*version_key, "approved", owner))
+
     def assert_restored_service_behaviour(self, fixture, restored_url):
         from ninai_cloud.postgres_store import AuthorizationError, PostgresStore, Principal
 
@@ -140,6 +230,54 @@ class SyntheticDumpRestoreTests(unittest.TestCase):
         self.assertEqual([m.scope_id for m in private], [ids["private-project"]])
         with self.assertRaises(AuthorizationError):
             store.search(revoked, "shared continuity")
+
+    def assert_restored_team_behaviour(self, psycopg, restored_url, ids):
+        from psycopg.rows import dict_row
+
+        from ninai_cloud.postgres_store import AuthorizationError
+        from ninai_cloud.team_runtime import verify_team_runtime
+        from ninai_cloud.team_sources import SourceAccess, SourceProof, source_fingerprint
+        from ninai_cloud.team_store import TeamHuman, TeamStore
+
+        def operator():
+            return psycopg.connect(restored_url, row_factory=dict_row)
+
+        def runtime():
+            return psycopg.connect(restored_url, user="restore_team_runtime", row_factory=dict_row)
+
+        class SyntheticVerifier:
+            def verify(self, request):
+                fingerprint = source_fingerprint(request.reference.provider, request.reference.resource_key, "fixture-v1")
+                return SourceProof(request, datetime.now(timezone.utc), SourceAccess.GRANTED, fingerprint)
+
+        with operator() as db:
+            db.execute("CREATE ROLE restore_team_runtime LOGIN NOSUPERUSER NOBYPASSRLS")
+            grants = (ROOT / "cloud" / "team_runtime_grants.sql").read_text()
+            body = grants[grants.index("BEGIN;") + len("BEGIN;"):grants.rindex("COMMIT;")]
+            db.execute(body.replace(':"team_runtime_role"', "restore_team_runtime"))
+        verify_team_runtime(runtime, operator)
+        workspace, project = ids["workspace"], ids["shared-project"]
+        owner = TeamHuman(ids["user"], TEAM_ISSUER, "fixture-owner", int(time.time()) + 60)
+        store = TeamStore(runtime, verifier=SyntheticVerifier())
+        packet = store.context(workspace, project, owner, task="restore drill")
+        self.assertEqual(packet.payload["current"][0]["version"], 2)
+        self.assertEqual(packet.payload["current"][0]["sources"][0]["uri"], TEAM_SOURCE)
+        self.assertTrue(packet.payload["lineage"][0]["replaces"].endswith("@1"))
+        self.assertEqual(store.handoffs(workspace, project, owner, repository="restore/demo")["items"][0]["summary"],
+                         "Check the restored queue.")
+        with self.assertRaises(AuthorizationError):
+            store.context(workspace, project, REVOKED_TEAM_TOKEN, task="restore drill")
+
+        with operator() as db:
+            db.execute("UPDATE team_workspaces SET quarantined_at=clock_timestamp() WHERE workspace_id=%s", (workspace,))
+        for operation in (
+            lambda: store.context(workspace, project, owner, task="restore drill"),
+            lambda: store.export_project(workspace, project, owner),
+            lambda: store.handoffs(workspace, project, owner, repository="restore/demo"),
+            lambda: store.issue_binding(workspace, owner, project=project, client="claude", actions=["read"]),
+        ):
+            with self.assertRaises(AuthorizationError):
+                operation()
 
 
 if __name__ == "__main__":

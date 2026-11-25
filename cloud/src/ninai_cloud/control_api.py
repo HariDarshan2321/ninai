@@ -572,6 +572,8 @@ class ControlService:
     def delete_workspace(self, identity: ControlIdentity, confirmation: str) -> bool:
         with self._connect() as db:
             workspace = self._member(db, identity, admin=True)
+            # Serialize soft deletion with opt-in team context finalization.
+            db.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (str(workspace["id"]),))
             PostgresStore._lock_workspace(db, identity.workspace_id)
             if workspace["role"] != "owner":
                 raise AuthorizationError("Workspace owner role required")
@@ -688,6 +690,11 @@ class ControlApp:
                                 secure=True, samesite="lax", path="/control")
             response.set_cookie("ninai_pkce_verifier", verifier, max_age=600, httponly=True,
                                 secure=True, samesite="lax", path="/control")
+            if request.query_params.get("return") == "team":
+                response.set_cookie("ninai_oauth_return", "team", max_age=600, httponly=True,
+                                    secure=True, samesite="lax", path="/control")
+            else:
+                response.delete_cookie("ninai_oauth_return", path="/control")
             return response
         if path == "/control/logout" and request.method == "GET":
             destination = "/control"
@@ -714,6 +721,7 @@ class ControlApp:
             response = HTMLResponse(body, status_code=400, headers=self._security_headers())
             response.delete_cookie("ninai_oauth_state", path="/control")
             response.delete_cookie("ninai_pkce_verifier", path="/control")
+            response.delete_cookie("ninai_oauth_return", path="/control")
             return response
         if path == "/control" and request.method == "GET" and request.query_params.get("code"):
             return await self._oauth_callback(request)
@@ -776,6 +784,8 @@ class ControlApp:
                         display_name=name[:200] if isinstance(name, str) and name.strip() else identity.display_name)
             self.service.record_login(identity)
             destination = "/control/admin" if self.service.is_platform_admin(identity) else "/control"
+            if request.cookies.get("ninai_oauth_return") == "team":
+                destination = "/control/team"
         except AuthorizationError:
             return JSONResponse({"error": "Active account required"}, status_code=403,
                                 headers=self._security_headers())
@@ -785,6 +795,7 @@ class ControlApp:
                             httponly=True, secure=True, samesite="lax", path="/")
         response.delete_cookie("ninai_oauth_state", path="/control")
         response.delete_cookie("ninai_pkce_verifier", path="/control")
+        response.delete_cookie("ninai_oauth_return", path="/control")
         return response
 
     async def _identity(self, request: Request, *, platform_admin: bool = False) -> ControlIdentity:
