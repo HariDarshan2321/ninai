@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import os
+import re
 from contextlib import contextmanager
 from dataclasses import replace
 from threading import BoundedSemaphore
@@ -135,6 +137,11 @@ class TeamApp:
     async def page(self, request: Request):
         from .team_ui import TEAM_HTML
 
+        revision = os.environ.get("RENDER_GIT_COMMIT", "")
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            revision = ""
+        html = TEAM_HTML.replace("<!--TEAM_HELPER_REVISION-->", revision)
+
         try:
             self._check_ingress(request)
             with self._slot(self._request_slots):
@@ -144,9 +151,9 @@ class TeamApp:
             return self._limited(error)
         except AuthorizationError:
             return HTMLResponse(
-                TEAM_HTML, status_code=401, headers=HEADERS,
+                html, status_code=401, headers=HEADERS,
             )
-        return HTMLResponse(TEAM_HTML, headers=HEADERS)
+        return HTMLResponse(html, headers=HEADERS)
 
     async def handle(self, request: Request):
         try:
@@ -198,7 +205,8 @@ class TeamApp:
             if not isinstance(data, dict):
                 raise ValueError("Expected a JSON object")
         if request.method == "GET" and not is_assistant and parts == ["identity"]:
-            return json_response({"user_id": actor.user_id, "issuer": actor.issuer, "subject": actor.subject})
+            return json_response({"user_id": actor.user_id, "issuer": actor.issuer, "subject": actor.subject,
+                                  "can_create_team": self.store.can_create_team(actor)})
         if len(parts) == 2 and not is_assistant:
             workspace, action = parts
             if request.method == "GET" and action == "overview":

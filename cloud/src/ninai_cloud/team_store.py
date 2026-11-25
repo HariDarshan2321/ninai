@@ -72,9 +72,14 @@ class TeamPrincipal:
 
 
 class TeamStore:
-    def __init__(self, connect: Callable[[], ContextManager[Any]], *, verifier=None):
+    def __init__(self, connect: Callable[[], ContextManager[Any]], *, verifier=None,
+                 bootstrap_user_ids: frozenset[str] | None = None):
         self._connect = connect
         self.verifier = verifier
+        self._bootstrap_user_ids = bootstrap_user_ids
+
+    def can_create_team(self, human: TeamHuman) -> bool:
+        return self._bootstrap_user_ids is None or human.user_id in self._bootstrap_user_ids
 
     def check_ready(self) -> None:
         with self._connect() as db:
@@ -183,6 +188,9 @@ class TeamStore:
         """Opt in as the verified legacy workspace owner. No legacy access is copied."""
         self._check_human_expiry(human)
         with self._tenant(workspace, lock=True) as db:
+            if not self.can_create_team(human):
+                require_row(db.execute("SELECT 1 FROM team_workspaces WHERE workspace_id=%s",
+                                       (workspace,)).fetchone())
             require_row(db.execute("""
                 SELECT w.id FROM workspaces w
                 JOIN workspace_members m ON m.workspace_id=w.id AND m.user_id=w.owner_user_id

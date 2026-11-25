@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 from mcp.server.auth.provider import AccessToken
@@ -43,6 +44,9 @@ class Store:
         return TaskPacket("empty", None if task == "tiny" else {"outcome": "empty"},
                           None if task == "tiny" else wire, (), ("budget-exhausted",) if task == "tiny" else ())
 
+    def can_create_team(self, actor):
+        return False
+
     def enable(self, workspace, actor):
         self.seen.append((workspace, actor))
         return {"workspace_id": workspace}
@@ -71,6 +75,7 @@ class TeamTransportTests(unittest.TestCase):
                             AuthSettings(ISSUER, "team", ORIGIN + "/mcp", ISSUER + "keys",
                                          control_client_id="dashboard"))
         self.client = TestClient(Starlette(routes=[
+            Route("/control/team", self.team.page),
             Route("/api/team/{path:path}", self.team.handle, methods=["GET", "POST"]),
             Route("/api/team-assistant/{path:path}", self.team.handle, methods=["POST"]),
         ]), base_url=ORIGIN)
@@ -78,6 +83,19 @@ class TeamTransportTests(unittest.TestCase):
         self.assistant = f"/api/team-assistant/{self.workspace}/projects/{self.project}"
         self.human = f"/api/team/{self.workspace}"
         self.browser = {"Authorization": "Bearer browser-token"}
+
+    def test_helper_installer_accepts_only_an_exact_render_revision(self):
+        with patch.dict("os.environ", {"RENDER_GIT_COMMIT": "a" * 40}):
+            page = self.client.get("/control/team", headers=self.browser)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(f'data-revision="{"a" * 40}"', page.text)
+        self.assertIn("uv sync --locked --no-dev", page.text)
+
+        with patch.dict("os.environ", {"RENDER_GIT_COMMIT": '\" onload=unexpected'}):
+            page = self.client.get("/control/team")
+        self.assertEqual(page.status_code, 401)
+        self.assertIn('data-revision=""', page.text)
+        self.assertNotIn("onload=unexpected", page.text)
 
     def test_assistant_packet_is_served_as_exact_bytes(self):
         answer = self.client.post(self.assistant + "/context", json={"task": "refund"},
@@ -114,7 +132,8 @@ class TeamTransportTests(unittest.TestCase):
         self.assertEqual(ok.json(), {"workspace_id": self.workspace})
         self.assertEqual(self.store.seen[0][1].user_id, self.user)
         self.assertEqual(self.client.get("/api/team/identity").json(),
-                         {"user_id": self.user, "issuer": ISSUER, "subject": "fixture|browser"})
+                         {"user_id": self.user, "issuer": ISSUER, "subject": "fixture|browser",
+                          "can_create_team": False})
 
     def test_audit_export_requires_the_dashboard_audience(self):
         route = f"{self.human}/projects/{self.project}/audit-export"

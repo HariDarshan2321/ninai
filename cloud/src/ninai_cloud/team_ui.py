@@ -85,6 +85,10 @@ TEAM_HTML = r"""<!doctype html>
       <div class="controls group"><button type="button" class="secondary" id="setup-finish">Go to project brief</button></div>
     </div>
   </section>
+  <section id="pilot-access" class="card" hidden>
+    <h2>Team is invite-only</h2>
+    <p>To join a project, open the invite link your teammate shared with you.</p>
+  </section>
   <div id="dashboard" class="layout" hidden>
     <nav aria-label="Team workspace"><ul>
       <li><a href="#workspace">Workspace</a></li><li data-admin hidden><a href="#access">Access</a></li>
@@ -223,14 +227,20 @@ TEAM_HTML = r"""<!doctype html>
 
       <section class="card" id="assistants" aria-labelledby="assistants-title" data-project hidden>
         <h2 id="assistants-title">Connect an assistant</h2>
-        <form id="guided-assistant" class="row">
+        <details id="team-helper" class="group" data-revision="<!--TEAM_HELPER_REVISION-->" hidden>
+          <summary>Install the Ninai Team helper</summary>
+          <p>Run this once per machine for this release. It needs Git and <a href="https://docs.astral.sh/uv/getting-started/installation/" rel="noreferrer">uv</a>. It installs in your home directory.</p>
+          <pre id="team-helper-command" class="wrap"></pre>
+          <button type="button" id="copy-team-helper" class="secondary">Copy install command</button>
+        </details>
+        <form id="guided-assistant" class="row group">
           <label class="field">Coding assistant<select name="client"><option value="claude-code">Claude Code</option><option value="codex">Codex</option></select></label>
           <label class="choice"><input name="publish" type="checkbox"> Allow publishing handoffs</label>
           <button>Start connection</button>
         </form>
         <section id="assistant-setup" class="group" aria-labelledby="assistant-setup-title" hidden>
           <h3 id="assistant-setup-title">Finish in your coding assistant</h3>
-          <p>With the Ninai Team helper installed, open Bash or Zsh in your checkout. Copy the setup, then enter the one-time token when prompted.</p>
+          <p>With the Ninai Team helper installed, open Bash or Zsh in your checkout. Copy the setup, then enter your assistant token when prompted.</p>
           <pre id="assistant-command" class="wrap"></pre>
           <div class="controls group"><button id="copy-assistant-command" type="button" class="secondary">Copy setup</button></div>
           <details><summary>Load the brief automatically when a session starts</summary>
@@ -728,7 +738,8 @@ function renderSetup() {
   const setup = select('team-onboarding');
   const role = state.overview?.role;
   const visible = Boolean(state.identity && !state.invite && !state.setupFinished
-    && (!role || ['owner', 'admin'].includes(role)));
+    && (role ? ['owner', 'admin'].includes(role) : state.canCreateTeam));
+  select('pilot-access').hidden = !(state.identity && !state.invite && !role && !state.canCreateTeam);
   setup.hidden = !visible;
   if (!visible) return;
   const step = !role ? 'team' : state.project ? 'invite' : 'project';
@@ -885,6 +896,27 @@ bind('browser-handoff', async (data, button, form) => {
     await loadBrief();
   }
 });
+const teamHelper = select('team-helper');
+const teamHelperRevision = teamHelper.dataset.revision;
+const managedHelper = /^[0-9a-f]{40}$/.test(teamHelperRevision);
+const teamHelperDirectory = '"$HOME/.local/share/ninai/team/' + teamHelperRevision + '"';
+if (managedHelper) {
+  const install = [
+    'ninai_team_helper=' + teamHelperDirectory,
+    'mkdir -p "$ninai_team_helper" &&',
+    'git -C "$ninai_team_helper" init -q &&',
+    'git -C "$ninai_team_helper" fetch -q --no-tags --depth=1 https://github.com/HariDarshan2321/ninai.git ' + teamHelperRevision + ' &&',
+    'git -C "$ninai_team_helper" checkout -q --detach ' + teamHelperRevision + ' &&',
+    'uv sync --locked --no-dev --project "$ninai_team_helper/cloud"'
+  ];
+  select('team-helper-command').textContent = install.join('\n');
+  const copyInstall = select('copy-team-helper');
+  copyInstall.addEventListener('click', run(copyInstall, async () => {
+    await navigator.clipboard.writeText(select('team-helper-command').textContent);
+    notice('Team helper install command copied.');
+  }));
+  teamHelper.hidden = false;
+}
 projectAction('guided-assistant', 'binding', (values, data) => ({
   client: values.client,
   actions: ['read', 'read-handoffs', ...(data.has('publish') ? ['publish-handoff'] : [])]
@@ -894,19 +926,26 @@ projectAction('guided-assistant', 'binding', (values, data) => ({
   const client = select('guided-assistant').elements.client.value;
   select('assistant-hook-location').textContent = client === 'claude-code'
     ? '.claude/settings.local.json' : '.codex/hooks.json';
-  const launch = client === 'claude-code' ? 'claude'
+  const launch = client === 'claude-code'
+    ? "claude --mcp-config '" + JSON.stringify({mcpServers:{'ninai-team':{command:'ninai-team-mcp'}}}) + "'"
     : 'codex -c \'mcp_servers.ninai_team.command="ninai-team-mcp"\' -c \'mcp_servers.ninai_team.env_vars=["NINAI_TEAM_ORIGIN","NINAI_TEAM_WORKSPACE","NINAI_TEAM_PROJECT","NINAI_TEAM_CHECKOUT","NINAI_TEAM_TOKEN"]\'';
   const lines = [
+    '(',
+    ...(managedHelper ? [
+      'export PATH=' + teamHelperDirectory + '/cloud/.venv/bin:"$PATH"',
+      'command -v ninai-team-mcp >/dev/null || { printf "%s\\n" "Install the Ninai Team helper first."; exit 1; }',
+    ] : []),
     `export NINAI_TEAM_ORIGIN='${location.origin}'`,
     `export NINAI_TEAM_WORKSPACE='${state.workspace}'`,
     `export NINAI_TEAM_PROJECT='${state.project}'`,
     'export NINAI_TEAM_CHECKOUT="$(pwd -P)"',
-    ...(client === 'claude-code' ? ['claude mcp add --scope local ninai-team -- ninai-team-mcp'] : []),
-    "printf 'Paste Ninai token and press Enter: '; read -r -s NINAI_TEAM_TOKEN && export NINAI_TEAM_TOKEN && " + launch
+
+    "printf 'Paste Ninai token and press Enter: '; read -r -s NINAI_TEAM_TOKEN && export NINAI_TEAM_TOKEN && " + launch,
+    ')'
   ];
   select('assistant-command').textContent = lines.join('\n');
   select('assistant-setup').hidden = false;
-  showCredential('Assistant token', result.token, 'Enter this one-time display token at the terminal prompt.', button);
+  showCredential('Assistant token', result.token, 'Enter this token at the terminal prompt. Ninai shows it only once.', button);
 });
 const copyAssistant = select('copy-assistant-command');
 copyAssistant.addEventListener('click', run(copyAssistant, async () => {
@@ -935,6 +974,9 @@ window.addEventListener('hashchange', () => {
 });
 api('/api/team/identity').then(async identity => {
   state.identity = identity.user_id;
+  state.canCreateTeam = identity.can_create_team === true;
+  select('create-workspace').hidden = !state.canCreateTeam;
+  select('enable').hidden = !state.canCreateTeam;
   select('identity-issuer').textContent = identity.issuer;
   select('identity-subject').textContent = identity.subject;
   select('identity-user').textContent = identity.user_id;

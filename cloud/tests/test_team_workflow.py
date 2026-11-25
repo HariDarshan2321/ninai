@@ -132,6 +132,32 @@ class TeamWorkflowTests(unittest.TestCase):
     def _recall(self, credential):
         return self.store.context(self.workspace, self.project, credential, **TASK)
 
+    def test_bootstrap_allowlist_only_controls_new_teams(self):
+        workspace = str(uuid4())
+        with self.connect() as db:
+            db.execute("INSERT INTO workspaces(id,name,slug,owner_user_id) VALUES(%s,'Pilot',%s,%s)",
+                       (workspace, workspace, self.owner.user_id))
+            db.execute("INSERT INTO workspace_members(workspace_id,user_id,role) VALUES(%s,%s,'owner')",
+                       (workspace, self.owner.user_id))
+
+        closed = TeamStore(self.runtime_connect, bootstrap_user_ids=frozenset())
+        self.assertFalse(closed.can_create_team(self.owner))
+        with self.assertRaises(AuthorizationError):
+            closed.enable(workspace, self.owner)
+        with self.assertRaises(AuthorizationError):
+            closed.overview(workspace, self.owner)
+
+        pilot = TeamStore(self.runtime_connect, bootstrap_user_ids=frozenset({self.owner.user_id}))
+        self.assertTrue(pilot.can_create_team(self.owner))
+        pilot.enable(workspace, self.owner)
+        self.assertEqual(closed.enable(workspace, self.owner), {"workspace_id": workspace})
+
+        self._member()
+        self.assertFalse(closed.can_create_team(self.member))
+        self.assertEqual(closed.overview(self.workspace, self.member)["role"], "member")
+        with self.assertRaises(AuthorizationError):
+            closed.enable(self.workspace, self.member)
+
     def test_verified_email_project_invite_works_without_a_github_repository(self):
         project = self.store.create_project(self.workspace, self.owner, name="Operations",
                                             assign_creator=True)["project_id"]

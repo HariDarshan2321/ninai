@@ -10,8 +10,9 @@ review and source-authorization requirements.
 1. Sign in to the Team dashboard, name the team, and create a project.
 2. Enter a teammate's email and copy the invite link. The teammate opens it
    and signs in with that verified email. The dashboard opens the project brief.
-3. To use an assistant, open **Connect an assistant**, choose the client, and
-   follow the setup shown there. **Check connection** confirms that the scoped
+3. Open **Connect an assistant**. In the hosted pilot, **Install the Ninai Team
+   helper** installs a copy pinned to the active release with its locked Python
+   dependencies. Choose the client and follow the setup shown there. **Check connection** confirms that the scoped
    credential completed a read. The preview credential expires after one hour.
 
 The project can be used on the website without a GitHub app or repository.
@@ -28,7 +29,7 @@ before a customer rollout.
 
 ## Connect an assistant
 
-Install the cloud package from this checkout in a virtual environment with
+For local development or self-hosting, install the cloud package from this checkout in a virtual environment with
 `pip install ./cloud`. Activate the environment or use full executable paths
 in the assistant configuration. Set these values in the shell that starts
 the assistant, using the workspace and project IDs from the Team dashboard.

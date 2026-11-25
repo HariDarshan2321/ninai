@@ -593,7 +593,7 @@ def main() -> None:
         team_database_url = os.environ.get("NINAI_TEAM_DATABASE_URL", "").strip()
         if team_database_url:
             from .team_runtime import verify_team_runtime
-            from .team_store import TeamStore
+            from .team_store import TeamStore, identifier
 
             if settings is None or team_database_url == database_url:
                 raise SystemExit("Team preview requires dashboard OAuth and a separate database login")
@@ -603,7 +603,10 @@ def main() -> None:
             ))
             team_pool.wait(timeout=10)
             verify_team_runtime(team_pool.connection, pool.connection)
-            team_store = TeamStore(team_pool.connection)
+            bootstrap_user_ids = frozenset(identifier(value.strip()) for value in
+                                           os.environ.get("NINAI_TEAM_BOOTSTRAP_USER_IDS", "").split(",")
+                                           if value.strip())
+            team_store = TeamStore(team_pool.connection, bootstrap_user_ids=bootstrap_user_ids)
 
         control_service = ControlService(
             store._connection, self_hosted=mode == "pat",
