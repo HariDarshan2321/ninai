@@ -1,21 +1,23 @@
 # Ninai Cloud Team repository handoffs
 
-A Team workspace can share updates and approved decisions across checkouts of
-the same GitHub repository. Recent handoffs report what a teammate is working
+A Team workspace can share updates and approved decisions across local
+checkouts connected to the same Ninai project. Recent handoffs report what a teammate is working
 on, what's blocked and what to pick up next. Approved decisions keep their
 review and source-authorization requirements.
 
 ## Team setup
 
-1. In the Team control center, create or enable a workspace and invite each
-   teammate using their verified dashboard identity.
-2. Create a project with its GitHub repository, or select **Connect existing
-   project**. Enter `owner/repo` or the GitHub clone URL. Assign each teammate
-   to the project. The repository assignment stays fixed for that project.
-3. Each teammate selects the project and issues their own assistant credential.
-   Enable **Read context** and **Read team handoffs** for session briefs. Use
-   **Publish team handoffs** and **Propose decisions** to opt in to writes.
-   The preview credential expires after one hour and can be rotated or revoked.
+1. Sign in to the Team dashboard, name the team, and create a project.
+2. Enter a teammate's email and copy the invite link. The teammate opens it
+   and signs in with that verified email. The dashboard opens the project brief.
+3. To use an assistant, open **Connect an assistant**, choose the client, and
+   follow the setup shown there. **Check connection** confirms that the scoped
+   credential completed a read. The preview credential expires after one hour.
+
+The project can be used on the website without a GitHub app or repository.
+You can associate a GitHub origin in Workspace access for checkout detection.
+Approved decisions with protected sources still require proof for the requesting
+teammate. A ticket number in a handoff is a reference supplied by the author.
 
 Only project-authorized users receive handoffs. A handoff records the verified
 author, status, and source identifier. It needs no PR. The brief includes up to
@@ -35,14 +37,14 @@ the assistant, using the workspace and project IDs from the Team dashboard.
 export NINAI_TEAM_ORIGIN=https://team-staging.example.com
 export NINAI_TEAM_WORKSPACE="your-workspace-uuid"
 export NINAI_TEAM_PROJECT="your-project-uuid"
-export NINAI_TEAM_REPOSITORY=owner/repo
+export NINAI_TEAM_CHECKOUT="$(pwd -P)"
 ```
 
 Set `NINAI_TEAM_TOKEN` from the issued assistant credential using your local
 secret manager or a hidden shell prompt. Keep it out of project files and
-command history. Launch the assistant from a checkout whose single Git
-`origin` points to the configured GitHub repository. HTTPS and GitHub SSH
-clone URLs resolve to the same project.
+command history. Launch the assistant from the checkout you selected. To use
+GitHub origin detection, also set `NINAI_TEAM_REPOSITORY=owner/repo`. HTTPS
+and GitHub SSH clone URLs resolve to the same project.
 
 In Claude Code, register the stdio server from the checkout:
 
@@ -55,7 +57,7 @@ In Codex, add this server to the trusted project's `.codex/config.toml`:
 ```toml
 [mcp_servers.ninai_team]
 command = "ninai-team-mcp"
-env_vars = ["NINAI_TEAM_ORIGIN", "NINAI_TEAM_WORKSPACE", "NINAI_TEAM_PROJECT", "NINAI_TEAM_REPOSITORY", "NINAI_TEAM_TOKEN"]
+env_vars = ["NINAI_TEAM_ORIGIN", "NINAI_TEAM_WORKSPACE", "NINAI_TEAM_PROJECT", "NINAI_TEAM_CHECKOUT", "NINAI_TEAM_REPOSITORY", "NINAI_TEAM_TOKEN"]
 ```
 
 Merge this hook into the existing Claude Code local project settings

@@ -1,5 +1,7 @@
 import asyncio
 import json
+from pathlib import Path
+import tempfile
 import unittest
 
 import httpx
@@ -37,6 +39,18 @@ class TeamClientConfigTests(unittest.TestCase):
             with self.subTest(field=field, value=invalid), self.assertRaises(ValueError) as error:
                 TeamClient.from_environment({**values, field: invalid})
             self.assertNotIn(TOKEN, str(error.exception))
+
+    def test_explicit_checkout_can_enable_the_project_without_a_github_remote(self):
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as unrelated:
+            checkout = Path(root) / "checkout"
+            checkout.mkdir()
+            subdir = checkout / "src"
+            subdir.mkdir()
+            client = client_for(lambda _: httpx.Response(204), checkout=str(checkout))
+            self.assertTrue(client.project_workflow)
+            self.assertTrue(client.matches_checkout(str(subdir)))
+            self.assertFalse(client.matches_checkout(unrelated))
+            self.assertIsNone(client.repository)
 
     def test_test_transport_can_allow_only_numeric_loopback_http(self):
         transport = httpx.MockTransport(lambda _: httpx.Response(204))

@@ -61,6 +61,7 @@ class TeamHuman:
     issuer: str
     subject: str
     expires_at: int
+    verified_email: str | None = None
 
 
 @dataclass(frozen=True)
@@ -201,21 +202,31 @@ class TeamStore:
             self._human(db, workspace, human)
         return {"workspace_id": workspace}
 
-    def invite(self, workspace, human, *, issuer, subject, role="member"):
-        if issuer != human.issuer or role not in ROLES:
-            raise ValueError("Invalid invitation issuer or role")
-        subject = bounded_text(subject, 255, "recipient subject")
+    def invite(self, workspace, human, *, issuer=None, subject=None, role="member", email=None, project=None):
+        if role not in ROLES or (email is None) == (subject is None):
+            raise ValueError("Enter one invitation recipient")
+        if email is not None:
+            email = bounded_text(email, 254, "recipient email").lower()
+            if issuer is not None or role != "member" or project is None or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+                raise ValueError("Enter a valid email and select a project")
+            issuer = human.issuer
+        else:
+            if issuer != human.issuer or project is not None:
+                raise ValueError("Invalid invitation issuer or project")
+            subject = bounded_text(subject, 255, "recipient subject")
         token = new_token()
         with self._tenant(workspace, lock=True) as db:
             actor = self._human(db, workspace, human, admin=True)
             if role == "admin" and actor.role != "owner":
                 raise AuthorizationError(DENIED)
+            if project is not None:
+                self._project(db, workspace, project, actor.user_id)
             self._check_create_quota(db, workspace, actor, "invite")
             db.execute("""
                 INSERT INTO team_invitations(workspace_id,id,inviter_user_id,recipient_issuer,
-                    recipient_subject,role,token_hash,expires_at)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,now()+interval '24 hours')
-            """, (workspace, str(uuid4()), actor.user_id, issuer, subject, role, digest(token)))
+                    recipient_subject,recipient_email,project_id,role,token_hash,expires_at)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,now()+interval '24 hours')
+            """, (workspace, str(uuid4()), actor.user_id, issuer, subject, email, project, role, digest(token)))
             self._audit(db, workspace, actor, "invite")
         return {"invitation_token": token}
 
@@ -225,22 +236,44 @@ class TeamStore:
             self._check_human_expiry(human)
             self._workspace(db, workspace)
             row = require_row(db.execute("""
-                SELECT i.id,i.role FROM team_invitations i
+                SELECT i.id,i.role,i.project_id FROM team_invitations i
                 JOIN team_members m ON (m.workspace_id,m.user_id)=(i.workspace_id,i.inviter_user_id)
                     AND m.revoked_at IS NULL AND m.role IN ('owner','admin')
                 JOIN users inviter ON inviter.id=m.user_id AND inviter.deleted_at IS NULL
-                JOIN oauth_identities o ON o.issuer=i.recipient_issuer AND o.subject=i.recipient_subject
+                JOIN oauth_identities o ON o.issuer=i.recipient_issuer
+                    AND o.user_id=%s AND o.issuer=%s AND o.subject=%s
                 JOIN users u ON u.id=o.user_id AND u.deleted_at IS NULL
                 WHERE i.workspace_id=%s AND i.token_hash=%s AND i.accepted_at IS NULL
                     AND i.revoked_at IS NULL AND i.expires_at>clock_timestamp()
                     AND (i.role<>'admin' OR m.role='owner')
-                    AND u.id=%s AND o.issuer=%s AND o.subject=%s
-            """, (workspace, digest(token), human.user_id, human.issuer, human.subject)).fetchone())
+                    AND (i.recipient_subject=o.subject OR i.recipient_email=%s)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM team_members recipient
+                        WHERE recipient.workspace_id=i.workspace_id AND recipient.user_id=u.id
+                          AND recipient.revoked_at>=i.created_at
+                    )
+                    AND NOT EXISTS (
+                        SELECT 1 FROM team_project_members recipient
+                        WHERE recipient.workspace_id=i.workspace_id AND recipient.project_id=i.project_id
+                          AND recipient.user_id=u.id AND recipient.revoked_at>=i.created_at
+                    )
+            """, (human.user_id, human.issuer, human.subject, workspace, digest(token),
+                  human.verified_email.strip().lower() if human.verified_email else None)).fetchone())
+            if row["project_id"] is not None:
+                require_row(db.execute("""
+                    SELECT 1 FROM team_projects WHERE workspace_id=%s AND id=%s AND archived_at IS NULL
+                """, (workspace, row["project_id"])).fetchone())
             db.execute("""
                 INSERT INTO team_members(workspace_id,user_id,role) VALUES(%s,%s,%s)
                 ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,revoked_at=NULL
                 WHERE team_members.revoked_at IS NOT NULL
             """, (workspace, human.user_id, row["role"]))
+            if row["project_id"] is not None:
+                db.execute("""
+                    INSERT INTO team_project_members(workspace_id,project_id,user_id,role) VALUES(%s,%s,%s,'member')
+                    ON CONFLICT(workspace_id,project_id,user_id) DO UPDATE SET role='member',revoked_at=NULL
+                    WHERE team_project_members.revoked_at IS NOT NULL
+                """, (workspace, row["project_id"], human.user_id))
             db.execute("""
                 UPDATE team_invitations SET accepted_at=clock_timestamp(),accepted_by_user_id=%s
                 WHERE workspace_id=%s AND id=%s
@@ -248,7 +281,10 @@ class TeamStore:
             actor = self._human(db, workspace, human)
             self._advance(db, workspace)
             self._audit(db, workspace, actor, "accept-invite")
-        return {"workspace_id": workspace}
+        result = {"workspace_id": workspace}
+        if row["project_id"] is not None:
+            result["project_id"] = str(row["project_id"])
+        return result
 
     def assign_project(self, workspace, human, *, project, user, role="member"):
         if role not in {"member", "maintainer", "remove"}:
@@ -384,6 +420,22 @@ class TeamStore:
                 """, (workspace, project, binding, action))
             self._audit(db, workspace, actor, "issue-binding", project=project, reason=binding)
         return {"binding_id": binding, "token": token, "expires_at": row["expires_at"]}
+
+    def check_binding(self, workspace, project, human, *, binding):
+        with self._tenant(workspace, lock=True) as db:
+            actor = self._authorize(db, workspace, project, human, "read")
+            require_row(db.execute("""
+                SELECT 1 FROM team_bindings
+                WHERE workspace_id=%s AND project_id=%s AND id=%s AND sponsor_user_id=%s
+                  AND revoked_at IS NULL AND expires_at>clock_timestamp()
+            """, (workspace, project, binding, actor.user_id)).fetchone())
+            used = db.execute("""
+                SELECT 1 FROM team_audit_events WHERE workspace_id=%s AND project_id=%s AND binding_id=%s
+                  AND actor_user_id=%s AND action IN ('read','read-handoffs')
+                  AND outcome IN ('released','packet','empty','conflict','abstain')
+                LIMIT 1
+            """, (workspace, project, binding, actor.user_id)).fetchone()
+        return {"connected": bool(used)}
 
     def update_binding(self, workspace, human, *, project, binding, operation):
         if operation not in {"revoke", "rotate"}:
@@ -819,8 +871,8 @@ class TeamStore:
             raise ValueError("Invalid context budget")
         request_id = str(uuid4())
         repository = repository_key(repository) if repository is not None else None
-        if type(project_overview) is not bool or project_overview and (repository is None or history_only):
-            raise ValueError("A project overview requires a connected repository and current guidance.")
+        if type(project_overview) is not bool or project_overview and history_only:
+            raise ValueError("A project overview requires current guidance.")
         context = TaskContext(task, paths, project_overview)
         try:
             with self._tenant(workspace) as db:
@@ -916,8 +968,10 @@ class TeamStore:
                 """, (workspace,)).fetchall()
             return result
 
-    def create_project(self, workspace, human, *, name, repository=None):
+    def create_project(self, workspace, human, *, name, repository=None, assign_creator=False):
         name = bounded_text(name, 100, "project name")
+        if type(assign_creator) is not bool:
+            raise ValueError("Invalid maintainer assignment")
         repository = repository_key(repository) if repository is not None else None
         project = str(uuid4())
         with self._tenant(workspace, lock=True) as db:
@@ -926,6 +980,11 @@ class TeamStore:
             db.execute("""
                 INSERT INTO team_projects(id,workspace_id,name,slug,repository) VALUES(%s,%s,%s,%s,%s)
             """, (project, workspace, name, f"team-{project}", repository))
+            if assign_creator:
+                db.execute("""
+                    INSERT INTO team_project_members(workspace_id,project_id,user_id,role)
+                    VALUES(%s,%s,%s,'maintainer')
+                """, (workspace, project, actor.user_id))
             self._audit(db, workspace, actor, "create-project", project=project)
         return {"project_id": project}
 
@@ -944,11 +1003,11 @@ class TeamStore:
                 raise AuthorizationError(DENIED)
         return {"updated": True}
 
-    def publish_handoff(self, workspace, project, credential, *, repository, request_key,
-                        topic, status, summary, next_step=None):
+    def publish_handoff(self, workspace, project, credential, *, request_key,
+                        topic, status, summary, next_step=None, repository=None):
         from .postgres_store import _contains_secret
 
-        repository = repository_key(repository)
+        repository = repository_key(repository) if repository is not None else None
         request_key = identifier(request_key)
         topic = bounded_text(topic, 80, "handoff topic")
         summary = bounded_text(summary, 400, "handoff summary")
@@ -959,7 +1018,8 @@ class TeamStore:
             raise ValueError("Invalid handoff")
         with self._tenant(workspace, lock=True) as db:
             actor = self._authorize(db, workspace, project, credential, "publish-handoff")
-            self._require_repository(db, workspace, project, repository)
+            if repository is not None:
+                self._require_repository(db, workspace, project, repository)
             existing = db.execute("""
                 SELECT id,topic,status,summary,next_step FROM team_handoffs
                 WHERE workspace_id=%s AND project_id=%s AND author_user_id=%s AND request_key=%s
@@ -979,12 +1039,13 @@ class TeamStore:
             self._audit(db, workspace, actor, "publish-handoff", project=project, reason=handoff)
         return {"id": handoff}
 
-    def handoffs(self, workspace, project, credential, *, repository):
-        repository = repository_key(repository)
+    def handoffs(self, workspace, project, credential, *, repository=None):
+        repository = repository_key(repository) if repository is not None else None
         request_id = str(uuid4())
         with self._tenant(workspace, lock=True) as db:
             actor = self._authorize(db, workspace, project, credential, "read-handoffs")
-            self._require_repository(db, workspace, project, repository)
+            if repository is not None:
+                self._require_repository(db, workspace, project, repository)
             rows = db.execute("""
                 SELECT latest.*,u.display_name FROM (
                     SELECT DISTINCT ON (author_user_id,lower(topic))

@@ -338,6 +338,11 @@ class ControlAppTest(unittest.TestCase):
         self.assertIn("ninai_oauth_state=", response.headers["set-cookie"])
         self.assertIn("HttpOnly", response.headers["set-cookie"])
         self.assertIn("Secure", response.headers["set-cookie"])
+        team_login = client.get("/control/login?return=team", follow_redirects=False)
+        self.assertIn("ninai_oauth_return=team", team_login.headers["set-cookie"])
+        self.assertNotIn("return=team", team_login.headers["location"])
+        untrusted_return = client.get("/control/login?return=https://elsewhere.example", follow_redirects=False)
+        self.assertNotIn("elsewhere.example", untrusted_return.headers["location"])
         logout = client.get("/control/logout", follow_redirects=False)
         self.assertEqual(logout.status_code, 302)
         self.assertEqual(
@@ -418,6 +423,12 @@ class ControlAppTest(unittest.TestCase):
         self.assertIn("Secure", session)
         self.assertIn("SameSite=lax", session)
         self.assertIn(("login", self.identity), self.service.calls)
+
+        client.cookies.set("ninai_oauth_return", "team")
+        with patch("httpx.AsyncClient", AsyncClient):
+            team = client.get("/control?code=authorization-code&state=expected", follow_redirects=False)
+        self.assertEqual(team.headers["location"], "/control/team")
+        self.assertIn("ninai_oauth_return=", team.headers["set-cookie"])
 
     def test_dashboard_cookie_auth_requires_origin_for_mutations(self):
         client = self.client

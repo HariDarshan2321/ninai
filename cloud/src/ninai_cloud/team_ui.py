@@ -7,7 +7,7 @@ TEAM_HTML = r"""<!doctype html>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <meta name="theme-color" content="#0b302b">
-  <title>Team decisions · Ninai</title>
+  <title>Ninai Team</title>
   <style>
     :root{color-scheme:light;--ink:#182421;--muted:#4b615a;--green:#0b302b;--paper:#f4efe5;--panel:#fffdf8;--line:#c6cfc5;--focus:#ae421f;font:16px/1.52 system-ui,sans-serif;color:var(--ink);background:var(--paper)}
     *{box-sizing:border-box}[hidden]{display:none!important}body{margin:0}a{color:var(--green)}
@@ -27,6 +27,11 @@ TEAM_HTML = r"""<!doctype html>
     details{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}summary{cursor:pointer;min-height:34px;font-weight:700}details>form{margin-top:8px}
     .notice{padding:8px 11px;border-left:4px solid #326054;background:#edf1e7;margin:0 0 10px}.notice:empty{display:none}.error{background:#fbeddf;border-color:var(--focus);color:#6b2b1b}
     .list{display:grid;gap:8px;padding:0;list-style:none;margin:10px 0 0}.item{border:1px solid var(--line);border-radius:8px;padding:10px;overflow-wrap:anywhere}.item p:last-child{margin-bottom:0}.credential input{font-family:ui-monospace,monospace}
+    .setup{max-width:780px;margin:0 auto 24px}.setup h2{margin-bottom:8px}.setup form{margin-top:14px}
+    .setup-steps{display:flex;gap:16px;flex-wrap:wrap;padding:0;list-style:none;margin:0 0 18px;color:var(--muted)}
+    .setup-steps [aria-current=step]{font-weight:750;color:var(--green);text-decoration:underline;text-underline-offset:6px}
+    .brief-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,255px),1fr));gap:24px;margin-top:18px}
+    pre{white-space:pre-wrap;overflow-wrap:anywhere}
     @media(max-width:720px){.layout{display:block}.layout nav{position:static;padding:0 0 12px}.layout nav ul{display:flex;flex-wrap:wrap;gap:4px}.layout nav a{padding:6px 8px}.intro{padding-top:24px}}
   </style>
 </head>
@@ -34,11 +39,51 @@ TEAM_HTML = r"""<!doctype html>
 <a class="skip" href="#main">Skip to main content</a>
 <header class="top"><div><a class="brand" href="/control" aria-label="Ninai control center">Ninai</a><a href="/control">Control center</a></div></header>
 <main id="main" tabindex="-1">
-  <div class="intro"><h1>Team decisions</h1><p>Private preview for synthetic test workspaces. Use test accounts and source fixtures. Team access is separate from your local vault and existing cloud memory.</p></div>
+  <div class="intro"><h1>Ninai Team</h1><p>Share decisions and handoffs with the people and assistants on your project.</p></div>
   <p id="status" class="notice" role="status" aria-live="polite"></p>
   <p id="error" class="notice error" role="alert"></p>
   <section id="signin" class="card" aria-labelledby="sign-in-title" hidden>
-    <h2 id="sign-in-title">Sign in to continue</h2><a href="/control/login">Sign in to Ninai</a>
+    <h2 id="sign-in-title">Sign in to continue</h2>
+    <a id="team-signin" href="/control/login?return=team">Sign in to Ninai</a>
+  </section>
+  <section id="team-join" class="card accent setup" aria-labelledby="join-title" hidden>
+    <h2 id="join-title">Join your team</h2>
+    <p>Use the Ninai account with the verified email your teammate invited.</p>
+    <form id="join-team"><button>Accept invitation</button></form>
+  </section>
+  <section id="team-onboarding" class="card accent setup" aria-labelledby="setup-title" hidden>
+    <h2 id="setup-title">Set up your team</h2>
+    <ol class="setup-steps" aria-label="Setup progress">
+      <li id="setup-step-team">Team</li><li id="setup-step-project">Project</li><li id="setup-step-invite">Teammates</li>
+    </ol>
+    <div id="setup-team">
+      <p>Give your team a name to create a shared workspace.</p>
+      <form id="setup-team-form" class="row">
+        <label class="field">Team name<input name="name" required maxlength="100" autocomplete="organization"></label>
+        <button>Create team</button>
+      </form>
+      <div class="controls group"><button type="button" id="setup-existing" class="secondary">Open my existing team</button></div>
+    </div>
+    <div id="setup-project" hidden>
+      <p>Name the project your team is working on.</p>
+      <form id="setup-project-form" class="row">
+        <label class="field">Project name<input name="name" required maxlength="100"></label>
+        <button>Create project</button>
+      </form>
+    </div>
+    <div id="setup-invite" hidden>
+      <p>Invite a teammate to the project you’ve selected.</p>
+      <form id="setup-invite-form" class="row">
+        <label class="field">Teammate email<input name="email" type="email" autocomplete="off" required maxlength="254"></label>
+        <button>Create invite link</button>
+      </form>
+      <div id="setup-invite-result" class="group" hidden>
+        <label class="field">Invite link<input id="setup-invite-link" readonly autocomplete="off" spellcheck="false"></label>
+        <div class="controls group"><button type="button" id="setup-copy-invite" class="secondary">Copy invite link</button></div>
+        <p class="muted group">Share this link with the invited teammate. It expires in 24 hours.</p>
+      </div>
+      <div class="controls group"><button type="button" class="secondary" id="setup-finish">Go to project brief</button></div>
+    </div>
   </section>
   <div id="dashboard" class="layout" hidden>
     <nav aria-label="Team workspace"><ul>
@@ -49,11 +94,11 @@ TEAM_HTML = r"""<!doctype html>
     <div>
       <section class="card accent" id="workspace" aria-labelledby="workspace-title">
         <h2 id="workspace-title">Workspace</h2>
-        <form id="open-workspace" class="row">
+        <details id="workspace-settings"><summary>Workspace settings</summary>
+        <form id="open-workspace" class="row group">
           <label class="field">Workspace ID<input name="workspace" required maxlength="36" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
           <button>Open workspace</button>
         </form>
-        <p class="group" id="workspace-selection" hidden></p>
         <details><summary>Use an existing workspace or create your first workspace</summary>
           <div class="controls"><button type="button" id="find-workspace" class="secondary">Use my existing workspace</button></div>
           <form id="create-workspace" class="row group"><label class="field">Workspace name<input name="name" required maxlength="120"></label><button>Create workspace</button></form>
@@ -64,6 +109,8 @@ TEAM_HTML = r"""<!doctype html>
           <form id="accept" class="row"><label class="field">Invitation token<input name="token" required type="password" maxlength="128" autocomplete="off"></label><button>Accept invitation</button></form>
           <details><summary>My invitation details</summary><dl><dt>Identity issuer</dt><dd id="identity-issuer" class="wrap"></dd><dt>Identity subject</dt><dd id="identity-subject" class="wrap"></dd><dt>User ID</dt><dd id="identity-user" class="wrap"></dd></dl></details>
         </details>
+        </details>
+        <p class="group" id="workspace-selection" hidden></p>
       </section>
 
       <section class="card" id="access" aria-labelledby="access-title" data-admin hidden>
@@ -121,8 +168,23 @@ TEAM_HTML = r"""<!doctype html>
         <label class="field">Project with decision access<select id="active-project"></select></label>
         <p class="group muted" id="project-role"></p>
         <p id="project-repo" class="muted wrap"></p>
-        <form id="project-handoffs" class="group" hidden><button class="secondary">Load recent handoffs</button></form>
-        <div id="handoff-results" class="group"></div>
+        <section id="project-brief" aria-labelledby="brief-title" hidden>
+          <h3 id="brief-title" tabindex="-1">Project brief</h3>
+          <div class="brief-grid">
+            <div><h3>Recent handoffs</h3><div id="handoff-results" aria-live="polite"></div></div>
+            <div><h3>Approved decisions</h3><div id="brief-decisions" aria-live="polite"></div></div>
+          </div>
+          <details><summary>Share a handoff</summary>
+            <form id="browser-handoff" class="group"><div class="fields">
+              <label class="field">Topic<input name="topic" required maxlength="80"></label>
+              <label class="field">Status<select name="status"><option value="working">In progress</option>
+                <option value="blocked">Blocked</option><option value="done">Done</option></select></label>
+              <label class="field">Update<textarea name="summary" required maxlength="400" rows="2"></textarea></label>
+              <label class="field">Next step (optional)<textarea name="next_step" maxlength="240" rows="2"></textarea></label>
+            </div><button>Share with project</button></form>
+          </details>
+          <form id="project-handoffs" class="group"><button class="secondary">Refresh project brief</button></form>
+        </section>
       </section>
 
       <section class="card" id="decisions" aria-labelledby="decisions-title" data-project hidden>
@@ -160,8 +222,25 @@ TEAM_HTML = r"""<!doctype html>
       </section>
 
       <section class="card" id="assistants" aria-labelledby="assistants-title" data-project hidden>
-        <h2 id="assistants-title">Assistant credentials</h2>
-        <p class="muted">Set actions explicitly for the selected project. A new connection can start with zero actions.</p>
+        <h2 id="assistants-title">Connect an assistant</h2>
+        <form id="guided-assistant" class="row">
+          <label class="field">Coding assistant<select name="client"><option value="claude-code">Claude Code</option><option value="codex">Codex</option></select></label>
+          <label class="choice"><input name="publish" type="checkbox"> Allow publishing handoffs</label>
+          <button>Start connection</button>
+        </form>
+        <section id="assistant-setup" class="group" aria-labelledby="assistant-setup-title" hidden>
+          <h3 id="assistant-setup-title">Finish in your coding assistant</h3>
+          <p>With the Ninai Team helper installed, open Bash or Zsh in your checkout. Copy the setup, then enter the one-time token when prompted.</p>
+          <pre id="assistant-command" class="wrap"></pre>
+          <div class="controls group"><button id="copy-assistant-command" type="button" class="secondary">Copy setup</button></div>
+          <details><summary>Load the brief automatically when a session starts</summary>
+            <p>Merge this hook into your assistant’s project settings.</p>
+            <p id="assistant-hook-location" class="muted"></p>
+            <pre class="wrap">{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"ninai-team-session-start"}]}]}}</pre>
+          </details>
+          <form id="check-assistant" class="group"><button class="secondary">Check connection</button></form>
+        </section>
+        <details><summary>Advanced assistant permissions</summary>
         <form id="binding"><div class="fields">
           <label class="field">Assistant client<select name="client"><option value="claude-code">Claude Code</option><option value="codex">Codex</option></select></label>
           <label class="field">Binding identity<select name="kind" id="binding-kind"><option value="human">My user</option><option value="service">Sponsored service</option></select></label>
@@ -172,6 +251,7 @@ TEAM_HTML = r"""<!doctype html>
           <label class="choice"><input name="actions" type="checkbox" value="read-handoffs"> Read team handoffs</label>
           <label class="choice"><input name="actions" type="checkbox" value="publish-handoff"> Publish team handoffs</label>
         </div></fieldset><button>Issue credential</button></form>
+        </details>
         <details id="binding-controls"><summary>Rotate or revoke a binding</summary>
           <form id="manage-binding"><div class="fields">
             <label class="field">Binding ID<input name="binding" required maxlength="36" autocomplete="off" spellcheck="false"></label>
@@ -211,7 +291,8 @@ TEAM_HTML = r"""<!doctype html>
 <script>
 'use strict';
 const select = (id) => document.getElementById(id);
-const state = {workspace: '', project: '', overview: null, generation: 0};
+const state = {workspace: '', project: '', overview: null, generation: 0, identity: '', invite: null,
+  setupFinished: false, binding: ''};
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const outcomeNotes = {
   packet: 'Current guidance', history: 'Decision history', empty: 'No relevant, verified guidance to show.',
@@ -299,8 +380,11 @@ function selectProject(project) {
   if (state.project !== project) {
     state.generation += 1;
     clearCredential();
-    for (const id of ['proposal-results', 'context-results', 'handoff-results']) select(id).replaceChildren();
-    for (const id of ['propose', 'version-action', 'reviewer', 'binding', 'manage-binding', 'context-form']) select(id).reset();
+    for (const id of ['proposal-results', 'context-results', 'handoff-results', 'brief-decisions']) select(id).replaceChildren();
+    for (const id of ['propose', 'version-action', 'reviewer', 'binding', 'manage-binding', 'context-form', 'browser-handoff']) select(id).reset();
+    state.binding = '';
+    select('assistant-setup').hidden = true;
+    clearInviteLink();
   }
   state.project = project;
   const selection = state.overview?.projects?.find(row => row.id === project && row.access);
@@ -310,7 +394,8 @@ function selectProject(project) {
   select('project-audit-export').hidden = select('project-export').hidden;
   select('project-role').textContent = selection ? (elevated ? 'Decision review available.' : 'Project member access.') : 'Choose a project to continue.';
   select('project-repo').textContent = selection?.repository ? `Repository ${selection.repository} · Project ID ${project}` : '';
-  select('project-handoffs').hidden = !selection?.repository;
+  select('project-brief').hidden = !selection;
+  renderSetup();
 }
 
 function displayOverview(overview) {
@@ -366,7 +451,9 @@ async function openWorkspace(workspace) {
     select('active-project').value = previous;
     selectProject(previous);
   }
+  if (state.identity) writeStored('ninai-team-last:' + state.identity, workspace, true);
   notice('Workspace opened.');
+  if (state.project) loadBrief();
 }
 
 function pathFor(workspace, project, action) {
@@ -527,14 +614,14 @@ findButton.addEventListener('click', run(findButton, async () => {
   select('open-workspace').elements.workspace.value = result.workspace.id;
   notice('Workspace ID ready. Open the team workspace or enable the preview if you own it.');
 }));
-select('active-project').addEventListener('change', event => selectProject(event.target.value));
+select('active-project').addEventListener('change', event => { selectProject(event.target.value); loadBrief(); });
 select('group-kind').addEventListener('change', updateGroupSubject);
 select('hide-credential').addEventListener('click', () => { clearCredential(true); notice('Token dismissed.'); });
 select('copy-credential').addEventListener('click', run(select('copy-credential'), async () => {
   await navigator.clipboard.writeText(select('credential-value').value);
   notice('Token copied.');
 }));
-window.addEventListener('pagehide', () => clearCredential());
+window.addEventListener('pagehide', () => { clearCredential(); clearInviteLink(); });
 
 workspaceAction('enable', 'enable', empty, updated);
 workspaceAction('accept', 'accept', (values, form) => { form.reset(); return values; }, updated);
@@ -562,26 +649,6 @@ bind('archive-project', async (data) => {
 });
 workspaceAction('group-edge', 'group-edge', values => ({...values, active: values.active === 'true'}), updated);
 workspaceAction('audit-form', 'audit', empty, showAudit);
-
-projectAction('project-handoffs', 'handoffs', () => ({
-  repository: state.overview.projects.find(row => row.id === state.project)?.repository
-}), result => {
-  const target = select('handoff-results');
-  target.replaceChildren();
-  if (!result.items.length) {
-    append(target, 'p', 'No recent team handoffs.', 'muted');
-    return;
-  }
-  const list = append(target, 'ul', null, 'list');
-  for (const row of result.items) {
-    const item = append(list, 'li', null, 'item');
-    append(item, 'h3', row.topic);
-    append(item, 'p', `${row.status} · ${row.author} · ${new Date(row.recorded_at).toLocaleString()}`, 'muted');
-    append(item, 'p', row.summary);
-    if (row.next_step) append(item, 'p', row.next_step);
-    append(item, 'code', row.id);
-  }
-});
 
 projectAction('binding', 'binding', (values, data) => ({client: values.client, kind: values.kind, actions: data.getAll('actions')}), (result, button) => {
   select('manage-binding').elements.binding.value = result.binding_id;
@@ -623,12 +690,273 @@ projectAction('project-audit-export', 'audit-export', empty, result => {
   downloadExport(result, 'ninai-project-audit.json', 'Project audit prepared.');
 });
 
-api('/api/team/identity').then(identity => {
+const pendingInviteKey = 'ninai-team-pending-invite';
+
+function readStored(key, persistent = false) {
+  try { return (persistent ? localStorage : sessionStorage).getItem(key); } catch { return null; }
+}
+
+function writeStored(key, value, persistent = false) {
+  try {
+    const storage = persistent ? localStorage : sessionStorage;
+    if (value === null) storage.removeItem(key);
+    else storage.setItem(key, value);
+  } catch { /* The open page can still operate with tab storage disabled. */ }
+}
+
+function currentInvite() {
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const shared = fragment.get('invite');
+  const match = /^([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/i.exec(shared || '');
+  if (match && uuid.test(match[1])) return {workspace: match[1], token: match[2]};
+  if (fragment.has('invite')) return null;
+  try {
+    const saved = JSON.parse(readStored(pendingInviteKey));
+    if (saved && saved.expires >= Date.now() && uuid.test(saved.workspace)
+        && /^[A-Za-z0-9_-]{43}$/.test(saved.token)) return saved;
+  } catch { /* Ignore malformed stored invitations. */ }
+  writeStored(pendingInviteKey, null);
+  return null;
+}
+
+function clearInviteLink() {
+  select('setup-invite-link').value = '';
+  select('setup-invite-result').hidden = true;
+}
+
+function renderSetup() {
+  const setup = select('team-onboarding');
+  const role = state.overview?.role;
+  const visible = Boolean(state.identity && !state.invite && !state.setupFinished
+    && (!role || ['owner', 'admin'].includes(role)));
+  setup.hidden = !visible;
+  if (!visible) return;
+  const step = !role ? 'team' : state.project ? 'invite' : 'project';
+  for (const name of ['team', 'project', 'invite']) {
+    const item = select('setup-step-' + name);
+    if (name === step) item.setAttribute('aria-current', 'step');
+    else item.removeAttribute('aria-current');
+    select('setup-' + name).hidden = name !== step;
+  }
+}
+
+function selectedProject(project) {
+  const picker = select('active-project');
+  if (project !== state.project && [...picker.options].some(option => option.value === project)) {
+    picker.value = project;
+    selectProject(project);
+    loadBrief();
+  }
+}
+
+function showHandoffs(result) {
+  const target = select('handoff-results');
+  target.replaceChildren();
+  if (!result.items.length) {
+    append(target, 'p', 'No recent handoffs.', 'muted');
+    return;
+  }
+  const list = append(target, 'ul', null, 'list');
+  for (const row of result.items) {
+    const item = append(list, 'li', null, 'item');
+    append(item, 'h3', row.topic);
+    const status = {working: 'In progress', blocked: 'Blocked', done: 'Done'}[row.status];
+    append(item, 'p', `${status} · ${row.author}`, 'muted');
+    append(item, 'p', row.summary);
+    if (row.next_step) append(item, 'p', row.next_step);
+  }
+}
+
+function showBriefDecisions(result) {
+  const target = select('brief-decisions');
+  target.replaceChildren();
+  if (!result.current?.length) {
+    append(target, 'p', outcomeNotes[result.outcome] || 'No approved decisions yet.', 'muted');
+    return;
+  }
+  const list = append(target, 'ul', null, 'list');
+  for (const row of result.current) {
+    const item = append(list, 'li', null, 'item');
+    if (row.topic) append(item, 'h3', row.topic);
+    append(item, 'p', row.rule);
+    if (row.rationale) append(item, 'p', row.rationale, 'muted');
+    sourceLinks(item, row.sources);
+  }
+}
+
+async function loadBrief() {
+  const {workspace, project, generation} = state;
+  if (!workspace || !project) return;
+  const requests = [
+    ['handoff-results', showHandoffs, api(pathFor(workspace, project, 'handoffs'), {})],
+    ['brief-decisions', showBriefDecisions, api(pathFor(workspace, project, 'context'), {
+      task: 'Project orientation', project_overview: true, max_tokens: 2048
+    })]
+  ];
+  await Promise.all(requests.map(async ([target, render, request]) => {
+    try {
+      const result = await request;
+      if (state.generation === generation) render(result);
+    } catch {
+      if (state.generation === generation) {
+        select(target).replaceChildren();
+        append(select(target), 'p', 'This part of the brief is unavailable. Try refreshing.', 'muted');
+      }
+    }
+  }));
+}
+
+function openBrief() {
+  state.setupFinished = true;
+  clearInviteLink();
+  renderSetup();
+  select('brief-title').focus();
+}
+
+bind('setup-team-form', async data => {
+  const result = await api('/api/control/workspaces', {name: data.get('name')});
+  await api(pathFor(result.id, '', 'enable'), {});
+  await openWorkspace(result.id);
+});
+const existingTeam = select('setup-existing');
+existingTeam.addEventListener('click', run(existingTeam, async () => {
+  const result = await api('/api/control/overview');
+  await api(pathFor(result.workspace.id, '', 'enable'), {});
+  await openWorkspace(result.workspace.id);
+}));
+bind('setup-project-form', async data => {
+  const workspace = state.workspace;
+  const result = await api(pathFor(workspace, '', 'project'), {name: data.get('name'), assign_creator: true});
+  if (state.workspace !== workspace) return;
+  await openWorkspace(workspace);
+  selectedProject(result.project_id);
+});
+bind('setup-invite-form', async data => {
+  const {workspace, project, generation} = state;
+  if (!workspace || !project) throw Error('Choose a project first.');
+  const result = await api(pathFor(workspace, '', 'invite'), {email: data.get('email'), project});
+  if (state.generation !== generation) return;
+  const link = new URL('/control/team', location.origin);
+  link.hash = 'invite=' + workspace + '.' + result.invitation_token;
+  select('setup-invite-link').value = link.href;
+  select('setup-invite-result').hidden = false;
+  select('setup-invite-link').focus();
+});
+const copyInvite = select('setup-copy-invite');
+copyInvite.addEventListener('click', run(copyInvite, async () => {
+  await navigator.clipboard.writeText(select('setup-invite-link').value);
+  notice('Invite link copied.');
+}));
+select('setup-finish').addEventListener('click', openBrief);
+select('team-signin').addEventListener('click', () => {
+  if (state.invite) writeStored(pendingInviteKey, JSON.stringify({...state.invite, expires: Date.now() + 600000}));
+});
+bind('join-team', async () => {
+  const invite = state.invite;
+  if (!invite) throw Error('Open your invitation link again.');
+  const joined = await api(pathFor(invite.workspace, '', 'accept'), {token: invite.token, verify_email: true});
+  state.invite = null;
+  writeStored(pendingInviteKey, null);
+  select('team-join').hidden = true;
+  select('dashboard').hidden = false;
+  await openWorkspace(invite.workspace);
+  if (joined.project_id) selectedProject(joined.project_id);
+  openBrief();
+  notice('You joined the team.');
+});
+bind('project-handoffs', loadBrief);
+bind('browser-handoff', async (data, button, form) => {
+  const {workspace, project, generation} = state;
+  if (!workspace || !project) throw Error('Choose a project first.');
+  const draft = Object.fromEntries(data);
+  // A repeated submission after a lost response reuses the same request key.
+  const signature = JSON.stringify(draft);
+  if (form.signature !== signature || !form.requestKey) {
+    form.signature = signature;
+    form.requestKey = crypto.randomUUID();
+  }
+  await api(pathFor(workspace, project, 'publish-handoff'), {
+    ...draft, next_step: draft.next_step.trim() || null, request_key: form.requestKey
+  });
+  if (generation === state.generation) {
+    form.reset();
+    form.requestKey = null;
+    notice('Handoff shared with your project.');
+    await loadBrief();
+  }
+});
+projectAction('guided-assistant', 'binding', (values, data) => ({
+  client: values.client,
+  actions: ['read', 'read-handoffs', ...(data.has('publish') ? ['publish-handoff'] : [])]
+}), (result, button) => {
+  state.binding = result.binding_id;
+  select('manage-binding').elements.binding.value = result.binding_id;
+  const client = select('guided-assistant').elements.client.value;
+  select('assistant-hook-location').textContent = client === 'claude-code'
+    ? '.claude/settings.local.json' : '.codex/hooks.json';
+  const launch = client === 'claude-code' ? 'claude'
+    : 'codex -c \'mcp_servers.ninai_team.command="ninai-team-mcp"\' -c \'mcp_servers.ninai_team.env_vars=["NINAI_TEAM_ORIGIN","NINAI_TEAM_WORKSPACE","NINAI_TEAM_PROJECT","NINAI_TEAM_CHECKOUT","NINAI_TEAM_TOKEN"]\'';
+  const lines = [
+    `export NINAI_TEAM_ORIGIN='${location.origin}'`,
+    `export NINAI_TEAM_WORKSPACE='${state.workspace}'`,
+    `export NINAI_TEAM_PROJECT='${state.project}'`,
+    'export NINAI_TEAM_CHECKOUT="$(pwd -P)"',
+    ...(client === 'claude-code' ? ['claude mcp add --scope local ninai-team -- ninai-team-mcp'] : []),
+    "printf 'Paste Ninai token and press Enter: '; read -r -s NINAI_TEAM_TOKEN && export NINAI_TEAM_TOKEN && " + launch
+  ];
+  select('assistant-command').textContent = lines.join('\n');
+  select('assistant-setup').hidden = false;
+  showCredential('Assistant token', result.token, 'Enter this one-time display token at the terminal prompt.', button);
+});
+const copyAssistant = select('copy-assistant-command');
+copyAssistant.addEventListener('click', run(copyAssistant, async () => {
+  await navigator.clipboard.writeText(select('assistant-command').textContent);
+  notice('Assistant setup copied.');
+}));
+projectAction('check-assistant', 'check-binding', () => ({binding: state.binding}), result => {
+  notice(result.connected ? 'Assistant connected to this project.' : 'Waiting for the first read from your assistant.');
+});
+
+function loadInvitation() {
+  state.invite = currentInvite();
+  if (location.hash.startsWith('#invite=')) history.replaceState(null, '', location.pathname);
+  if (state.identity && state.invite) {
+    state.generation += 1;
+    clearCredential();
+    clearInviteLink();
+    select('dashboard').hidden = true;
+    select('team-join').hidden = false;
+    renderSetup();
+  }
+}
+loadInvitation();
+window.addEventListener('hashchange', () => {
+  if (location.hash.startsWith('#invite=')) loadInvitation();
+});
+api('/api/team/identity').then(async identity => {
+  state.identity = identity.user_id;
   select('identity-issuer').textContent = identity.issuer;
   select('identity-subject').textContent = identity.subject;
   select('identity-user').textContent = identity.user_id;
   select('invite').elements.issuer.value = identity.issuer || '';
+  writeStored(pendingInviteKey, null);
+  if (state.invite) {
+    select('team-join').hidden = false;
+    return;
+  }
   select('dashboard').hidden = false;
+  const previous = readStored('ninai-team-last:' + state.identity, true);
+  if (previous && uuid.test(previous)) {
+    state.setupFinished = true;
+    try {
+      await openWorkspace(previous);
+      return;
+    } catch {
+      writeStored('ninai-team-last:' + state.identity, null, true);
+      state.setupFinished = false;
+    }
+  }
+  renderSetup();
 }).catch(() => { select('signin').hidden = false; });
 </script>
 </body>

@@ -9,6 +9,7 @@ import logging
 import os
 import re
 from urllib.parse import urlsplit
+from pathlib import Path
 from uuid import UUID
 from typing import Awaitable, Callable
 
@@ -129,7 +130,7 @@ async def _write_response(response: httpx.Response) -> CallToolResult:
 class TeamClient:
     def __init__(self, origin: str, workspace: str, project: str, token: str, *,
                  transport: httpx.AsyncBaseTransport | None = None, allow_loopback_http: bool = False,
-                 timeout: float = 10.0, repository: str | None = None) -> None:
+                 timeout: float = 10.0, repository: str | None = None, checkout: str | None = None) -> None:
         endpoint_origin = _trusted_origin(origin, allow_loopback_http=allow_loopback_http)
         try:
             workspace_id, project_id = UUID(workspace), UUID(project)
@@ -139,6 +140,9 @@ class TeamClient:
             raise ValueError("Configure a scoped Ninai team assistant token.")
         self._endpoint = f"{endpoint_origin}/api/team-assistant/{workspace_id}/projects/{project_id}"
         self.repository = repository_key(repository) if repository is not None else None
+        if checkout is not None and not Path(checkout).is_absolute():
+            raise ValueError("Configure an absolute checkout directory.")
+        self.checkout = Path(checkout).resolve() if checkout is not None else None
         self._token = token
         self._transport = transport
         self._timeout = timeout
@@ -148,7 +152,22 @@ class TeamClient:
         values = os.environ if env is None else env
         return cls(values.get("NINAI_TEAM_ORIGIN", ""), values.get("NINAI_TEAM_WORKSPACE", ""),
                    values.get("NINAI_TEAM_PROJECT", ""), values.get("NINAI_TEAM_TOKEN", ""),
-                   timeout=timeout, repository=values.get("NINAI_TEAM_REPOSITORY") or None)
+                   timeout=timeout, repository=values.get("NINAI_TEAM_REPOSITORY") or None,
+                   checkout=values.get("NINAI_TEAM_CHECKOUT") or None)
+
+    @property
+    def project_workflow(self) -> bool:
+        return self.repository is not None or self.checkout is not None
+
+    def matches_checkout(self, cwd: str) -> bool:
+        if not self.project_workflow or not isinstance(cwd, str) or not Path(cwd).is_absolute():
+            return False
+        try:
+            if self.checkout is not None and not Path(cwd).resolve().is_relative_to(self.checkout):
+                return False
+            return self.repository is None or checkout_repository(cwd) == self.repository
+        except (OSError, RuntimeError, ValueError):
+            return False
 
     async def context(self, task: str, paths: list[str] | None = None, max_items: int = DEFAULT_PACKET_ITEMS,
                       max_tokens: int = DEFAULT_PACKET_TOKENS, history_only: bool = False, *, project_overview: bool = False) -> CallToolResult:
@@ -160,11 +179,11 @@ class TeamClient:
                 or type(max_tokens) is not int or not 1 <= max_tokens <= MAX_PACKET_TOKENS
                 or type(history_only) is not bool
                 or type(project_overview) is not bool
-                or project_overview and (self.repository is None or history_only)):
+                or project_overview and (not self.project_workflow or history_only)):
             return _error(_INVALID_REQUEST)
         body = {"task": task, "paths": paths or [], "max_items": max_items, "max_tokens": max_tokens,
                 "history_only": history_only}
-        if self.repository is not None:
+        if self.project_workflow:
             body.update(repository=self.repository, project_overview=project_overview)
 
         async def handle(response):
@@ -173,13 +192,13 @@ class TeamClient:
         return await self._post("context", body, handle)
 
     async def handoffs(self) -> CallToolResult:
-        if self.repository is None:
+        if not self.project_workflow:
             return _error(_INVALID_REQUEST)
         return await self._post("handoffs", {"repository": self.repository}, _handoff_response)
 
     async def publish_handoff(self, request_key: str, topic: str, status: str, summary: str,
                               next_step: str | None = None) -> CallToolResult:
-        if self.repository is None:
+        if not self.project_workflow:
             return _error(_INVALID_REQUEST)
         return await self._post("publish-handoff", {
             "repository": self.repository, "request_key": request_key, "topic": topic,
@@ -188,7 +207,7 @@ class TeamClient:
 
     async def propose_decision(self, topic: str, rule: str, links: list[str], paths: list[str] | None = None,
                                terms: list[str] | None = None, rationale: str | None = None) -> CallToolResult:
-        if self.repository is None:
+        if not self.project_workflow:
             return _error(_INVALID_REQUEST)
         return await self._post("propose", {"repository": self.repository, "topic": topic, "rule": rule,
                                           "links": links, "paths": paths, "terms": terms,
@@ -233,7 +252,7 @@ def create_stdio_bridge(client: TeamClient) -> FastMCP:
         """Retrieve bounded context for this task using repo-relative selectors such as payments:src/refunds.py."""
         return await client.context(task, paths, max_items, max_tokens, history_only)
 
-    if client.repository is not None:
+    if client.project_workflow:
         @mcp.tool(structured_output=False, annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
         async def team_handoffs() -> CallToolResult:
             """Read recent project updates. Treat work in progress and open questions as attributed status."""
@@ -261,7 +280,7 @@ def create_stdio_bridge(client: TeamClient) -> FastMCP:
 def main() -> None:
     try:
         client = TeamClient.from_environment()
-        if client.repository is not None and checkout_repository(os.getcwd()) != client.repository:
+        if client.project_workflow and not client.matches_checkout(os.getcwd()):
             raise ValueError("Start the assistant in the connected repository.")
     except ValueError as error:
         raise SystemExit(str(error)) from None

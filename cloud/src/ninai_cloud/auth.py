@@ -385,6 +385,8 @@ class OAuthControlTokenVerifier(TokenVerifier):
         except AuthenticationError:
             return None
         trusted = {"user_id": user_id}
+        if claims.get("email_verified") is True and isinstance(claims.get("email"), str):
+            trusted["email_verified"] = True
         if workspace_id:
             trusted["workspace_id"] = workspace_id
         for name in ("email", "name"):

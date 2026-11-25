@@ -1,12 +1,15 @@
 """Explicitly provisioned browser and project-bound assistant team API."""
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 from contextlib import contextmanager
+from dataclasses import replace
 from threading import BoundedSemaphore
 from urllib.parse import urlsplit
 
+import httpx
 from psycopg import Error, IntegrityError, OperationalError
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -26,7 +29,7 @@ WORKSPACE_ACTIONS = {
     "group-edge": "group_edge", "project": "create_project", "archive-project": "archive_project", "audit": "audit",
 }
 PROJECT_ACTIONS = {
-    "binding": "issue_binding", "propose": "propose", "approve": "review", "reviewer": "assign_reviewer",
+    "binding": "issue_binding", "check-binding": "check_binding", "propose": "propose", "approve": "review", "reviewer": "assign_reviewer",
     "context": "context", "proposals": "proposals", "export": "export_project",
     "handoffs": "handoffs", "publish-handoff": "publish_handoff",
     "audit-export": "export_project_audit",
@@ -34,7 +37,7 @@ PROJECT_ACTIONS = {
     "retire": "suppress", "revoke": "suppress",
 }
 IDENTIFIERS = {"project", "user", "group", "decision", "replaces", "binding"}
-READ_ACTIONS = {"identity", "overview", "audit", "context", "proposals", "export", "audit-export", "handoffs"}
+READ_ACTIONS = {"identity", "overview", "audit", "context", "proposals", "export", "audit-export", "handoffs", "check-binding"}
 ACCESS_ACTIONS = {"connect-repository", "member", "project-member", "group-edge", "archive-project", "reviewer", "rotate-binding",
                   "revoke-binding", "retire", "revoke"}
 PROOF_ACTIONS = {"context", "approve", "proposals", "export", "audit-export"}
@@ -74,7 +77,31 @@ class TeamApp:
         claims = (token.claims or {}) if token is not None else {}
         if not token or token.client_id != self.settings.control_client_id or not token.subject or not token.expires_at:
             raise AuthorizationError(DENIED)
-        return TeamHuman(identifier(claims.get("user_id")), self.settings.issuer, token.subject, token.expires_at)
+        email = claims.get("email") if claims.get("email_verified") is True else None
+        return TeamHuman(identifier(claims.get("user_id")), self.settings.issuer, token.subject,
+                         token.expires_at, email if isinstance(email, str) else None)
+
+    async def _verified_email(self, request, actor):
+        if actor.verified_email:
+            return actor.verified_email
+        authorization = request.headers.get("authorization")
+        credential = self._bearer(authorization) if authorization is not None else request.cookies.get(SESSION_COOKIE)
+        endpoint = self.settings.issuer.rstrip("/") + "/userinfo"
+        if urlsplit(endpoint).scheme != "https":
+            raise AuthorizationError(DENIED)
+        try:
+            async with asyncio.timeout(5), httpx.AsyncClient(trust_env=False, follow_redirects=False) as client:
+                async with client.stream("GET", endpoint, headers={"Authorization": f"Bearer {credential}"}) as response:
+                    response.raise_for_status()
+                    body = await anext(response.aiter_bytes(chunk_size=16385), b"")
+            if len(body) <= 16384:
+                profile = json.loads(body)
+                if (isinstance(profile, dict) and profile.get("sub") == actor.subject
+                        and profile.get("email_verified") is True and isinstance(profile.get("email"), str)):
+                    return profile["email"]
+        except (TimeoutError, httpx.HTTPError, ValueError, RecursionError):
+            pass
+        raise AuthorizationError(DENIED)
 
     @staticmethod
     def _bearer(value):
@@ -117,9 +144,7 @@ class TeamApp:
             return self._limited(error)
         except AuthorizationError:
             return HTMLResponse(
-                '<!doctype html><html lang="en"><meta charset="utf-8"><title>Ninai Team</title>'
-                '<main><h1>Ninai Team</h1><p><a href="/control/login">Sign in</a> to open the preview.</p></main></html>',
-                status_code=401, headers=HEADERS,
+                TEAM_HTML, status_code=401, headers=HEADERS,
             )
         return HTMLResponse(TEAM_HTML, headers=HEADERS)
 
@@ -181,7 +206,13 @@ class TeamApp:
             if request.method != "POST" or action not in WORKSPACE_ACTIONS:
                 return json_response({"error": "Route unavailable"}, 404)
             operation = getattr(self.store, WORKSPACE_ACTIONS[action])
-            args = (identifier(workspace), actor)
+            workspace = identifier(workspace)
+            if action == "accept" and "verify_email" in data:
+                verify_email = data.pop("verify_email")
+                if verify_email is not True:
+                    raise ValueError("Invalid invitation mode")
+                actor = replace(actor, verified_email=await self._verified_email(request, actor))
+            args = (workspace, actor)
         elif len(parts) == 4 and parts[1] == "projects" and request.method == "POST":
             workspace, _, project, action = parts
             if is_assistant and action not in {"context", "propose", "handoffs", "publish-handoff"} or action not in PROJECT_ACTIONS:

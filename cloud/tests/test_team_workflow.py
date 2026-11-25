@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
@@ -130,6 +131,43 @@ class TeamWorkflowTests(unittest.TestCase):
 
     def _recall(self, credential):
         return self.store.context(self.workspace, self.project, credential, **TASK)
+
+    def test_verified_email_project_invite_works_without_a_github_repository(self):
+        project = self.store.create_project(self.workspace, self.owner, name="Operations",
+                                            assign_creator=True)["project_id"]
+        invitation = self.store.invite(self.workspace, self.owner, email="COLLEAGUE@example.invalid",
+                                       project=project)["invitation_token"]
+        with self.assertRaises(AuthorizationError):
+            self.store.accept_invite(self.workspace, self.member, token=invitation)
+        with self.assertRaises(AuthorizationError):
+            self.store.accept_invite(self.workspace, replace(self.stranger, verified_email="other@example.invalid"),
+                                     token=invitation)
+        member = replace(self.member, verified_email="Colleague@example.invalid")
+        self.assertEqual(self.store.accept_invite(self.workspace, member, token=invitation)["project_id"], project)
+        with self.assertRaises(AuthorizationError):
+            self.store.accept_invite(self.workspace, member, token=invitation)
+        self.assertEqual([row["name"] for row in self.store.overview(self.workspace, member)["projects"]],
+                         ["Operations"])
+
+        binding = self.store.issue_binding(self.workspace, member, project=project, client="codex",
+                                           actions=["read", "read-handoffs", "publish-handoff"])
+        self.assertFalse(self.store.check_binding(self.workspace, project, member,
+                                                 binding=binding["binding_id"])["connected"])
+        update = self.store.publish_handoff(self.workspace, project, binding["token"], request_key=str(uuid4()),
+                                            topic="Queue review", status="blocked", summary="Needs an owner.")
+        rows = self.store.handoffs(self.workspace, project, self.owner)["items"]
+        self.assertEqual([(row["id"], row["status"]) for row in rows], [(update["id"], "blocked")])
+        self.assertEqual(self.store.context(self.workspace, project, binding["token"], task="Project orientation",
+                                            project_overview=True).outcome, "empty")
+        self.assertTrue(self.store.check_binding(self.workspace, project, member,
+                                                binding=binding["binding_id"])["connected"])
+        pending = self.store.invite(self.workspace, self.owner, email="colleague@example.invalid",
+                                    project=project)["invitation_token"]
+        self.store.change_member(self.workspace, self.owner, user=member.user_id, role="remove")
+        with self.assertRaises(AuthorizationError):
+            self.store.handoffs(self.workspace, project, binding["token"])
+        with self.assertRaises(AuthorizationError):
+            self.store.accept_invite(self.workspace, member, token=pending)
 
     def test_two_repository_checkouts_share_cloud_handoffs_and_approved_guidance(self):
         import httpx
